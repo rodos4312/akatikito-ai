@@ -284,7 +284,7 @@ body.simple-view .pro-only,body.simple-view #chat>.steps:not(.important-step),bo
       <summary data-i18n="maint_summary">🛠️ Συντήρηση, Υγεία & Αντίγραφα</summary>
       <div class="set-body">
         <div id="health-box" style="display:flex;flex-direction:column;gap:4px;font-size:11.5px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:7px">
-          <span class="hint">Πάτησε Έλεγχος Υγείας για κατάσταση συστήματος.</span>
+          <span class="hint" data-i18n="hint_health_click">Πάτησε Έλεγχος Υγείας για κατάσταση συστήματος.</span>
         </div>
         <div style="display:flex;gap:6px">
           <button class="btn" data-i18n="btn_health" style="flex:1;font-size:11.5px" onclick="loadSystemHealth()">🩺 Έλεγχος Υγείας</button>
@@ -298,9 +298,9 @@ body.simple-view .pro-only,body.simple-view #chat>.steps:not(.important-step),bo
         <div style="display:flex;flex-direction:column;gap:5px;border-top:1px solid var(--border);padding-top:6px">
           <label for="project-profile" data-i18n="lbl_trust_profile" style="font-size:11.5px">🛡️ Επίπεδο Εμπιστοσύνης Project</label>
           <select id="project-profile" onchange="saveProjectProfile(this.value)" style="background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:5px 7px;font-size:12px">
-            <option value="developer">💻 Developer (Πλήρης πρόσβαση με εγκρίσεις)</option>
-            <option value="office">📄 Office (Έγγραφα & αρχεία, χωρίς terminal)</option>
-            <option value="readonly">🔒 Read-Only (Μόνο ανάγνωση & αναζήτηση)</option>
+            <option value="developer" data-i18n="prof_dev">💻 Developer (Πλήρης πρόσβαση με εγκρίσεις)</option>
+            <option value="office" data-i18n="prof_office">📄 Office (Έγγραφα & αρχεία, χωρίς terminal)</option>
+            <option value="readonly" data-i18n="prof_readonly">🔒 Read-Only (Μόνο ανάγνωση & αναζήτηση)</option>
           </select>
           <button class="btn" data-i18n="btn_audit_log" style="font-size:11.5px" onclick="loadAuditLog()">📜 Αρχείο Ελέγχου (Audit)</button>
           <div id="audit-box" style="display:none;flex-direction:column;gap:4px;max-height:160px;overflow:auto;font-size:11px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:6px"></div>
@@ -431,7 +431,7 @@ body.simple-view .pro-only,body.simple-view #chat>.steps:not(.important-step),bo
           <button class="btn" data-i18n="plg_gw_stop" style="width:auto" onclick="gatewayAction('stop')">⏸ Παύση gateway</button>
           <button class="btn" data-i18n="plg_gw_refresh" style="width:auto" onclick="loadPlugins()">🔄 Ανανέωση κατάστασης</button>
         </div>
-        <p class="hint">Το gateway συνεχίζει να εξυπηρετεί Telegram/Discord ακόμα και όταν κλείνεις το παράθυρο. Οι εγκρίσεις ενεργειών εμφανίζονται στο παράθυρο.</p>
+        <p class="hint" data-i18n="gw_hint_bg">Το gateway συνεχίζει να εξυπηρετεί Telegram/Discord ακόμα και όταν κλείνεις το παράθυρο. Οι εγκρίσεις ενεργειών εμφανίζονται στο παράθυρο.</p>
       </div>
 
       <div class="menu-card">
@@ -445,7 +445,7 @@ body.simple-view .pro-only,body.simple-view #chat>.steps:not(.important-step),bo
         <div class="field">
           <label>MCP servers (data/mcp.json)</label>
           <div id="mcp-servers" style="display:flex;flex-direction:column;gap:8px"></div>
-          <span class="hint">Τοπικοί stdio ή HTTP servers. Κάθε νέα ή τροποποιημένη σύνδεση ζητά ρητή έγκριση. Τα κλειδιά αποθηκεύονται συγκαλυμμένα.</span>
+          <span class="hint" data-i18n="mcp_hint_sec">Τοπικοί stdio ή HTTP servers. Κάθε νέα ή τροποποιημένη σύνδεση ζητά ρητή έγκριση. Τα κλειδιά αποθηκεύονται συγκαλυμμένα.</span>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
           <button class="btn" data-i18n="plg_mcp_add" style="width:auto" onclick="toggleMcpForm()">＋ Προσθήκη / Επεξεργασία MCP</button>
@@ -578,13 +578,13 @@ body.simple-view .pro-only,body.simple-view #chat>.steps:not(.important-step),bo
           <button id="voice-prepare" data-i18n="set_voice_dl" class="btn" style="width:auto" onclick="prepareVoice()">⬇️ Λήψη τοπικού μοντέλου</button>
           <button id="voice-file" data-i18n="set_voice_file" class="btn" style="width:auto" onclick="chooseVoiceFile()">🎵 Μεταγραφή τοπικού ηχητικού…</button>
         </div>
-        <span class="hint">Το μικρόφωνο γράφει έως 60 δευτερόλεπτα. Ο ήχος διαγράφεται μετά την αναγνώριση. Το κείμενο δεν στέλνεται αυτόματα.</span>
+        <span class="hint" data-i18n="voice_hint_60s">Το μικρόφωνο γράφει έως 60 δευτερόλεπτα. Ο ήχος διαγράφεται μετά την αναγνώριση. Το κείμενο δεν στέλνεται αυτόματα.</span>
       </div>
 
       <div class="menu-card">
         <h4 data-i18n="hdr_budget">💳 Κόστος, Όρια & Αποθηκευμένα Κλειδιά</h4>
         <div id="usage-cost" class="hint"></div>
-        <div class="field"><label data-i18n="set_budget_lbl">Ημερήσιο όριο εκτιμώμενου κόστους ($, 0 χωρίς όριο)</label><input id="daily-budget" type="number" min="0" step="0.1" value="0"><span class="hint">Με ενεργό όριο απαιτούνται οι δικές σου τιμές. Η τελευταία κλήση μπορεί να υπερβεί το υπόλοιπο.</span></div>
+        <div class="field"><label data-i18n="set_budget_lbl">Ημερήσιο όριο εκτιμώμενου κόστους ($, 0 χωρίς όριο)</label><input id="daily-budget" type="number" min="0" step="0.1" value="0"><span class="hint" data-i18n="budget_hint">Με ενεργό όριο απαιτούνται οι δικές σου τιμές. Η τελευταία κλήση μπορεί να υπερβεί το υπόλοιπο.</span></div>
         <div class="field"><label data-i18n="set_prices_lbl">Τιμές ανά 1 εκατ. tokens: είσοδος / cache / έξοδος ($)</label>
           <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
             <input id="price-input" type="number" min="0" step="0.01" placeholder="Input">
@@ -675,9 +675,9 @@ body.simple-view .pro-only,body.simple-view #chat>.steps:not(.important-step),bo
     <div id="file-info" class="hint"></div>
     <div id="file-rich" style="display:none;overflow:auto;max-height:42vh;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px"></div>
     <pre id="file-text" tabindex="0"></pre>
-    <div class="file-controls"><button class="btn" id="file-prev" onclick="filePage(false)">← Πίσω</button><button class="btn" id="file-next" onclick="filePage(true)">Συνέχεια →</button><button class="btn" id="file-refresh" onclick="refreshFile()">Ανανέωση</button></div>
-    <button class="btn" id="file-insert" onclick="insertFilePath()">＋ Διαδρομή στο μήνυμα</button>
-    <span class="hint">Μόνο ανάγνωση. Το περιεχόμενο δεν στέλνεται στο μοντέλο με το άνοιγμα.</span>
+    <div class="file-controls"><button class="btn" id="file-prev" data-i18n="btn_prev" onclick="filePage(false)">← Πίσω</button><button class="btn" id="file-next" data-i18n="btn_next" onclick="filePage(true)">Συνέχεια →</button><button class="btn" id="file-refresh" data-i18n="btn_refresh" onclick="refreshFile()">Ανανέωση</button></div>
+    <button class="btn" id="file-insert" data-i18n="btn_insert_path" onclick="insertFilePath()">＋ Διαδρομή στο μήνυμα</button>
+    <span class="hint" data-i18n="hint_readonly_file">Μόνο ανάγνωση. Το περιεχόμενο δεν στέλνεται στο μοντέλο με το άνοιγμα.</span>
   </section>
 </aside>
 
@@ -781,7 +781,7 @@ function renderFileList(files) {
   document.getElementById('files-count').textContent = String(rows.length);
   if (!rows.length) {
     const hint = document.createElement('span'); hint.className = 'hint';
-    hint.textContent = 'Άνοιξε ένα αρχείο. Εδώ εμφανίζονται και οι επιτυχημένες αλλαγές του agent.';
+    hint.textContent = i18nText('empty_files', 'Άνοιξε ένα αρχείο. Εδώ εμφανίζονται και οι επιτυχημένες αλλαγές του agent.');
     list.appendChild(hint);
   }
   for (const row of rows) {
@@ -1043,7 +1043,7 @@ function invalidateOrganizationPlan() {
 }
 function updateOrganizationSelectionLabel() {
   const el = document.getElementById('organization-selected');
-  if (el) el.textContent = 'Επιλεγμένα: ' + orgSelection.size;
+  if (el) el.textContent = i18nText('lbl_selected', 'Επιλεγμένα: ') + orgSelection.size;
 }
 function clearOrganizationSelection() {
   orgBound(); orgSelection.clear(); invalidateOrganizationPlan(); updateOrganizationSelectionLabel();
@@ -1728,7 +1728,7 @@ function renderAgendaList(tasks) {
   box.replaceChildren();
   if (!rows.length) {
     const empty = document.createElement('span'); empty.className = 'hint';
-    empty.textContent = 'Καμία υπενθύμιση στην ατζέντα.';
+    empty.textContent = i18nText('empty_agenda', 'Καμία υπενθύμιση στην ατζέντα.');
     box.appendChild(empty); return;
   }
   for (const t of rows.slice(0, 30)) {
@@ -1966,7 +1966,7 @@ async function loadRoutines() {
       btn.style.textAlign = 'left';
       btn.style.fontSize = '11.5px';
       btn.style.padding = '5px 7px';
-      btn.textContent = '▶ ' + item.name;
+      btn.textContent = '▶ ' + (item.builtin ? i18nText('rtn_' + item.id, item.name) : item.name);
       btn.title = item.prompt;
       btn.onclick = () => { useQuickPrompt(item.prompt); };
       row.appendChild(btn);
@@ -2044,10 +2044,29 @@ function applyI18nStrings(lang, strings) {
       if (i18nStrings[k]) opt.textContent = i18nStrings[k];
     }
   }
+  modeLabels = {
+    auto: i18nText('mode_auto', 'Αυτόματο'),
+    assistant: i18nText('mode_assistant', 'Βοηθός'),
+    ask: i18nText('mode_ask', 'Ερώτηση'),
+    architect: i18nText('mode_architect', 'Αρχιτέκτονας'),
+    code: i18nText('mode_code', 'Κώδικας'),
+    debug: i18nText('mode_debug', 'Debug'),
+  };
+  modeHints = {
+    assistant: i18nText('hint_mode_assistant', 'έρευνα, έγγραφα και υπενθυμίσεις'),
+    auto: i18nText('hint_mode_auto', 'σχεδιάζει, υλοποιεί και ελέγχει ανάλογα με το αίτημά σου'),
+    ask: i18nText('hint_mode_ask', 'απαντάει μόνο από όσα διαβάζει — δεν αλλάζει τίποτα'),
+    architect: i18nText('hint_mode_architect', 'σχεδιάζει το πλάνο (PLAN.md), δεν γράφει κώδικα'),
+    code: i18nText('hint_mode_code', 'αλλάζει, τρέχει, διορθώνει — πλήρης δουλειά'),
+    debug: i18nText('hint_mode_debug', 'ψάχνει σφάλματα με tests και logs'),
+  };
+  const mh = document.getElementById('mode-hint');
+  if (mh && modeSel) mh.textContent = modeHints[modeSel.value] || '';
   const advChk = document.getElementById('advanced-view');
   updateViewModeBadge(!!(advChk && advChk.checked));
   const busyEl = document.getElementById('busy-badge');
   if (busyEl) busyEl.textContent = busy ? i18nText('badge_busy', '⚡ εργάζεται…') : i18nText('badge_idle', '💤 αδρανής');
+  updateOrganizationSelectionLabel();
 }
 async function loadI18n(lang) {
   try {
@@ -2060,6 +2079,11 @@ async function changeUiLanguage(lang) {
   const r = await api('/api/preferences', {ui_language: lang});
   if (r && r.error) { showNotice('err', r.error); return; }
   await loadI18n(lang);
+  try {
+    await Promise.allSettled([loadAgenda(), loadRoutines(), loadLearning(learningOffset), loadPlugins(), loadProviders()]);
+    const st = await api('/api/status');
+    if (st && !st.error) updateBadges(st);
+  } catch (_) {}
 }
 function updateViewModeBadge(isPro) {
   const btn = document.getElementById('view-mode-toggle');
@@ -2115,34 +2139,34 @@ async function loadLearning(offset=0){
   const heading=text=>{const el=document.createElement('p');el.textContent=text;panel.appendChild(el);};
   const card=text=>{const el=document.createElement('div');el.className='hint';el.style.whiteSpace='pre-wrap';el.style.marginBottom='12px';el.textContent=text;panel.appendChild(el);return el;};
   const profile=result.profile||{},skills=result.skills||{};
-  heading('Προτάσεις μνήμης — ενεργοποιούνται μόνο μετά την έγκριση');
+  heading(i18nText('mem_proposals_hdr', 'Προτάσεις μνήμης — ενεργοποιούνται μόνο μετά την έγκριση'));
   for(const row of (profile.proposals||[])){
     const scope=row.target==='global'?'⚠ ΓΕΝΙΚΗ ΜΝΗΜΗ — ισχύει σε ΟΛΑ τα projects\n':'Προφίλ χρήστη\n';
     const box=card(scope+row.topic+' · '+(row.status==='unconfirmed'?'Ανεπιβεβαίωτη υπόθεση':'Επιβεβαιωμένο στοιχείο'));
     if(row.before?.length){const old=document.createElement('p');old.textContent='Αντικαθιστά: '+row.before.map(x=>x.text).join(' · ');box.appendChild(old);}
     const input=document.createElement('textarea');input.value=row.text;input.maxLength=4000;input.style.width='100%';box.appendChild(input);
-    learningButton(box,'Έγκριση',()=>learningAction('memory_approve',row.id,input.value,row.review_hash));
-    learningButton(box,'Απόρριψη',()=>learningAction('memory_reject',row.id,undefined,row.review_hash));
+    learningButton(box,i18nText('btn_approve','Έγκριση'),()=>learningAction('memory_approve',row.id,input.value,row.review_hash));
+    learningButton(box,i18nText('btn_reject','Απόρριψη'),()=>learningAction('memory_reject',row.id,undefined,row.review_hash));
   }
-  heading('Ενεργή μνήμη · '+(profile.total||0)+' στοιχεία');
+  heading(i18nText('mem_active_hdr', 'Ενεργή μνήμη')+' · '+(profile.total||0));
   for(const row of(profile.entries||[])){
-    const box=card(row.topic+' ['+(row.status==='unconfirmed'?'ΑΝΕΠΙΒΕΒΑΙΩΤΗ ΥΠΟΘΕΣΗ':'επιβεβαιωμένο')+']\n'+row.text);
-    learningButton(box,'Αφαίρεση από ενεργή μνήμη',()=>learningAction('memory_forget',row.id));
+    const box=card(row.topic+' ['+(row.status==='unconfirmed'?'UNCONFIRMED':'confirmed')+']\n'+row.text);
+    learningButton(box,i18nText('mem_forget_btn', 'Αφαίρεση από ενεργή μνήμη'),()=>learningAction('memory_forget',row.id));
   }
-  if(offset>0)learningButton(panel,'Προηγούμενες',()=>loadLearning(Math.max(0,offset-30)));
-  if(profile.next!==null && profile.next!==undefined)learningButton(panel,'Επόμενες',()=>loadLearning(profile.next));
-  learningButton(panel,'Τακτοποίηση βέβαιων διπλοτύπων',()=>learningAction('consolidate',''));
+  if(offset>0)learningButton(panel,i18nText('btn_prev','Προηγούμενες'),()=>loadLearning(Math.max(0,offset-30)));
+  if(profile.next!==null && profile.next!==undefined)learningButton(panel,i18nText('btn_next','Επόμενες'),()=>loadLearning(profile.next));
+  learningButton(panel,i18nText('mem_consolidate_btn', 'Τακτοποίηση βέβαιων διπλοτύπων'),()=>learningAction('consolidate',''));
   panel=document.getElementById('skills-content');panel.replaceChildren();
-  heading('Προτάσεις συνταγών — πρώτα διάβασε όλα τα βήματα');
+  heading(i18nText('sk_proposals_hdr', 'Προτάσεις συνταγών — πρώτα διάβασε όλα τα βήματα'));
   for(const row of(skills.proposals||[])){
     const modeBadge=row.mode==='refine'?(row.merged_from?` [🔄 Συγχώνευση παρόμοιου '${row.merged_from}']`:' [🔄 Βελτίωση υπάρχοντος]'):'';
     const catBadge=row.category?` [${row.category}]`:'';
-    const box=card(row.name+catBadge+modeBadge+' · '+(row.description||'')+' · '+(row.scope==='project'?'μόνο για αυτό το project':'για όλα τα projects'));
+    const box=card(row.name+catBadge+modeBadge+' · '+(row.description||'')+' · '+(row.scope==='project'?'project':'global'));
     const preview=document.createElement('pre');preview.textContent=row.body.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n/,'');preview.style.whiteSpace='pre-wrap';box.appendChild(preview);
-    learningButton(box,'Έγκριση συνταγής',()=>learningAction('skill_approve',row.id,undefined,row.signature));
-    learningButton(box,'Απόρριψη',()=>learningAction('skill_reject',row.id,undefined,row.signature));
+    learningButton(box,i18nText('btn_approve','Έγκριση συνταγής'),()=>learningAction('skill_approve',row.id,undefined,row.signature));
+    learningButton(box,i18nText('btn_reject','Απόρριψη'),()=>learningAction('skill_reject',row.id,undefined,row.signature));
   }
-  heading('Διαθέσιμες συνταγές');
+  heading(i18nText('sk_catalog_hdr', 'Διαθέσιμες συνταγές'));
   for(const row of(skills.catalog||[])){
     const cat=row.category?` [${row.category}]`:'';
     const uses=row.uses?` · χρήσεις: ${row.uses}`:'';
@@ -2158,7 +2182,7 @@ async function loadLearning(offset=0){
       details.textContent=txt;box.appendChild(details);
     }
     const actions=document.createElement('div');actions.style.cssText='display:flex;gap:6px;flex-wrap:wrap;margin-top:6px';
-    learningButton(actions,'▶ Εκτέλεση στο Chat',()=>runSkillInChat(row.name));
+    learningButton(actions,i18nText('sk_run_btn', '▶ Εκτέλεση στο Chat'),()=>runSkillInChat(row.name));
     if(row.source!=='builtin'){
       learningButton(actions,'✏️ Επεξεργασία',()=>editOwnerSkill(row));
       learningButton(actions,'🗑 Διαγραφή',()=>deleteOwnerSkill(row.name));
@@ -2404,7 +2428,7 @@ function updateBadges(s) {
   document.getElementById('tab-memory').textContent=learning.pending ? memLabel + ' · ' + learning.pending : memLabel;
   renderGateway(s.gateway||{});
   document.getElementById('learning-status').textContent=learning.error||(
-    learning.pending ? learning.pending+' προτάσεις περιμένουν προεπισκόπηση και έγκριση.' : 'Οι μνήμες και τα skills είναι τοπικά. Οι νέες προτάσεις χρειάζονται έγκριση.');
+    learning.pending ? learning.pending+' pending' : i18nText('mem_status_default', 'Οι μνήμες και τα skills είναι τοπικά. Οι νέες προτάσεις χρειάζονται έγκριση.'));
   const mcp=s.mcp||{},mcpKey=JSON.stringify([mcp,s.busy]);
   if(mcpKey!==mcpSignature){
     mcpSignature=mcpKey;const panel=document.getElementById('mcp-servers');panel.replaceChildren();
@@ -2473,14 +2497,15 @@ function updateBadges(s) {
   document.getElementById('cautious-edits').disabled=!!s.busy;
   updateFiles(s);
   const origin = document.getElementById("app-origin");
-  origin.textContent = s.app_root ? "Εφαρμογή: " + s.app_root : "";
+  origin.textContent = s.app_root ? i18nText('lbl_app_prefix', 'Εφαρμογή: ') + s.app_root : "";
   origin.title = s.app_root || "";
   document.getElementById("proj-label").textContent = s.project || "—";
   document.getElementById("proj-label").title = s.project || "";
-  document.getElementById("mode-badge").textContent = s.mode_label || "—";
+  const mLabel = s.mode ? (modeLabels[s.mode] || s.mode_label || "—") : (s.mode_label || "—");
+  document.getElementById("mode-badge").textContent = s.auto_mode && s.mode ? (i18nText('mode_auto', 'Αυτόματο') + ' · ' + mLabel) : mLabel;
   currentModel = s.model || ""; currentProvider = s.provider || "";
   currentSession = s.session_id || ""; currentProject = s.project || "";
-  const prefix = s.connected ? (s.busy ? "Δουλεύει: " : "Μοντέλο: ") : "Τελευταίο: ";
+  const prefix = s.connected ? (s.busy ? i18nText('lbl_working_prefix', 'Δουλεύει: ') : i18nText('lbl_model_prefix', 'Μοντέλο: ')) : i18nText('lbl_last_prefix', 'Τελευταίο: ');
   document.getElementById("model-badge").textContent = prefix + [currentProvider, currentModel].filter(Boolean).join(" · ");
   document.getElementById("model-badge").title = prefix + [currentProvider, currentModel].filter(Boolean).join(" · ");
   const modelSel = document.getElementById("model");
@@ -2642,7 +2667,7 @@ function renderVoice(state){
   else if(active)document.getElementById('voice-message').textContent=job.kind==='prepare'?'Κατεβαίνουν τα αρχεία του τοπικού μοντέλου. Δεν γίνεται κλήση μοντέλου chat.':'Η υπαγόρευση μετατρέπεται σε κείμενο τοπικά…';
   if(!voiceConfigPending){document.getElementById('voice-model').value=voiceSnapshot.model;document.getElementById('voice-language').value=voiceSnapshot.language;}
   for(const id of ['voice-model','voice-language','voice-prepare'])document.getElementById(id).disabled=!!state.busy||!!active||!!voiceCapture||voiceConfigPending;
-  document.getElementById('voice-availability').textContent=voiceSnapshot.models?.[voiceSnapshot.model]?'Έτοιμο — τοπική αναγνώριση, χωρίς αποστολή ήχου σε υπηρεσία.':'Χρειάζεται λήψη των αρχείων μία φορά. Μετά λειτουργεί χωρίς σύνδεση.';
+  document.getElementById('voice-availability').textContent=voiceSnapshot.models?.[voiceSnapshot.model]?i18nText('voice_ready','Έτοιμο — τοπική αναγνώριση, χωρίς αποστολή ήχου σε υπηρεσία.'):'Χρειάζεται λήψη των αρχείων μία φορά. Μετά λειτουργεί χωρίς σύνδεση.';
   voiceRecordControls();
 }
 function insertPendingVoice(){if(voicePending&&sameVoiceContext(voicePending.context)){voiceInsert(voicePending.text);voicePending=null;document.getElementById('voice-result').textContent='';document.getElementById('voice-insert').style.display='none';}}
@@ -2709,7 +2734,7 @@ async function loadSessions() {
   const box = document.getElementById("sessions");
   box.innerHTML = "";
   if (!r.sessions || !r.sessions.length) {
-    box.innerHTML = '<span class="hint">Καμία αποθηκευμένη συνομιλία ακόμα.</span>';
+    box.innerHTML = '<span class="hint">' + esc(i18nText('empty_sessions', 'Καμία αποθηκευμένη συνομιλία ακόμα.')) + '</span>';
     return;
   }
   for (const s of r.sessions) {
@@ -2821,7 +2846,7 @@ async function loadProviders() {
   for (const [name, short] of Object.entries(savedKeys)) {
     html += `<div class="keyrow"><span><span class="dot">●</span> ${esc(name)}</span><span>${esc(short)}</span></div>`;
   }
-  document.getElementById("saved-keys").innerHTML = html ? "<h3 class='sec'>Αποθηκευμένα κλειδιά</h3>" + html : "";
+  document.getElementById("saved-keys").innerHTML = html ? "<h3 class='sec'>" + esc(i18nText('saved_keys_hdr', 'Αποθηκευμένα κλειδιά')) + "</h3>" + html : "";
   if (r.warning) showNotice("err", r.warning);
   onProvider();
 }
@@ -2903,7 +2928,7 @@ function uiText(tag,text,parent){const el=document.createElement(tag);el.textCon
 function renderGateway(g){
   const panel=document.getElementById('gateway-state');
   if(!panel)return;
-  panel.textContent=g.running?'Gateway ενεργό · '+(g.provider||'')+' / '+(g.model||''):'Gateway σε παύση';
+  panel.textContent=g.running?i18nText('gw_running','Gateway ενεργό')+' · '+(g.provider||'')+' / '+(g.model||''):i18nText('gw_paused','Gateway σε παύση');
   for(const [name,row] of Object.entries(g.channels||{}))uiText('p',name+': '+row.state+(row.message?' · '+row.message:''),panel);
   if(g.queue?.held)uiText('p','Μηνύματα σε αναμονή σύνδεσης ή από παλιές ρυθμίσεις: '+g.queue.held+'. Διατηρούνται και δεν εκτελούνται σε διαφορετικό project/bot.',panel);
   const issues=g.queue?.issues||[];if(issues.length)uiText('p','Εργασίες που χρειάζονται προσοχή: '+issues.length+'. Αβέβαιες εργασίες δεν επαναλαμβάνονται αυτόματα· /new στο κανάλι για νέα συνεδρία.',panel);
@@ -2916,10 +2941,10 @@ async function loadPlugins(){
   if(toolPanel){
     toolPanel.replaceChildren();
     for(const tp of (r.tool_plugins||[])){
-      const card=uiText('div',`${tp.name} (εργαλείο: ${tp.tool_name}) · ${tp.enabled?'🟢 Ενεργό':'⚪ Απενεργοποιημένο'}`,toolPanel);
+      const card=uiText('div',`${tp.name} (${tp.tool_name}) · ${tp.enabled?i18nText('lbl_enabled','🟢 Ενεργό'):i18nText('lbl_disabled','⚪ Απενεργοποιημένο')}`,toolPanel);
       card.className='field';
       uiText('p',tp.description||'',card);
-      learningButton(card,tp.enabled?'Απενεργοποίηση':'Ενεργοποίηση',async()=>{
+      learningButton(card,tp.enabled?i18nText('btn_disable','Απενεργοποίηση'):i18nText('btn_enable','Ενεργοποίηση'),async()=>{
         try{await pluginAction({action:'toggle_tool_plugin',id:tp.id,enabled:!tp.enabled});await loadPlugins();}
         catch(e){showNotice('err',e.message);}
       });
@@ -2935,7 +2960,7 @@ async function loadPlugins(){
       uiText('p','Εγκατεστημένο · '+installed.source,card);
       learningButton(card,'Ρύθμιση '+row.name,()=>configureChannel(row.id));
       learningButton(card,'Απεγκατάσταση',async()=>{if(!confirm('Να αφαιρεθεί το πρόσθετο '+row.name+'; Το ιστορικό παραμένει.'))return;try{await pluginAction({action:'remove',id:row.id});await loadPlugins();}catch(e){showNotice('err',e.message);}});
-    }else learningButton(card,'Προεπισκόπηση / Εγκατάσταση',()=>previewPlugin(row.source));
+    }else learningButton(card,i18nText('btn_preview_install','Προεπισκόπηση / Εγκατάσταση'),()=>previewPlugin(row.source));
   }
 }
 async function previewPlugin(source){
