@@ -1402,14 +1402,14 @@ class AppState:
             self.files = self.files[:100]
 
     def open_file(self, path, offset=0, version='', project=None, session_id=None):
-        from .file_view import preview
+        from .file_view import rich_preview
         try:
             with self._lock:
                 root = self._files_root()
                 if ((project is not None and Path(project).resolve() != root) or
                         (session_id is not None and session_id != (self.session_id or ''))):
                     raise ValueError('Η συνομιλία ή το project άλλαξε. Άνοιξε ξανά το αρχείο.')
-                result = preview(root, path, offset, version)
+                result = rich_preview(root, path, offset, version)
                 self._remember_file(result['path'], 'άνοιγμα')
                 result.update(project=str(root), session_id=self.session_id or '', files=list(self.files))
                 if self.session_id and not self.busy:
@@ -1417,6 +1417,69 @@ class AppState:
                 return result
         except (OSError, ValueError, TypeError, PermissionError) as exc:
             return {'error':str(exc)}
+
+    def project_profile(self, data=None):
+        from .project_profiles import PROFILES, ProjectProfiles
+        try:
+            root = self._files_root()
+            store = ProjectProfiles(APP_ROOT / 'data' / 'memory' / 'project_profiles.json')
+            req_profile = str((data or {}).get('profile') or '').strip().lower()
+            if req_profile:
+                return store.set(root, req_profile)
+            return {'project': str(root), 'profile': store.get(root), 'profiles': PROFILES}
+        except Exception as exc:
+            return {'error': str(exc)}
+
+    def audit_view(self, limit=60):
+        from .audit_log import AuditLog
+        try:
+            root = self._files_root()
+            log = AuditLog(root)
+            return {
+                'project': str(root),
+                'entries': log.entries(limit=max(1, min(200, int(limit or 60)))),
+                'verification': log.verify_chain(),
+            }
+        except Exception as exc:
+            return {'error': str(exc), 'entries': [], 'verification': {'ok': False, 'count': 0, 'error': str(exc)}}
+
+    def docs_search(self, query='', limit=8):
+        from .doc_index import DocIndex
+        try:
+            root = self._files_root()
+            res = DocIndex(root).search(str(query or ''), limit=max(1, min(30, int(limit or 8))), reindex=True)
+            res['project'] = str(root)
+            return res
+        except Exception as exc:
+            return {'error': str(exc), 'results': []}
+
+    def _routines_store(self):
+        from .routines import RoutinesStore
+        return RoutinesStore(APP_ROOT / 'data' / 'memory' / 'routines.json')
+
+    def routines_list(self):
+        try:
+            return {'routines': self._routines_store().list_routines()}
+        except Exception as exc:
+            return {'error': str(exc), 'routines': []}
+
+    def routines_add(self, data):
+        try:
+            item = self._routines_store().add_routine(
+                str((data or {}).get('name') or ''),
+                str((data or {}).get('prompt') or ''),
+                str((data or {}).get('icon') or 'star'),
+            )
+            return {'ok': True, 'routine': item, 'routines': self._routines_store().list_routines()}
+        except Exception as exc:
+            return {'error': str(exc)}
+
+    def routines_delete(self, routine_id):
+        try:
+            deleted = self._routines_store().delete_routine(str(routine_id or ''))
+            return {'ok': deleted, 'routines': self._routines_store().list_routines()}
+        except Exception as exc:
+            return {'error': str(exc)}
 
     def list_project_tree(self, path='.', project=None, offset=0, limit=100, version=''):
         from .file_view import list_tree
@@ -1698,6 +1761,18 @@ def make_handler(state: AppState) -> type:
                 self._send(state.github_update_check())
             elif path == '/api/update/apply':
                 self._send(state.github_update_apply(data))
+            elif path == '/api/project-profile':
+                self._send(state.project_profile(data))
+            elif path == '/api/audit':
+                self._send(state.audit_view(data.get('limit', 60)))
+            elif path == '/api/docs/search':
+                self._send(state.docs_search(data.get('query', ''), data.get('limit', 8)))
+            elif path == '/api/routines/list':
+                self._send(state.routines_list())
+            elif path == '/api/routines/add':
+                self._send(state.routines_add(data))
+            elif path == '/api/routines/delete':
+                self._send(state.routines_delete(data.get('id', '')))
             elif path == '/api/approval':
                 self._send(state.answer_approval(data.get('id',''),data.get('allow') is True,data.get('always') is True))
             elif path == '/api/learning':

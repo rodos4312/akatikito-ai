@@ -339,11 +339,13 @@ def tool_call(name: str, **arguments: Any) -> dict:
 
 PROVIDERS: dict[str, str] = {
     "DeepSeek": "https://api.deepseek.com/v1",
+    "Google Gemini": "https://generativelanguage.googleapis.com/v1beta/openai",
+    "Anthropic (Claude)": "https://api.anthropic.com/v1",
+    "OpenAI": "https://api.openai.com/v1",
+    "OpenRouter": "https://openrouter.ai/api/v1",
     "NanoGPT (συνδρομή)": "https://api.nano-gpt.com/api/subscription/v1",
     "NanoGPT (credits)": "https://api.nano-gpt.com/api/v1",
     "Z.ai (GLM)": "https://api.z.ai/api/paas/v4",
-    "OpenRouter": "https://openrouter.ai/api/v1",
-    "OpenAI": "https://api.openai.com/v1",
     "Ollama (τοπικό)": "http://localhost:11434/v1",
     "Custom": "",
 }
@@ -353,23 +355,27 @@ PROVIDERS: dict[str, str] = {
 # φέρνει την αληθινή λίστα από τον πάροχο.
 PROVIDER_MODELS: dict[str, list[str]] = {
     "DeepSeek": ["deepseek-chat", "deepseek-reasoner"],
+    "Google Gemini": ["gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.0-flash"],
+    "Anthropic (Claude)": ["claude-sonnet-4-20250514", "claude-3-7-sonnet-20250219", "claude-3-5-haiku-20241022"],
+    "OpenAI": ["gpt-4o-mini", "gpt-4o", "gpt-4.1-mini"],
+    "OpenRouter": [],
     "NanoGPT (συνδρομή)": ["deepseek-ai/DeepSeek-V3.1", "qwen/qwen3.5-32b"],
     "NanoGPT (credits)": [],
     "Z.ai (GLM)": ["glm-4.6", "glm-4.5", "glm-4.5-air"],
-    "OpenAI": ["gpt-4o-mini", "gpt-4o", "gpt-4.1-mini"],
-    "OpenRouter": [],
     "Ollama (τοπικό)": [],
     "Custom": [],
 }
 
 PROVIDER_HINTS: dict[str, str] = {
     "DeepSeek": "deepseek-reasoner δείχνει και τη σκέψη του βήμα-βήμα.",
-    "Z.ai (GLM)": "Κλειδί από z.ai. Αν έχεις πακέτο coding, άλλαξε τη διεύθυνση σε "
-    "https://api.z.ai/api/coding/paas/v4 με «Custom».",
+    "Google Gemini": "Κλειδί από aistudio.google.com (Google AI Studio).",
+    "Anthropic (Claude)": "Κλειδί από console.anthropic.com (OpenAI-compatible API).",
+    "OpenAI": "Θέλει κλειδί από platform.openai.com.",
+    "OpenRouter": "Πάτα «Φόρτωση μοντέλων» για τη λίστα (π.χ. deepseek/deepseek-chat).",
     "NanoGPT (συνδρομή)": "Χρεώνει στη μηνιαία συνδρομή σου. Δείχνω μόνο όσα καλύπτει.",
     "NanoGPT (credits)": "Πληρώνεις με υπόλοιπο (pay-as-you-go) — δείχνει όλα τα μοντέλα.",
-    "OpenRouter": "Πάτα «Φόρτωση μοντέλων» για τη λίστα (π.χ. deepseek/deepseek-chat).",
-    "OpenAI": "Θέλει κλειδί από platform.openai.com.",
+    "Z.ai (GLM)": "Κλειδί από z.ai. Αν έχεις πακέτο coding, άλλαξε τη διεύθυνση σε "
+    "https://api.z.ai/api/coding/paas/v4 με «Custom».",
     "Ollama (τοπικό)": "Δεν θέλει κλειδί — άφησέ το κενό. Θέλει ανοιχτό ollama serve.",
     "Custom": "Οποιαδήποτε υπηρεσία μιλάει τη γλώσσα του OpenAI (…/v1).",
 }

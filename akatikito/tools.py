@@ -267,20 +267,29 @@ def run_command(ws: Workspace, command: str, timeout: int = 120) -> str:
     except (TypeError, ValueError):
         timeout_val = 120
     try:
-        proc = subprocess.run(
-            command,
-            shell=True,
-            cwd=str(ws.root),
-            capture_output=True,
-            timeout=max(1, timeout_val),
-        )
-    except subprocess.TimeoutExpired as exc:
-        output = (_decode(exc.stdout or b"") + _decode(exc.stderr or b"")).strip()
-        return f"returncode=124\nTimeoutError: η εντολή ξεπέρασε το όριο των {timeout_val}s.\n" + _clip_with_archive(ws, output)
+        from .job_sandbox import managed_job
+
+        with managed_job() as job:
+            proc = subprocess.Popen(
+                command,
+                shell=True,
+                cwd=str(ws.root),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
+            job.assign(proc)
+            try:
+                raw_out, raw_err = proc.communicate(timeout=max(1, timeout_val))
+            except subprocess.TimeoutExpired as exc:
+                proc.kill()
+                out_tail, err_tail = proc.communicate()
+                output = (_decode((exc.stdout or b"") + (out_tail or b"")) + _decode((exc.stderr or b"") + (err_tail or b""))).strip()
+                return f"returncode=124\nTimeoutError: η εντολή ξεπέρασε το όριο των {timeout_val}s.\n" + _clip_with_archive(ws, output)
     except OSError as exc:
         return f"ΣΦΑΛΜΑ: δεν μπόρεσα να τρέξω την εντολή ({exc})."
 
-    output = (_decode(proc.stdout) + _decode(proc.stderr)).strip()
+    output = (_decode(raw_out) + _decode(raw_err)).strip()
     body = output or "(καμία έξοδος)"
     return f"returncode={proc.returncode}\n{_clip_with_archive(ws, body)}"
 

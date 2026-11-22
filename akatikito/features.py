@@ -56,6 +56,8 @@ SPECS=[
         'table':{'type':'array','items':{'type':'array','items':S}},'expected_sha256':S},['path']),
     spec('git_status_diff','Read-only inspection of Git working tree status (modified/untracked files) and unified git diff without needing shell command approval. Available in all modes.',{
         'path':S,'staged':{'type':'boolean'}},[]),
+    spec('search_documents','Full-text BM25 offline search across local project documents (PDF, DOCX, XLSX, CSV, MD, TXT) using SQLite FTS5. Returns ranked file paths and text snippets. Read-only.',{
+        'query':S,'limit':{'type':'integer'}},['query']),
 ]
 
 
@@ -737,6 +739,11 @@ def git_status_diff(ws, path='', staged=False):
     return _safe_git_status_diff(ws, path=path, staged=staged)
 
 
-HANDLERS={n:globals()[n] for n in ('update_todos','read_document','list_reminders','add_reminder','done_reminder','use_skill','list_memory','list_skills','propose_memory','propose_skill','patch_skill','search_past_sessions','create_word_document','create_excel_sheet','create_pdf_document','git_status_diff')}
+def search_documents(ws, query='', limit=8):
+    from .doc_index import search_documents as _search_documents
+    return _search_documents(ws, query=query, limit=limit)
+
+
+HANDLERS={n:globals()[n] for n in ('update_todos','read_document','list_reminders','add_reminder','done_reminder','use_skill','list_memory','list_skills','propose_memory','propose_skill','patch_skill','search_past_sessions','create_word_document','create_excel_sheet','create_pdf_document','git_status_diff','search_documents')}
 HANDLERS.update({p["tool_name"]: p["handler"] for p in BUILTIN_TOOL_PLUGINS.values()})
 HANDLERS.update(ORG_HANDLERS)

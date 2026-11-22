@@ -110,3 +110,82 @@ def preview(root, path, offset=0, version=''):
             'size':len(raw), 'offset':offset, 'next':end if end < len(text) else None,
             'total_chars':len(text), 'line_start':text.count('\n', 0, offset)+1,
             'line_end':text.count('\n', 0, end)+1, 'version':digest}
+
+
+IMAGE_MIMES = {
+    '.png': 'image/png',
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.webp': 'image/webp',
+    '.gif': 'image/gif',
+    '.svg': 'image/svg+xml',
+}
+MAX_CSV_ROWS = 200
+MAX_CSV_COLS = 40
+
+
+def rich_preview(root, path, offset=0, version=''):
+    """Rich preview supporting images (base64 data URI), CSV/TSV tables, Markdown, and plain text."""
+    import base64
+    import csv
+    import io
+
+    if not isinstance(path, str) or not path.strip():
+        raise ValueError('Διάλεξε ένα αρχείο του project.')
+    ws = Workspace(root)
+    target = ws.resolve(path)
+    relative = ws.relative(target).replace('\\', '/')
+    if ':' in relative or not stat.S_ISREG(target.stat().st_mode):
+        raise ValueError('Η προεπισκόπηση υποστηρίζει μόνο κανονικά αρχεία του project.')
+    suffix = target.suffix.lower()
+
+    if suffix in IMAGE_MIMES:
+        with target.open('rb') as stream:
+            raw = stream.read(MAX_FILE_BYTES + 1)
+        if len(raw) > MAX_FILE_BYTES:
+            raise ValueError('Η εικόνα ξεπερνά το όριο προεπισκόπησης των 4 MiB.')
+        digest = hashlib.sha256(raw).hexdigest()
+        mime = IMAGE_MIMES[suffix]
+        b64 = base64.b64encode(raw).decode('ascii')
+        return {
+            'path': relative,
+            'kind': 'image',
+            'mime': mime,
+            'data_uri': f'data:{mime};base64,{b64}',
+            'size': len(raw),
+            'version': digest,
+            'text': '',
+            'offset': 0,
+            'next': None,
+            'total_chars': 0,
+            'line_start': 1,
+            'line_end': 1,
+        }
+
+    base = preview(root, path, offset=offset, version=version)
+    if suffix in {'.csv', '.tsv'} and offset == 0:
+        delim = '\t' if suffix == '.tsv' else ','
+        reader = csv.reader(io.StringIO(base['text']), delimiter=delim)
+        rows = []
+        truncated = False
+        for i, row in enumerate(reader):
+            if i >= MAX_CSV_ROWS + 1:
+                truncated = True
+                break
+            rows.append([cell[:200] for cell in row[:MAX_CSV_COLS]])
+        headers = rows[0] if rows else []
+        body = rows[1:] if len(rows) > 1 else []
+        base.update({
+            'kind': 'csv',
+            'headers': headers,
+            'rows': body,
+            'csv_truncated': truncated or base.get('next') is not None,
+        })
+        return base
+
+    if suffix in {'.md', '.markdown'}:
+        base['kind'] = 'markdown'
+        return base
+
+    base['kind'] = 'text'
+    return base

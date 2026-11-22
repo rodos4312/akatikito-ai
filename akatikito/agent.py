@@ -382,8 +382,23 @@ class Akatikito:
                     return "ΑΠΟΡΡΙΨΗ: όσο εκκρεμεί αποτυχία, διάβασε με τα εργαλεία ανάγνωσης και τρέξε μόνο τον καθορισμένο έλεγχο.", False
                 if not self.repair.can_verify():
                     return "ΑΠΟΡΡΙΨΗ: ο ίδιος έλεγχος ήδη απέτυχε. Τεκμηρίωσε τη διάγνωση και κάνε διόρθωση πριν τον επανέλεγχο.", False
-            self.ws.organization_scope = "full" if self.mode in ("code", "debug") else "documents"
+            from .project_profiles import ProjectProfiles
+            from .injection_guard import guard_untrusted_text
+            from .audit_log import AuditLog
+
+            proj_profile = getattr(self.ws, "project_profile", None) or ProjectProfiles().get(self.ws.root)
+            profile_denial = ProjectProfiles.check_tool(proj_profile, name)
+            if profile_denial:
+                try:
+                    AuditLog(self.ws.root).record("tool_denied", tool=name, mode=self.mode, status="denied", summary=profile_denial)
+                except Exception:
+                    pass
+                return profile_denial, False
+
+            self.ws.organization_scope = "full" if (self.mode in ("code", "debug") and proj_profile == "developer") else "documents"
             result = self.mcp.call(name,args,self) if getattr(self,'mcp',None) and name in self.mcp.entries else dispatch(self.ws, name, args)
+            if name in ("web_search", "web_fetch", "browser_fetch", "web_news", "youtube_transcript", "read_document") or name.startswith("mcp_"):
+                result = guard_untrusted_text(result, source=name)
             if name in ('propose_memory','propose_skill','patch_skill') and not result.startswith(('ΣΦΑΛΜΑ','ΑΠΟΡΡΙΨΗ','ΑΠΟΤΡΟΠΗ','ΕΝΤΟΠΙΣΤΗΚΕ ΠΑΡΟΜΟΙΟ SKILL')):
                 proposals.add(key)
                 self._learning_proposals=proposals
@@ -404,6 +419,11 @@ class Akatikito:
                                   str(exc),changed,True,getattr(result,'recovery_paths',()))
             if getattr(result,'recovery_required',False):
                 self._filesystem_failure=str(result)
+            try:
+                status_tag = "denied" if str(result).startswith("ΑΠΟΡΡΙΨΗ") else ("error" if str(result).startswith("ΣΦΑΛΜΑ") else "ok")
+                AuditLog(self.ws.root).record("tool_call", tool=name, mode=self.mode, status=status_tag, paths=changed, summary=str(result)[:220])
+            except Exception:
+                pass
             return result, checking
         except PermissionError as exc:
             return f"ΑΠΟΡΡΙΨΗ: {exc}",False

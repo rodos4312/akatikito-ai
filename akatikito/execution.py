@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from .network_tools import READ_TOOLS
 
-PARALLEL_READS = frozenset(('list_files', 'read_file', 'search_in_file', 'search_project', 'file_operation_history', *READ_TOOLS))
+PARALLEL_READS = frozenset(('list_files', 'read_file', 'search_in_file', 'search_project', 'search_documents', 'file_operation_history', *READ_TOOLS))
 
 
 def mutation_paths(name, args, result):
