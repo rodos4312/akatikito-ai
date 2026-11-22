@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  windows-test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if (Test-Path requirements.txt) { pip install -r requirements.txt }
+          pip install -r requirements-features.txt
+          pip install pytest
+
+      - name: Install template parser dependencies
+        run: npm.cmd install --prefix akatikito/template_parsers --no-audit --no-fund
+
+      - name: Validate UI JavaScript & Node UI tests
+        run: |
+          python -c "import pathlib,re,subprocess; s=re.findall(r'<script>(.*?)</script>', pathlib.Path('akatikito/ui.html').read_text(encoding='utf-8'), re.S)[-1]; assert subprocess.run(['node','--check'], input=s, text=True).returncode==0"
+          Get-ChildItem tests\*.cjs | ForEach-Object { node $_.FullName; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE } }
+
+      - name: Run Python test suites
+        run: pytest tests/test_best_of_both_worlds.py tests/test_pro_release.py tests/test_modern_extensibility.py tests/test_roadmap_extensions.py tests/test_app_api.py tests/test_gateway_ui.py tests/test_gateway_channels.py tests/test_engine_improvements.py tests/test_engine_regressions.py tests/test_dependency_map.py tests/test_general_workflows.py tests/test_learning.py tests/test_files_ui.py tests/test_agenda.py tests/test_mcp_http.py -k "not real_chromium" -q
+
+      - name: Run 10-scenario offline eval harness
+        run: python scripts/run_evals.py

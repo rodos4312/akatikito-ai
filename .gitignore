@@ -1,0 +1,33 @@
+# Python & virtual environments
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node.js dependencies (reinstalled via Install.cmd / npm ci)
+node_modules/
+akatikito/template_parsers/node_modules/
+
+# Private owner data, secrets, keys, memory & runtime state — NEVER commit!
+data/
+.agent/
+.agent_backups/
+*.broken.json
+*.lock
+*.tmp
+
+# Build & release artifacts
+dist/
+build/
+*.zip
+SHA256SUMS.txt
+
+# OS & editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

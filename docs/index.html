@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Akatikito — Local-First Desktop AI Agent for Windows</title>
+<style>
+  :root {
+    --bg: #0b0f1a; --panel: #13192b; --panel2: #192138; --border: #26314f;
+    --text: #eef2ff; --dim: #94a3b8; --accent: #38bdf8; --accent2: #60a5fa; --ok: #4ade80;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: "Segoe UI", system-ui, -apple-system, sans-serif; background: radial-gradient(circle at top, #17203a 0%, var(--bg) 55%); color: var(--text); line-height: 1.6; }
+  .wrap { max-width: 1060px; margin: 0 auto; padding: 28px 20px 64px; }
+  header { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; padding-bottom: 20px; border-bottom: 1px solid var(--border); }
+  .brand { font-size: 20px; font-weight: 700; letter-spacing: .3px; display: flex; align-items: center; gap: 10px; }
+  .brand-dot { width: 12px; height: 12px; border-radius: 50%; background: linear-gradient(135deg, var(--accent), var(--accent2)); box-shadow: 0 0 12px var(--accent); }
+  .lang-switch { display: flex; gap: 6px; }
+  .lang-btn { background: var(--panel); border: 1px solid var(--border); color: var(--dim); padding: 6px 12px; border-radius: 8px; cursor: pointer; font-size: 13px; }
+  .lang-btn.active, .lang-btn:hover { color: var(--text); border-color: var(--accent); background: var(--panel2); }
+  .hero { padding: 54px 0 36px; text-align: center; }
+  .pill { display: inline-block; padding: 5px 14px; border-radius: 999px; background: #1e293b; border: 1px solid var(--border); color: var(--accent); font-size: 12.5px; margin-bottom: 18px; }
+  h1 { font-size: clamp(30px, 5vw, 48px); line-height: 1.15; margin-bottom: 16px; background: linear-gradient(135deg, #fff, #93c5fd); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+  .lead { max-width: 720px; margin: 0 auto 28px; font-size: 17px; color: var(--dim); }
+  .cta-row { display: flex; justify-content: center; gap: 12px; flex-wrap: wrap; }
+  .btn { text-decoration: none; padding: 12px 22px; border-radius: 10px; font-weight: 600; font-size: 14.5px; border: 1px solid var(--border); color: var(--text); background: var(--panel); transition: transform .12s, border-color .15s; }
+  .btn.primary { background: linear-gradient(135deg, #2563eb, #0284c7); border-color: #38bdf8; }
+  .btn:hover { transform: translateY(-1px); border-color: var(--accent); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 16px; margin-top: 38px; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 20px; }
+  .card h3 { font-size: 16px; margin-bottom: 8px; color: #f8fafc; }
+  .card p { font-size: 14px; color: var(--dim); }
+  .install-box { margin-top: 44px; background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 24px; }
+  .install-box h2 { font-size: 20px; margin-bottom: 12px; }
+  pre { background: #070a12; border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; overflow-x: auto; font-size: 13.5px; color: #bae6fd; margin: 12px 0; }
+  .badges { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; font-size: 13px; color: var(--ok); }
+  footer { margin-top: 54px; padding-top: 20px; border-top: 1px solid var(--border); text-align: center; color: var(--dim); font-size: 13px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand"><span class="brand-dot"></span> Akatikito</div>
+    <div class="lang-switch" role="group" aria-label="Language">
+      <button class="lang-btn active" onclick="setLang('en', this)">English</button>
+      <button class="lang-btn" onclick="setLang('el', this)">Ελληνικά</button>
+      <button class="lang-btn" onclick="setLang('ru', this)">Русский</button>
+    </div>
+  </header>
+
+  <section class="hero">
+    <div class="pill" data-k="pill">Open Source · Local-First · Windows Desktop AI Agent</div>
+    <h1 data-k="h1">Your local AI assistant & coding agent — with real security.</h1>
+    <p class="lead" data-k="lead">Runs cleanly in its own native desktop window with zero console clutter, Windows DPAPI secret encryption, safe file organization with Undo, Office & PDF creation, isolated Chromium research, MCP hub, and 6 UI languages.</p>
+    <div class="cta-row">
+      <a class="btn primary" href="https://github.com/rodos4312/akatikito-ai/releases" data-k="cta_dl">⬇ Download Portable Release</a>
+      <a class="btn" href="https://github.com/rodos4312/akatikito-ai" data-k="cta_gh">★ View on GitHub</a>
+    </div>
+  </section>
+
+  <section class="grid">
+    <div class="card">
+      <h3 data-k="c1_t">🔐 Windows DPAPI & Owner Approvals</h3>
+      <p data-k="c1_p">API keys, MCP credentials, and bot tokens are encrypted per Windows user via CryptProtectData. Dangerous commands and file reorganizations always require explicit owner approval.</p>
+    </div>
+    <div class="card">
+      <h3 data-k="c2_t">📦 Safe File Manager + Verified Undo</h3>
+      <p data-k="c2_p">Bulk Move, Copy, Pattern Rename, and Safe Trash with mandatory preview plans, NTFS stream preservation, backups, and verified rollback.</p>
+    </div>
+    <div class="card">
+      <h3 data-k="c3_t">📊 Real Word, Excel & Greek/Unicode PDF</h3>
+      <p data-k="c3_p">Generates real .docx, .xlsx (formula-injection safe), and .pdf documents via isolated Chromium CDP with an offline TrueType vector fallback, plus a 50-digit Decimal calculator.</p>
+    </div>
+    <div class="card">
+      <h3 data-k="c4_t">🧠 12-Language Tree-sitter Coding Engine</h3>
+      <p data-k="c4_p">Native offline syntax navigation for Python, JS/TS/TSX, Go, Rust, C/C++, Java, C#, PHP, HTML/CSS/XML, plus Vue, Svelte & Angular — with bare-Git checkpoints.</p>
+    </div>
+    <div class="card">
+      <h3 data-k="c5_t">🌐 Isolated Chromium & PublicProxy</h3>
+      <p data-k="c5_p">Live web search, RSS news, YouTube transcripts, and headless Chromium routed through a DNS-pinned local proxy that blocks loopback & private-network SSRF.</p>
+    </div>
+    <div class="card">
+      <h3 data-k="c6_t">🌍 6 Languages · Simple & Pro Modes</h3>
+      <p data-k="c6_p">Instant switching between English, Greek, Russian, German, Spanish, and French, plus 1-click Simple/Pro view and MCP presets (GitHub, Notion, Playwright, SQLite).</p>
+    </div>
+  </section>
+
+  <section class="install-box">
+    <h2 data-k="inst_t">1-Click Install on Windows (No Code-Signing Needed)</h2>
+    <p style="color:var(--dim);font-size:14px" data-k="inst_p">Clone or download the Portable ZIP, run Install.cmd once, and launch Akatikito cleanly from your Desktop or Start Menu shortcut with zero black console window.</p>
+    <pre>git clone https://github.com/rodos4312/akatikito-ai.git
+cd akatikito-ai
+Install.cmd</pre>
+    <div class="badges">
+      <span data-k="b1">✓ Zero console window (pythonw.exe shortcut)</span>
+      <span data-k="b2">✓ Bring your own API key or local Ollama</span>
+      <span data-k="b3">✓ 100% open source (MIT License)</span>
+    </div>
+  </section>
+
+  <footer>Akatikito · Open Source Local AI Agent · MIT License</footer>
+</div>
+
+<script>
+const COPY = {
+  en: {
+    pill: "Open Source · Local-First · Windows Desktop AI Agent",
+    h1: "Your local AI assistant & coding agent — with real security.",
+    lead: "Runs cleanly in its own native desktop window with zero console clutter, Windows DPAPI secret encryption, safe file organization with Undo, Office & PDF creation, isolated Chromium research, MCP hub, and 6 UI languages.",
+    cta_dl: "⬇ Download Portable Release",
+    cta_gh: "★ View on GitHub",
+    c1_t: "🔐 Windows DPAPI & Owner Approvals",
+    c1_p: "API keys, MCP credentials, and bot tokens are encrypted per Windows user via CryptProtectData. Dangerous commands and file reorganizations always require explicit owner approval.",
+    c2_t: "📦 Safe File Manager + Verified Undo",
+    c2_p: "Bulk Move, Copy, Pattern Rename, and Safe Trash with mandatory preview plans, NTFS stream preservation, backups, and verified rollback.",
+    c3_t: "📊 Real Word, Excel & Unicode PDF",
+    c3_p: "Generates real .docx, .xlsx (formula-injection safe), and .pdf documents via isolated Chromium CDP with an offline TrueType vector fallback, plus a 50-digit Decimal calculator.",
+    c4_t: "🧠 12-Language Tree-sitter Coding Engine",
+    c4_p: "Native offline syntax navigation for Python, JS/TS/TSX, Go, Rust, C/C++, Java, C#, PHP, HTML/CSS/XML, plus Vue, Svelte & Angular — with bare-Git checkpoints.",
+    c5_t: "🌐 Isolated Chromium & PublicProxy",
+    c5_p: "Live web search, RSS news, YouTube transcripts, and headless Chromium routed through a DNS-pinned local proxy that blocks loopback & private-network SSRF.",
+    c6_t: "🌍 6 Languages · Simple & Pro Modes",
+    c6_p: "Instant switching between English, Greek, Russian, German, Spanish, and French, plus 1-click Simple/Pro view and MCP presets (GitHub, Notion, Playwright, SQLite).",
+    inst_t: "1-Click Install on Windows",
+    inst_p: "Clone or download the Portable ZIP, run Install.cmd once, and launch Akatikito cleanly from your Desktop or Start Menu shortcut with zero black console window.",
+    b1: "✓ Zero console window (pythonw.exe shortcut)",
+    b2: "✓ Bring your own API key or local Ollama",
+    b3: "✓ 100% open source (MIT License)"
+  },
+  el: {
+    pill: "Ανοιχτού Κώδικα · Τοπικός AI Agent για Windows",
+    h1: "Ο τοπικός σου AI βοηθός & coding agent — με πραγματική ασφάλεια.",
+    lead: "Ανοίγει καθαρά σε δικό του παράθυρο χωρίς μαύρη κονσόλα Python, με κρυπτογράφηση Windows DPAPI, ασφαλή οργάνωση αρχείων με Undo, δημιουργία Word/Excel/PDF, απομονωμένο Chromium, MCP hub και 6 γλώσσες.",
+    cta_dl: "⬇ Λήψη Portable Έκδοσης",
+    cta_gh: "★ Προβολή στο GitHub",
+    c1_t: "🔐 Windows DPAPI & Εγκρίσεις Ιδιοκτήτη",
+    c1_p: "Όλα τα API keys, MCP μυστικά και bot tokens κρυπτογραφούνται ανά χρήστη Windows με CryptProtectData. Κάθε κρίσιμη ενέργεια ζητά ρητή έγκριση.",
+    c2_t: "📦 Ασφαλής Οργάνωση Αρχείων & Undo",
+    c2_p: "Μαζική Μετακίνηση, Αντιγραφή, Μετονομασία με μοτίβα και Ασφαλής Κάδος με προεπισκόπηση, NTFS backups και επαληθευμένη επαναφορά.",
+    c3_t: "📊 Πραγματικά Word, Excel & Ελληνικά PDF",
+    c3_p: "Παράγει .docx, .xlsx (με προστασία Formula Injection) και ελληνικά .pdf μέσω απομονωμένου Chromium CDP με offline TrueType fallback και υπολογιστή 50 ψηφίων.",
+    c4_t: "🧠 Tree-sitter Coding Engine 12 Γλωσσών",
+    c4_p: "Πραγματική τοπική ανάλυση σύνταξης για Python, JS/TS/TSX, Go, Rust, C/C++, Java, C#, PHP, HTML/CSS/XML, Vue, Svelte & Angular — με Git checkpoints.",
+    c5_t: "🌐 Απομονωμένος Chromium & PublicProxy",
+    c5_p: "Αναζήτηση Web, ειδήσεις RSS, υπότιτλοι YouTube και headless Chromium μέσα από DNS-pinned proxy που κόβει SSRF σε ιδιωτικά δίκτυα.",
+    c6_t: "🌍 6 Γλώσσες · Απλή & Pro Λειτουργία",
+    c6_p: "Άμεση εναλλαγή σε Ελληνικά, Αγγλικά, Ρωσικά, Γερμανικά, Ισπανικά & Γαλλικά, με 1-κλικ Απλή/Pro προβολή και έτοιμα MCP presets.",
+    inst_t: "Εγκατάσταση με 1 κλικ στα Windows",
+    inst_p: "Κατέβασε το project ή το Portable ZIP, τρέξε μία φορά το Install.cmd και άνοιξε το Akatikito από τη συντόμευση Επιφάνειας Εργασίας / Έναρξης — χωρίς μαύρο παράθυρο κονσόλας.",
+    b1: "✓ Χωρίς μαύρο παράθυρο Python (συντόμευση pythonw.exe)",
+    b2: "✓ Με το δικό σου API key ή τοπικό Ollama",
+    b3: "✓ 100% ανοιχτού κώδικα (MIT License)"
+  },
+  ru: {
+    pill: "Open Source · Локальный AI-агент для Windows",
+    h1: "Ваш локальный AI-помощник и coding-агент с реальной защитой.",
+    lead: "Запускается в собственном окне без чёрной консоли Python, с шифрованием ключей Windows DPAPI, безопасной организацией файлов с отменой, созданием Word/Excel/PDF, изолированным Chromium, MCP-хабом и 6 языками интерфейса.",
+    cta_dl: "⬇ Скачать Portable-версию",
+    cta_gh: "★ Открыть на GitHub",
+    c1_t: "🔐 Windows DPAPI и контроль владельца",
+    c1_p: "API-ключи, секреты MCP и токены ботов шифруются через Windows CryptProtectData. Опасные команды и операции с файлами требуют явного подтверждения.",
+    c2_t: "📦 Менеджер файлов + надёжный Undo",
+    c2_p: "Массовое перемещение, копирование, переименование по шаблону и безопасная корзина с предпросмотром, резервными копиями NTFS и откатом.",
+    c3_t: "📊 Настоящие Word, Excel и PDF",
+    c3_p: "Создаёт .docx, .xlsx (защита от инъекции формул) и .pdf через изолированный Chromium CDP с офлайн TrueType fallback, плюс калькулятор Decimal (50 знаков).",
+    c4_t: "🧠 Tree-sitter для 12 языков",
+    c4_p: "Офлайн-навигация по коду Python, JS/TS/TSX, Go, Rust, C/C++, Java, C#, PHP, HTML/CSS/XML, а также Vue, Svelte и Angular — с чекпоинтами Git.",
+    c5_t: "🌐 Изолированный Chromium + PublicProxy",
+    c5_p: "Поиск в сети, RSS-новости, субтитры YouTube и headless Chromium через локальный DNS-pinned прокси с защитой от SSRF.",
+    c6_t: "🌍 6 языков · Режимы Простой и Pro",
+    c6_p: "Мгновенное переключение между русским, английским, греческим, немецким, испанским и французским языками, пресеты MCP в 1 клик.",
+    inst_t: "Установка в 1 клик на Windows",
+    inst_p: "Клонируйте репозиторий или скачайте Portable ZIP, запустите Install.cmd один раз и открывайте Akatikito с ярлыка на рабочем столе или в меню Пуск — без окна консоли.",
+    b1: "✓ Без чёрного окна консоли (ярлык pythonw.exe)",
+    b2: "✓ Любой API-ключ или локальный Ollama",
+    b3: "✓ 100% открытый исходный код (MIT)"
+  }
+};
+function setLang(code, btn) {
+  const dict = COPY[code] || COPY.en;
+  document.documentElement.lang = code;
+  document.querySelectorAll('[data-k]').forEach(el => { const k = el.getAttribute('data-k'); if (dict[k]) el.textContent = dict[k]; });
+  document.querySelectorAll('.lang-btn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+}
+</script>
+</body>
+</html>

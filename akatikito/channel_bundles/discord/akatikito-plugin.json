@@ -1,0 +1,15 @@
+{
+  "id": "discord",
+  "name": "Discord",
+  "version": "1.0.0",
+  "api_version": 1,
+  "kind": "channel",
+  "entry": "adapter.py",
+  "files": [
+    "adapter.py"
+  ],
+  "permissions": [
+    "Discord Gateway και REST: λήψη και αποστολή μηνυμάτων"
+  ],
+  "description": "Κανάλι επικοινωνίας με χωριστό ιστορικό ανά χρήστη και συνομιλία."
+}

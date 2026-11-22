@@ -1,0 +1,208 @@
+"""Ρυθμίσεις που μένουν: πάροχος, μοντέλο και κλειδιά API ανά πάροχο.
+
+Αποθηκεύονται τοπικά (default: data/settings.json) ώστε να μη ζητάει κλειδί σε κάθε
+επανεκκίνηση. Το κλειδί δεν γράφεται ποτέ σε καθαρή μορφή στο αρχείο — μπαίνει με
+απλή αντιστρεπτή συγκάλυψη (base64 + XOR). Δεν είναι κρυπτογράφηση: είναι προστασία
+από «ματιές», όχι από κάποιον που έχει πρόσβαση στο μηχάνημα.
+"""
+
+from __future__ import annotations
+
+import base64
+import json
+import os
+from dataclasses import dataclass, field
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_PATH = Path(os.getenv("AKATIKITO_SETTINGS_FILE", str(ROOT / "data" / "settings.json")))
+
+_MASK = b"Akatikito::topikes::rythmiseis"
+_PREFIX = "v1:"
+
+
+def mask_secret(text: str) -> str:
+    """Κρυπτογραφεί το κλειδί με Windows DPAPI (CryptProtectData) πριν γραφτεί στο αρχείο, με fallback XOR εκτός Windows."""
+    if not text:
+        return ""
+    from .secret_store import DPAPI_PREFIX, protect_text
+
+    if str(text).startswith(DPAPI_PREFIX):
+        return str(text)
+    protected = protect_text(str(text))
+    if protected is not None:
+        return protected
+    raw = str(text).encode("utf-8")
+    mixed = bytes(byte ^ _MASK[i % len(_MASK)] for i, byte in enumerate(raw))
+    return _PREFIX + base64.urlsafe_b64encode(mixed).decode("ascii")
+
+
+def unmask_secret(text: str) -> str:
+    """Αποκρυπτογραφεί DPAPI ('dpapi:v1:') ή παλαιότερο 'v1:' κλειδί. Σε σφάλμα επιστρέφει κενό."""
+    if not text:
+        return ""
+    s = str(text)
+    from .secret_store import DPAPI_PREFIX, unprotect_text
+
+    if s.startswith(DPAPI_PREFIX):
+        return unprotect_text(s)
+    if not s.startswith(_PREFIX):
+        return s  # παλιά/χειροκίνητη καταχώρηση
+    try:
+        mixed = base64.urlsafe_b64decode(s[len(_PREFIX) :].encode("ascii"))
+        return bytes(byte ^ _MASK[i % len(_MASK)] for i, byte in enumerate(mixed)).decode("utf-8")
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def short_key(key: str) -> str:
+    """Δείχνει μόνο την αρχή και το τέλος του κλειδιού (για επιβεβαίωση)."""
+    if not key:
+        return ""
+    if len(key) <= 10:
+        return "•" * len(key)
+    return f"{key[:4]}…{key[-4:]}"
+
+
+@dataclass
+class Settings:
+    provider: str = "DeepSeek"
+    base_url: str = ""
+    model: str = ""
+    max_steps: int = 50
+    verify_command: str = ""
+    project: str = ""
+    keys: dict[str, str] = field(default_factory=dict)  # πάροχος -> συγκαλυμμένο κλειδί
+    models: dict[str, str] = field(default_factory=dict)
+    key_origins: dict[str, str] = field(default_factory=dict)
+    autonomous: bool = False
+    cautious_edits: bool = False
+    advanced_view: bool = False
+    daily_budget: float = 0.0
+    model_prices: dict = field(default_factory=dict)
+    vision_models: list[str] = field(default_factory=list)
+    checkpoints: bool = True
+    allowed_commands: list[str] = field(default_factory=list)
+    voice_model: str = 'base'
+    voice_language: str = 'el'
+    ui_language: str = 'el'
+    onboarding_complete: bool = False
+    warning: str = field(default="", compare=False)
+
+    # --- αρχείο ---------------------------------------------------------
+
+    @classmethod
+    def load(cls, path: str | Path | None = None) -> "Settings":
+        target = Path(path) if path else DEFAULT_PATH
+        settings = cls()
+        if not target.exists():
+            return settings
+        try:
+            data = json.loads(target.read_text(encoding="utf-8") or "{}")
+        except Exception:  # noqa: BLE001 — χαλασμένο αρχείο δεν σταματάει τη δουλειά
+            try:
+                target.replace(target.with_suffix(".broken.json"))
+                settings.warning = "Το αρχείο ρυθμίσεων ήταν χαλασμένο — κρατήθηκε αντίγραφο."
+            except OSError:
+                settings.warning = "Δεν διάβασα το αρχείο ρυθμίσεων."
+            return settings
+        if not isinstance(data, dict):
+            settings.warning = "Το αρχείο ρυθμίσεων δεν είχε τη σωστή μορφή."
+            return settings
+
+        from .i18n import SUPPORTED_LANGUAGES, normalize_lang
+        settings.voice_model=data.get('voice_model') if data.get('voice_model') in ('base','small') else 'base'
+        settings.voice_language=data.get('voice_language') if data.get('voice_language') in ('el','en','ru','de','es','fr','auto') else 'el'
+        settings.ui_language=normalize_lang(data.get('ui_language')) if data.get('ui_language') in SUPPORTED_LANGUAGES else 'el'
+        settings.provider = str(data.get("provider") or settings.provider)
+        settings.base_url = str(data.get("base_url") or "")
+        settings.model = str(data.get("model") or "")
+        try:
+            settings.max_steps = int(data.get("max_steps") or settings.max_steps)
+        except (TypeError, ValueError):
+            settings.max_steps = 50
+        settings.verify_command = str(data.get("verify_command") or "")
+        settings.project = str(data.get("project") or "")
+        models = data.get("models") or {}
+        if isinstance(models, dict):
+            settings.models = {str(k): str(v) for k, v in models.items() if v}
+        if settings.model:
+            settings.models[settings.provider] = settings.model
+        settings.onboarding_complete=data.get('onboarding_complete',bool(settings.project and
+            (settings.model or settings.models.get(settings.provider)))) is True
+        settings.vision_models = [str(x) for x in data.get('vision_models',[]) if isinstance(x,str)] if isinstance(data.get('vision_models'),list) else []
+        settings.advanced_view = data.get('advanced_view') is True
+        try: settings.daily_budget=max(0,float(data.get('daily_budget',0)))
+        except (TypeError,ValueError): settings.daily_budget=0
+        settings.model_prices=data.get('model_prices',{}) if isinstance(data.get('model_prices'),dict) else {}
+        settings.autonomous = data.get('autonomous') is True
+        settings.cautious_edits = data.get('cautious_edits') is True
+        settings.checkpoints = data.get('checkpoints',True) is True
+        settings.allowed_commands = [str(x) for x in data.get('allowed_commands',[]) if isinstance(x,str)] if isinstance(data.get('allowed_commands'),list) else []
+        origins = data.get('key_origins') or {}
+        if isinstance(origins,dict): settings.key_origins = {str(k):str(v) for k,v in origins.items() if v}
+        keys = data.get("keys") or {}
+        if isinstance(keys, dict):
+            settings.keys = {str(k): str(v) for k, v in keys.items() if v}
+        return settings
+
+    def save(self, path: str | Path | None = None) -> Path:
+        target = Path(path) if path else DEFAULT_PATH
+        target.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            'onboarding_complete':self.onboarding_complete,
+            'voice_model':self.voice_model,'voice_language':self.voice_language,'ui_language':self.ui_language,
+            "version": 1,
+            "provider": self.provider,
+            "base_url": self.base_url,
+            "model": self.model,
+            "max_steps": int(self.max_steps),
+            "verify_command": self.verify_command,
+            "project": self.project,
+            "models": self.models,
+            "key_origins": self.key_origins,
+            'autonomous':self.autonomous, 'cautious_edits':self.cautious_edits, 'checkpoints':self.checkpoints,
+            'advanced_view':self.advanced_view,'daily_budget':self.daily_budget,'model_prices':self.model_prices,
+            'allowed_commands':self.allowed_commands, 'vision_models':self.vision_models,
+            "keys": {k: v for k, v in self.keys.items() if v},
+        }
+        temp = target.with_suffix(".tmp")
+        temp.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        os.replace(temp, target)
+        try:  # να μη το διαβάζει όποιος περάσει (Windows: μόνο ο χρήστης)
+            os.chmod(target, 0o600)
+        except OSError:
+            pass
+        return target
+
+    # --- κλειδιά --------------------------------------------------------
+
+    def set_key(self, provider: str, key: str) -> None:
+        key = (key or "").strip()
+        if not key:
+            self.keys.pop(provider, None)
+            return
+        self.keys[provider] = mask_secret(key)
+
+    def key_for(self, provider: str) -> str:
+        return unmask_secret(self.keys.get(provider, ""))
+
+    def has_key(self, provider: str) -> bool:
+        return bool(self.key_for(provider))
+
+    def forget_key(self, provider: str) -> None:
+        if provider in self.keys:
+            self.keys.pop(provider)
+            self.save()
+
+    def known_providers(self) -> list[str]:
+        return sorted(self.keys)
+
+    def summary(self) -> list[dict]:
+        """Τι ξέρουμε για κάθε πάροχο — για εμφάνιση στο UI."""
+        rows: list[dict] = []
+        for name in sorted(self.keys):
+            key = self.key_for(name)
+            if key:
+                rows.append({"provider": name, "short": short_key(key)})
+        return rows
