@@ -241,23 +241,23 @@ body.simple-view .pro-only,body.simple-view #chat>.steps:not(.important-step),bo
         <button class="btn" data-i18n="btn_add" style="width:auto;padding:3px 8px;font-size:11px" onclick="toggleAgendaForm()">＋ Προσθήκη</button>
       </div>
       <div id="agenda-form" style="display:none;flex-direction:column;gap:6px;background:var(--panel);padding:8px;border-radius:8px;border:1px solid var(--accent)">
-        <input id="agenda-title" placeholder="Τίτλος ή Εντολή Agent (π.χ. /skills ή Σύνοψη ειδήσεων)" style="background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 8px;font-size:12px">
+        <input id="agenda-title" data-i18n-placeholder="agenda_title_ph" placeholder="Τίτλος ή Εντολή Agent (π.χ. /skills ή Σύνοψη ειδήσεων)" style="background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 8px;font-size:12px">
         <div style="display:flex;gap:6px">
           <input id="agenda-date" type="date" style="flex:1;background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:5px 8px;font-size:12px">
           <input id="agenda-time" type="time" value="10:00" style="width:95px;background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:5px 8px;font-size:12px">
         </div>
         <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
           <select id="agenda-repeat" style="flex:1;background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:5px 6px;font-size:11px">
-            <option value="none">🔁 Μία φορά</option>
-            <option value="daily">🔁 Κάθε μέρα</option>
-            <option value="weekly">🔁 Κάθε εβδομάδα</option>
-            <option value="monthly">🔁 Κάθε μήνα</option>
+            <option value="none" data-i18n="agenda_rep_none">🔁 Μία φορά</option>
+            <option value="daily" data-i18n="agenda_rep_daily">🔁 Κάθε μέρα</option>
+            <option value="weekly" data-i18n="agenda_rep_weekly">🔁 Κάθε εβδομάδα</option>
+            <option value="monthly" data-i18n="agenda_rep_monthly">🔁 Κάθε μήνα</option>
           </select>
           <select id="agenda-mode" style="width:100px;background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:5px 6px;font-size:11px" title="Λειτουργία αυτόματης εκτέλεσης">
-            <option value="assistant">Βοηθός</option>
-            <option value="ask">Ερώτηση</option>
-            <option value="code">Κώδικας</option>
-            <option value="debug">Debug</option>
+            <option value="assistant" data-i18n="mode_assistant">Βοηθός</option>
+            <option value="ask" data-i18n="mode_ask">Ερώτηση</option>
+            <option value="code" data-i18n="mode_code">Κώδικας</option>
+            <option value="debug" data-i18n="mode_debug">Debug</option>
           </select>
           <label style="display:flex;align-items:center;gap:4px;font-size:11px;cursor:pointer" title="Όταν έρθει η ώρα, ο Agent θα εκτελέσει αυτόματα την εντολή!">
             <input id="agenda-autorun" type="checkbox" style="width:auto"> 🤖 Auto-Run
@@ -1779,7 +1779,7 @@ async function loadScheduledJobs() {
     box.replaceChildren();
     if (r.error) { const er = document.createElement('span'); er.className = 'hint'; er.textContent = r.error; box.appendChild(er); return; }
     const jobs = Array.isArray(r.jobs) ? r.jobs.slice().reverse() : [];
-    if (!jobs.length) { const empty = document.createElement('span'); empty.className = 'hint'; empty.textContent = 'Καμία αυτόματη εκτέλεση ακόμα.'; box.appendChild(empty); return; }
+    if (!jobs.length) { const empty = document.createElement('span'); empty.className = 'hint'; empty.textContent = i18nText('empty_scheduled', 'Καμία αυτόματη εκτέλεση ακόμα.'); box.appendChild(empty); return; }
     const statusLabels = {queued: 'Σε αναμονή', running: 'Εκτελείται', completed: 'Ολοκληρώθηκε', failed: 'Απέτυχε', uncertain: 'Χρειάζεται έλεγχο', cancelled: 'Ακυρώθηκε'};
     for (const row of jobs) {
       const card = document.createElement('div');
@@ -2941,9 +2941,11 @@ async function loadPlugins(){
   if(toolPanel){
     toolPanel.replaceChildren();
     for(const tp of (r.tool_plugins||[])){
-      const card=uiText('div',`${tp.name} (${tp.tool_name}) · ${tp.enabled?i18nText('lbl_enabled','🟢 Ενεργό'):i18nText('lbl_disabled','⚪ Απενεργοποιημένο')}`,toolPanel);
+      const tpName = i18nText('tp_name_' + tp.id, tp.name);
+      const tpDesc = i18nText('tp_desc_' + tp.id, tp.description || '');
+      const card=uiText('div',`${tpName} (${tp.tool_name}) · ${tp.enabled?i18nText('lbl_enabled','🟢 Ενεργό'):i18nText('lbl_disabled','⚪ Απενεργοποιημένο')}`,toolPanel);
       card.className='field';
-      uiText('p',tp.description||'',card);
+      uiText('p',tpDesc,card);
       learningButton(card,tp.enabled?i18nText('btn_disable','Απενεργοποίηση'):i18nText('btn_enable','Ενεργοποίηση'),async()=>{
         try{await pluginAction({action:'toggle_tool_plugin',id:tp.id,enabled:!tp.enabled});await loadPlugins();}
         catch(e){showNotice('err',e.message);}
@@ -2954,7 +2956,7 @@ async function loadPlugins(){
   const rows=[...(r.available||[]),...(r.installed||[]).filter(x=>!(r.available||[]).some(a=>a.id===x.id))];
   for(const row of rows){
     const card=uiText('div',row.name+' · '+row.version,panel);card.className='field';
-    uiText('p',row.description||'Κανάλι επικοινωνίας',card);
+    uiText('p',i18nText('ch_desc_default', row.description||'Κανάλι επικοινωνίας'),card);
     const installed=(r.installed||[]).find(x=>x.id===row.id);
     if(installed){
       uiText('p','Εγκατεστημένο · '+installed.source,card);
