@@ -1226,6 +1226,41 @@ class AppState:
         except Exception as exc:
             return {'error': str(exc)}
 
+    def github_update_check(self):
+        from .github_updater import check_github_update
+        try:
+            info = check_github_update()
+            self._last_github_update = info
+            return info
+        except Exception as exc:
+            return {'error': f'Αποτυχία ελέγχου ενημερώσεων GitHub: {exc}'}
+
+    def github_update_apply(self, data=None):
+        if self.busy or self.self_update:
+            return {'error': 'Περίμενε να ολοκληρωθεί η τρέχουσα εργασία πριν την ενημέρωση.'}
+        from .github_updater import apply_github_update
+        try:
+            cached = getattr(self, '_last_github_update', None) or {}
+            zip_url = str((data or {}).get('zip_url') or cached.get('zip_url') or '').strip()
+            sha_url = str((data or {}).get('sha_url') or cached.get('sha_url') or '').strip()
+            zip_name = str((data or {}).get('zip_name') or cached.get('zip_name') or '').strip()
+            if not zip_url or not sha_url:
+                raise ValueError('Κάνε πρώτα «Έλεγχος Ενημερώσεων GitHub» για να βρεθεί έγκυρη έκδοση.')
+            with self._lock:
+                if self.busy:
+                    return {'error': 'Η εφαρμογή είναι απασχολημένη.'}
+                self.busy = True
+            try:
+                res = apply_github_update(APP_ROOT, zip_url=zip_url, sha_url=sha_url, zip_name=zip_name)
+                if res.get('ok'):
+                    self.restart_required = True
+                    self.notice = f"Η ενημέρωση v{res.get('version') or ''} εγκαταστάθηκε με επιτυχία. Κλείσε και ξαναάνοιξε το Akatikito."
+                return res
+            finally:
+                self.busy = False
+        except Exception as exc:
+            return {'error': str(exc)}
+
     def i18n_bundle(self, lang=None):
         from .i18n import SUPPORTED_LANGUAGES, normalize_lang, translations
         code = normalize_lang(lang or self.settings.ui_language)
@@ -1659,6 +1694,10 @@ def make_handler(state: AppState) -> type:
                 self._send(state.diagnostics_export(data))
             elif path == '/api/i18n':
                 self._send(state.i18n_bundle(data.get('lang')))
+            elif path == '/api/update/check':
+                self._send(state.github_update_check())
+            elif path == '/api/update/apply':
+                self._send(state.github_update_apply(data))
             elif path == '/api/approval':
                 self._send(state.answer_approval(data.get('id',''),data.get('allow') is True,data.get('always') is True))
             elif path == '/api/learning':

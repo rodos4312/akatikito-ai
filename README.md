@@ -63,7 +63,7 @@ Switch languages at any time using the **`🌐`** selector in the top bar (no re
 .venv\Scripts\python.exe packaging\build_portable.py
 ```
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) for the full technical blueprint and security model.
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the full technical blueprint and [ROADMAP.md](ROADMAP.md) for upcoming releases.
 
 ---
 

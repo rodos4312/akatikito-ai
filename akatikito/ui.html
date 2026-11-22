@@ -277,6 +277,11 @@ body.simple-view .pro-only,body.simple-view #chat>.steps:not(.important-step),bo
           <button class="btn" data-i18n="btn_health" style="flex:1;font-size:11.5px" onclick="loadSystemHealth()">🩺 Έλεγχος Υγείας</button>
           <button class="btn" data-i18n="btn_diag_zip" style="flex:1;font-size:11.5px" onclick="exportDiagnosticsBundle()" title="Εξάγει ανωνυμοποιημένο .zip αναφοράς χωρίς API keys ή προσωπικά δεδομένα">📦 Διαγνωστικά .zip</button>
         </div>
+        <div id="gh-update-box" style="display:flex;flex-direction:column;gap:5px;border-top:1px solid var(--border);padding-top:6px">
+          <button class="btn" data-i18n="btn_gh_check" style="font-size:11.5px" onclick="checkGithubUpdates()">🔄 Έλεγχος Ενημερώσεων GitHub</button>
+          <div id="gh-update-status" class="hint"></div>
+          <button class="btn primary" id="gh-update-install" data-i18n="btn_gh_install" style="display:none;font-size:11.5px" onclick="installGithubUpdate()">⬇️ Εγκατάσταση Ενημέρωσης</button>
+        </div>
         <div id="tokens" class="hint pro-only"></div>
         <div id="context-hint" class="hint pro-only"></div>
         <div id="session-cost" class="hint pro-only"></div>
@@ -651,14 +656,14 @@ body.simple-view .pro-only,body.simple-view #chat>.steps:not(.important-step),bo
 
 <div id="setup-dialog" role="dialog" aria-modal="true" aria-labelledby="setup-title" style="display:none;position:fixed;inset:0;z-index:1000;background:#000b;align-items:center;justify-content:center;padding:18px">
   <div style="background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:24px;width:min(600px,100%);max-height:92vh;overflow:auto;display:flex;flex-direction:column;gap:16px">
-    <h2 id="setup-title">Καλώς ήρθες στο Akatikito</h2>
+    <h2 id="setup-title" data-i18n="setup_title">Καλώς ήρθες στο Akatikito</h2>
     <p id="setup-progress" class="hint" aria-live="polite"></p>
     <section id="setup-page-0" class="field"><label for="setup-project">1. Πού θα δουλεύει ο βοηθός;</label><p class="hint">Επίλεξε τον φάκελο του project σου. Ο οδηγός δεν μετακινεί αρχεία.</p><input id="setup-project" placeholder="D:\Το project μου"><button class="btn" onclick="setupPickFolder()">📁 Επιλογή φακέλου</button></section>
     <section id="setup-page-1" class="field" style="display:none"><label for="setup-provider">2. Πάροχος και σύνδεση</label><select id="setup-provider" onchange="setupProviderChanged()"></select><label for="setup-url">Διεύθυνση για Custom πάροχο</label><input id="setup-url" placeholder="https://…/v1"><label for="setup-key">Κλειδί API</label><input id="setup-key" type="password" autocomplete="off" placeholder="Νέο κλειδί ή κενό για το ήδη αποθηκευμένο"><p id="setup-key-hint" class="hint"></p></section>
     <section id="setup-page-2" class="field" style="display:none"><label for="setup-model">3. Ποιο μοντέλο θέλεις;</label><input id="setup-model" list="setup-models" placeholder="Γράψε ή διάλεξε μοντέλο"><datalist id="setup-models"></datalist><button class="btn" id="setup-test" onclick="setupTestModels()">Δοκιμή σύνδεσης / Φόρτωση μοντέλων</button><p class="hint">Μπορείς να γράψεις το μοντέλο χειροκίνητα. Η δοκιμή ζητά μόνο τον κατάλογο μοντέλων, χωρίς μήνυμα συνομιλίας.</p></section>
     <section id="setup-page-3" class="field" style="display:none"><label>4. Έλεγχος και έναρξη</label><pre id="setup-summary" style="white-space:pre-wrap;overflow-wrap:anywhere"></pre><p class="hint">Τα αρχεία δεν αλλάζουν από τον οδηγό. Οι εγκρίσεις εντολών ακολουθούν τις ρυθμίσεις σου.</p></section>
     <p id="setup-error" role="status" style="color:var(--red);white-space:pre-wrap"></p>
-    <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" id="setup-later" onclick="closeSetup()">Αργότερα</button><button class="btn" id="setup-back" onclick="setupBack()">Πίσω</button><button class="btn primary" id="setup-next" onclick="setupNext()">Επόμενο</button><button class="btn primary" id="setup-finish" onclick="finishSetup()" style="display:none">Σύνδεση και ολοκλήρωση</button></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" id="setup-later" data-i18n="setup_later" onclick="closeSetup()">Αργότερα</button><button class="btn" id="setup-back" data-i18n="setup_back" onclick="setupBack()">Πίσω</button><button class="btn primary" id="setup-next" data-i18n="setup_next" onclick="setupNext()">Επόμενο</button><button class="btn primary" id="setup-finish" data-i18n="setup_finish" onclick="finishSetup()" style="display:none">Σύνδεση και ολοκλήρωση</button></div>
   </div>
 </div>
 <div id="channel-session-overlay" style="display:none" role="dialog" aria-label="Ιστορικό καναλιού"></div>
@@ -1639,6 +1644,61 @@ async function exportChatMarkdown() {
     showNotice('ok', 'Η συνομιλία αποθηκεύτηκε στο: ' + (r.path || r.full_path || 'exports'));
   } catch (e) {
     showNotice('err', 'Αποτυχία εξαγωγής: ' + (e.message || e));
+  }
+}
+let pendingGithubUpdate = null;
+async function checkGithubUpdates() {
+  const statusEl = document.getElementById('gh-update-status');
+  const installBtn = document.getElementById('gh-update-install');
+  if (statusEl) statusEl.textContent = 'Έλεγχος GitHub Releases…';
+  if (installBtn) installBtn.style.display = 'none';
+  pendingGithubUpdate = null;
+  try {
+    const r = await api('/api/update/check', {});
+    if (r.error) {
+      if (statusEl) statusEl.textContent = r.error;
+      showNotice('err', r.error);
+      return;
+    }
+    if (r.update_available) {
+      pendingGithubUpdate = r;
+      if (statusEl) statusEl.textContent = 'Νέα έκδοση διαθέσιμη: v' + r.latest_version + ' (τρέχουσα v' + r.current_version + ')';
+      if (installBtn && r.can_auto_install) installBtn.style.display = '';
+      showNotice('ok', 'Βρέθηκε νέα έκδοση v' + r.latest_version + ' στο GitHub!');
+    } else {
+      if (statusEl) statusEl.textContent = '✅ Έχεις την πιο πρόσφατη έκδοση (v' + r.current_version + ').';
+    }
+  } catch (e) {
+    if (statusEl) statusEl.textContent = e.message || String(e);
+    showNotice('err', e.message || String(e));
+  }
+}
+async function installGithubUpdate() {
+  if (!pendingGithubUpdate) return;
+  if (!confirm('Να εγκατασταθεί η έκδοση v' + pendingGithubUpdate.latest_version + ' από το GitHub (με έλεγχο SHA-256 & αυτόματο backup); Τα κλειδιά και οι ρυθμίσεις σου δεν θα επηρεαστούν.')) return;
+  const statusEl = document.getElementById('gh-update-status');
+  const installBtn = document.getElementById('gh-update-install');
+  if (installBtn) installBtn.disabled = true;
+  if (statusEl) statusEl.textContent = 'Λήψη, έλεγχος SHA-256 & εφαρμογή ενημέρωσης…';
+  try {
+    const r = await api('/api/update/apply', {
+      zip_url: pendingGithubUpdate.zip_url,
+      sha_url: pendingGithubUpdate.sha_url,
+      zip_name: pendingGithubUpdate.zip_name,
+    });
+    if (r.error) {
+      if (statusEl) statusEl.textContent = r.error;
+      showNotice('err', r.error);
+      if (installBtn) installBtn.disabled = false;
+      return;
+    }
+    if (statusEl) statusEl.textContent = '✅ Εγκαταστάθηκε η v' + (r.version || pendingGithubUpdate.latest_version) + ' (' + r.updated_files + ' αρχεία). Κλείσε και ξαναάνοιξε το Akatikito.';
+    if (installBtn) installBtn.style.display = 'none';
+    showNotice('ok', 'Η ενημέρωση ολοκληρώθηκε! Κλείσε και ξαναάνοιξε το Akatikito.');
+  } catch (e) {
+    if (statusEl) statusEl.textContent = e.message || String(e);
+    showNotice('err', e.message || String(e));
+    if (installBtn) installBtn.disabled = false;
   }
 }
 async function loadSystemHealth() {
