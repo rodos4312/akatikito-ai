@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://rodos4312.github.io/akatikito-ai/sitemap.xml
