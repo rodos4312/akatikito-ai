@@ -8,6 +8,8 @@
 
 **Akatikito** is a local-first AI assistant and coding agent for Windows, with an optional Android app. It runs locally in its own desktop window (no background console window), connects to your choice of LLM provider (DeepSeek, OpenAI, Anthropic, Gemini, Z.ai GLM, OpenRouter, Ollama, or custom OpenAI-compatible endpoints), and keeps files, API keys, and memory under local user control.
 
+![Akatikito Desktop v2.4.0](docs/screenshots/desktop-home.png)
+
 ---
 
 ## Key Capabilities
