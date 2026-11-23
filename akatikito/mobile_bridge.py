@@ -7,13 +7,56 @@ or Tailscale without exposing API keys or opening router ports.
 """
 from __future__ import annotations
 
+import base64
+import io
 import json
 import secrets
+import shutil
 import socket
+import subprocess
 import threading
 import time
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+
+def _detect_tailscale_ip() -> str:
+    """Detect local Tailscale IPv4 (100.x.y.z) if Tailscale is installed & connected."""
+    exe = shutil.which("tailscale") or r"C:\Program Files\Tailscale\tailscale.exe"
+    try:
+        out = subprocess.check_output(
+            [exe, "ip", "-4"],
+            stderr=subprocess.DEVNULL,
+            timeout=2,
+            text=True,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        ).strip()
+        for line in out.splitlines():
+            ip = line.strip()
+            if ip.startswith("100.") and ip.count(".") == 3:
+                return ip
+    except Exception:
+        pass
+    try:
+        for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
+            ip = info[4][0]
+            parts = ip.split(".")
+            if len(parts) == 4 and parts[0] == "100" and 64 <= int(parts[1]) <= 127:
+                return ip
+    except Exception:
+        pass
+    return ""
+
+
+def _qr_svg_data_uri(payload: str) -> str:
+    """Render an offline SVG QR code data URI for the pairing payload."""
+    try:
+        import segno
+        buf = io.BytesIO()
+        segno.make(payload, error="m").save(buf, kind="svg", scale=4, border=2, dark="#0f172a", light="#ffffff")
+        return "data:image/svg+xml;base64," + base64.b64encode(buf.getvalue()).decode("ascii")
+    except Exception:
+        return ""
 
 
 def _detect_lan_ip() -> str:
@@ -47,6 +90,7 @@ class MobileBridge:
         self.token: str = ""
         self.port: int = 0
         self.lan_ip: str = ""
+        self.tailscale_ip: str = ""
         self.started_at: float = 0.0
         self._sessions: dict[str, float] = {}  # session_token -> created_at
         self._failed_attempts: int = 0
@@ -67,16 +111,23 @@ class MobileBridge:
                     "pairing_uri": "",
                     "paired_devices": 0,
                 }
-            url = f"http://{self.lan_ip}:{self.port}"
+            primary_ip = self.tailscale_ip or self.lan_ip
+            url = f"http://{primary_ip}:{self.port}"
+            lan_url = f"http://{self.lan_ip}:{self.port}"
             qs = urllib.parse.urlencode({"url": url, "pin": self.pin, "token": self.token})
+            pairing_uri = f"akatikito://pair?{qs}"
             return {
                 "active": True,
                 "url": url,
+                "lan_url": lan_url,
                 "lan_ip": self.lan_ip,
+                "tailscale_ip": self.tailscale_ip,
+                "via_tailscale": bool(self.tailscale_ip),
                 "port": self.port,
                 "pin": self.pin,
                 "token": self.token,
-                "pairing_uri": f"akatikito://pair?{qs}",
+                "pairing_uri": pairing_uri,
+                "qr_data_uri": _qr_svg_data_uri(pairing_uri),
                 "paired_devices": len(self._sessions),
             }
 
@@ -87,6 +138,7 @@ class MobileBridge:
             self.pin = f"{secrets.randbelow(900000) + 100000}"
             self.token = secrets.token_urlsafe(24)
             self.lan_ip = "127.0.0.1" if host == "127.0.0.1" else _detect_lan_ip()
+            self.tailscale_ip = "" if host == "127.0.0.1" else _detect_tailscale_ip()
             self._sessions.clear()
             self._failed_attempts = 0
             handler = self._make_handler()
@@ -238,8 +290,22 @@ class MobileBridge:
                     self._send(state.new_session())
                 elif path == "/api/mobile/session/open":
                     self._send(state.open_session(data.get("id", ""), data.get("project", "")))
+                elif path == "/api/mobile/session/delete":
+                    self._send(state.delete_session(data.get("id", ""), data.get("project", "")))
                 elif path == "/api/mobile/routines":
                     self._send(state.routines_list())
+                elif path == "/api/mobile/agenda/list":
+                    self._send(state.agenda_list())
+                elif path == "/api/mobile/agenda/add":
+                    self._send(state.agenda_add(data))
+                elif path == "/api/mobile/agenda/toggle":
+                    self._send(state.agenda_toggle(data.get("id", ""), data.get("done", True)))
+                elif path == "/api/mobile/agenda/delete":
+                    self._send(state.agenda_delete(data.get("id", "")))
+                elif path == "/api/mobile/learning":
+                    self._send(state.learning_view(data.get("offset", 0)))
+                elif path == "/api/mobile/learning/action":
+                    self._send(state.learning_action(data))
                 elif path == "/api/mobile/docs/search":
                     self._send(state.docs_search(data.get("query", ""), data.get("limit", 8)))
                 elif path == "/api/mobile/approval":
