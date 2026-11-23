@@ -72,6 +72,8 @@ class AppState:
         self._drain_owner_tid = 0
         from .gateway_control import GatewayControl
         self.gateway=GatewayControl(DEFAULT_PATH.parent)
+        from .mobile_bridge import MobileBridge
+        self.mobile_bridge = MobileBridge(self)
 
     # ---------------------------------------------------------------- βοηθητικά
 
@@ -903,6 +905,8 @@ class AppState:
         self.approvals.cancel()
         self.voice.close()
         self.mcp.close()
+        if getattr(self, 'mobile_bridge', None):
+            self.mobile_bridge.stop()
 
     def mcp_connect(self,name):
         if self.busy or not self.agent:return {'error':'Συνδέσου και ολοκλήρωσε την εργασία.'}
@@ -1516,6 +1520,18 @@ class AppState:
             verify=self.settings.verify_command,
         )
 
+    def mobile_bridge_status(self):
+        return self.mobile_bridge.status()
+
+    def mobile_bridge_start(self, port=0):
+        try:
+            return self.mobile_bridge.start(port=int(port or 0))
+        except Exception as exc:
+            return {'error': str(exc), 'active': False}
+
+    def mobile_bridge_stop(self):
+        return self.mobile_bridge.stop()
+
     def open_in_os(self, path: str, reveal: bool = False):
         """Safely open a workspace file with its default Windows app or reveal it in Explorer."""
         import subprocess
@@ -1842,6 +1858,12 @@ def make_handler(state: AppState) -> type:
                 self._send(state.switch_project(data.get('project', '')))
             elif path == '/api/files/open-os':
                 self._send(state.open_in_os(data.get('path', ''), data.get('reveal') is True))
+            elif path == '/api/mobile-bridge/status':
+                self._send(state.mobile_bridge_status())
+            elif path == '/api/mobile-bridge/start':
+                self._send(state.mobile_bridge_start(data.get('port', 0)))
+            elif path == '/api/mobile-bridge/stop':
+                self._send(state.mobile_bridge_stop())
             elif path == '/api/approval':
                 self._send(state.answer_approval(data.get('id',''),data.get('allow') is True,data.get('always') is True))
             elif path == '/api/learning':
