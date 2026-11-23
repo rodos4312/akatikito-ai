@@ -1,30 +1,40 @@
-# Akatikito — Local-First Desktop AI Agent for Windows
+# Akatikito — Local-First Desktop & Android AI Agent
 
-[![CI](https://img.shields.io/badge/CI-Windows%20Tests%20%2B%20Evals-blue)](#testing--verification)
+[![Release](https://img.shields.io/badge/Release-v2.4.0-22c55e)](https://github.com/rodos4312/akatikito-ai/releases/tag/v2.4.0)
+[![Android APK](https://img.shields.io/badge/Android%20APK-v1.7.0%20arm64-3ddc84)](https://github.com/rodos4312/akatikito-ai/releases/tag/v2.4.0)
 [![Website](https://img.shields.io/badge/Website-GitHub%20Pages-38bdf8)](https://rodos4312.github.io/akatikito-ai/)
-[![Languages](https://img.shields.io/badge/UI%20Languages-EL%20%7C%20EN%20%7C%20RU%20%7C%20DE%20%7C%20ES%20%7C%20FR-green)](#multi-language-interface)
+[![Languages](https://img.shields.io/badge/UI%20Languages-EL%20%7C%20EN%20%7C%20RU%20%7C%20DE%20%7C%20ES%20%7C%20FR-blue)](#multi-language-interface)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-**Akatikito** is a local-first, security-hardened desktop AI assistant and coding agent built for everyday users and developers alike. It runs locally in its own native window (**zero background console window**), connects to your choice of LLM provider (DeepSeek, OpenAI, Anthropic, Gemini, OpenRouter, Ollama, or custom OpenAI-compatible endpoints), and keeps all your files, keys, and memory under strict owner control.
+**Akatikito** is a local-first AI assistant and coding agent for Windows, with an optional Android app. It runs locally in its own desktop window (no background console window), connects to your choice of LLM provider (DeepSeek, OpenAI, Anthropic, Gemini, Z.ai GLM, OpenRouter, Ollama, or custom OpenAI-compatible endpoints), and keeps files, API keys, and memory under local user control.
 
 ---
 
-## Highlights
+## Key Capabilities
 
-- **Windowless Native Desktop App**: Launches cleanly from a Start Menu / Desktop shortcut via `pythonw.exe` — no black terminal window left behind.
-- **Simple vs Pro View**: 1-click switch (`✨ Simple` / `⚙️ Pro`) hides technical clutter for everyday users and unlocks full developer controls on demand.
-- **6-Language Interface**: Live 1-click switching between **English (`en`)**, **Greek (`el`)**, **Russian (`ru`)**, **German (`de`)**, **Spanish (`es`)**, and **French (`fr`)** — updating both the UI and the agent's default response language.
-- **Safe File Organization & Undo**: Paginated folder browser with multi-select Move, Copy, Bulk Rename (`{index}_{stem}{ext}`), New Folder, and Safe Trash — always previewed before applying, backed up with NTFS stream preservation, and reversible via verified Undo.
-- **Real Office Documents & Exact Math**:
-  - Creates real `.docx`, `.xlsx` (with literal-text protection against Excel formula injection), and `.pdf` (isolated Chromium CDP primary + offline TrueType Unicode vector fallback).
-  - 50-digit `Decimal` calculator with exact VAT breakdown + strict CSV/JSON/Markdown converter.
-- **Isolated Web & Research**: DuckDuckGo + Wikipedia search, RSS/News, YouTube transcripts, and headless Chromium via Chrome DevTools Protocol (CDP) routed through a **DNS-pinned local PublicProxy** blocking loopback/private SSRF sub-requests.
-- **Multi-Language Coding Engine**: Native pinned **Tree-sitter** parsers for 12 languages (C, C++, Rust, Java, C#, PHP, JS, TS/TSX, Go, HTML, CSS, XML) + offline parsers for **Vue, Svelte, Angular**, with automatic graceful fallback and bare-Git object checkpoints.
-- **MCP Hub & Channels**: 1-click MCP presets (GitHub, Notion, Playwright, SQLite, Filesystem, Memory), Claude Desktop / Cursor JSON import, masked secret editing, hash-bound `autoConnect`, and optional Telegram / Discord gateway.
-- **OS-Level Security**:
-  - All API keys, MCP secrets, and channel tokens are encrypted at rest with **Windows DPAPI (`CryptProtectData`)**.
-  - Hash-authorized scheduled jobs run in isolated sessions with crash-safe `uncertain` recovery.
-  - 1-click **Health Check & Anonymized Diagnostics `.zip`** (strictly strips all secrets and user data).
+- **Desktop App (Windows 10/11)**: Windowless native UI (`pythonw.exe`), Simple/Pro toggle, light/dark themes, 1-click project folder switching, and dedicated **Agenda & Jobs**, **Providers**, **Plugins**, **Skills**, **Memory**, and **Settings** views.
+- **Cross-Provider Smart Model Routing**: Optionally configure a separate provider and model for routine tasks (e.g. GLM / Gemini Flash) and for complex or reasoning tasks (e.g. DeepSeek Reasoner / Claude) when running in Auto mode, with per-provider key isolation.
+- **6-Language Interface**: Live switching between **English (`en`)**, **Greek (`el`)**, **Russian (`ru`)**, **German (`de`)**, **Spanish (`es`)**, and **French (`fr`)**.
+- **Files, Office & Local Tools**:
+  - Paginated workspace browser with Move, Copy, Rename, Safe Trash, and Undo previews.
+  - Word (`.docx`) and Excel (`.xlsx`) generation, 50-digit `Decimal` calculator, local FTS5 document search, plus built-in **PDF Toolkit** (info/merge/split), **Image Tools** (resize/compress/convert), and **ZIP Manager** (list/create/extract with Zip-Slip and overwrite guards).
+- **Skills & Memory**:
+  - 7 built-in skills (`csv`, `debug`, `deep-research`, `invoice-audit`, `meeting-notes`, `security-review`, `translate-pro`), separated from user/AI-created skills.
+  - Import external `SKILL.md` files (with prompt-injection scanning) and negation-aware memory deduplication.
+- **MCP Hub & Messaging Channels**: MCP server presets and JSON import, plus optional **Telegram**, **Discord**, **Email (IMAP/SMTP)**, and **Slack** connectors.
+- **Security Controls**:
+  - Per-project trust profiles (**Read-Only**, **Office**, **Developer**) and Windows Job Object sandboxing for shell commands.
+  - API keys and tokens encrypted at rest with **Windows DPAPI (`CryptProtectData`)**.
+  - Local audit log and anonymized diagnostics export.
+
+---
+
+## Android Companion & Standalone App (`v1.7.0`)
+
+A release-signed Android APK (`Akatikito-Mobile-arm64.apk`) is available on the **[Releases](https://github.com/rodos4312/akatikito-ai/releases/tag/v2.4.0)** page:
+
+- **Standalone mode**: Includes an embedded Python 3.11 runtime (Chaquopy) so the agent can run directly on the phone with your own API key — including chat, agenda, skills, memory, local workspace files, native Android voice input, and text-to-speech.
+- **Optional PC pairing**: Enable **Mobile Companion** in desktop Settings and scan the QR code from the phone. Supports both Tailscale (recommended for encrypted remote access over 4G/5G) and local Wi-Fi, with bidirectional PC ↔ phone file transfer restricted to approved project folders.
 
 ---
 
@@ -69,6 +79,7 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the full technical blueprint and [ROA
 
 ## Ελληνικά (Σύνοψη)
 
-Το **Akatikito** είναι ένας τοπικός, ασφαλής AI βοηθός και coding agent για Windows με δικό του παράθυρο (χωρίς μαύρο παράθυρο Python), 6 γλώσσες διεπαφής, κρυπτογράφηση κλειδιών με Windows DPAPI, ασφαλή οργάνωση αρχείων με Κάδο & Undo, δημιουργία Word/Excel/PDF, απομονωμένο Chromium browser, Tree-sitter για 12 γλώσσες και πλήρες MCP hub.
+Το **Akatikito** είναι ένας τοπικός AI βοηθός και coding agent για Windows, με προαιρετική εφαρμογή Android. Τρέχει σε δικό του παράθυρο χωρίς κονσόλα, υποστηρίζει 6 γλώσσες διεπαφής, επιλογή διαφορετικού παρόχου/μοντέλου για απλές και δύσκολες εργασίες, εργαλεία εγγράφων (Word, Excel, PDF, εικόνες, ZIP, τοπική αναζήτηση FTS5), ενσωματωμένα & εισαγόμενα `SKILL.md`, MCP hub, κανάλια (Telegram, Discord, Email, Slack) και κρυπτογράφηση κλειδιών με Windows DPAPI.
 
-**Εγκατάσταση με 1 κλικ:** Τρέξε το `Install.cmd` και άνοιξε το **Akatikito** από τη συντόμευση της Επιφάνειας Εργασίας ή του Μενού Έναρξη.
+- **Windows:** Τρέξε το `Install.cmd` και άνοιξε το **Akatikito** από τη συντόμευση της Επιφάνειας Εργασίας ή του Μενού Έναρξη.
+- **Android:** Κατέβασε το `Akatikito-Mobile-arm64.apk` από τα **[Releases](https://github.com/rodos4312/akatikito-ai/releases/tag/v2.4.0)** — δουλεύει είτε αυτόνομα στο κινητό είτε συνδεδεμένο με το PC μέσω QR (Tailscale ή Wi-Fi).
