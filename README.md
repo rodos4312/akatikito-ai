@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/logo.png" alt="Akatikito Logo" width="84">
+</p>
+
 # Akatikito — Local-First Desktop & Android AI Agent
 
 [![Release](https://img.shields.io/badge/Release-v2.4.0-22c55e)](https://github.com/rodos4312/akatikito-ai/releases/tag/v2.4.0)

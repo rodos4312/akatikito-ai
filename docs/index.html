@@ -9,7 +9,7 @@
 <meta name="keywords" content="Akatikito AI, local AI agent, Windows AI assistant, open source coding agent, MCP client Windows, Tree-sitter agent, Ollama desktop client, local LLM desktop app, τοπικός AI βοηθός">
 <meta name="robots" content="index, follow, max-image-preview:large">
 <link rel="canonical" href="https://rodos4312.github.io/akatikito-ai/">
-<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<link rel="icon" type="image/png" href="logo.png">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Akatikito AI">
 <meta property="og:title" content="Akatikito AI — Local-First Desktop AI Agent for Windows">
@@ -25,9 +25,9 @@
   "@context": "https://schema.org",
   "@type": "SoftwareApplication",
   "name": "Akatikito AI",
-  "operatingSystem": "Windows 10, Windows 11",
+  "operatingSystem": "Windows 10, Windows 11, Android",
   "applicationCategory": "DeveloperApplication",
-  "softwareVersion": "2.3.0",
+  "softwareVersion": "2.4.0",
   "license": "https://opensource.org/licenses/MIT",
   "url": "https://rodos4312.github.io/akatikito-ai/",
   "downloadUrl": "https://github.com/rodos4312/akatikito-ai/releases/latest",
@@ -55,6 +55,8 @@
   .lang-btn { background: var(--panel); border: 1px solid var(--border); color: var(--dim); padding: 6px 12px; border-radius: 8px; cursor: pointer; font-size: 13px; }
   .lang-btn.active, .lang-btn:hover { color: var(--text); border-color: var(--accent); background: var(--panel2); }
   .hero { padding: 54px 0 36px; text-align: center; }
+  .hero-shot { margin: 28px auto 0; max-width: 960px; border-radius: 14px; overflow: hidden; border: 1px solid var(--border); box-shadow: 0 20px 50px rgba(0,0,0,.45); }
+  .hero-shot img { display: block; width: 100%; height: auto; }
   .pill { display: inline-block; padding: 5px 14px; border-radius: 999px; background: #1e293b; border: 1px solid var(--border); color: var(--accent); font-size: 12.5px; margin-bottom: 18px; }
   h1 { font-size: clamp(30px, 5vw, 48px); line-height: 1.15; margin-bottom: 16px; background: linear-gradient(135deg, #fff, #93c5fd); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
   .lead { max-width: 720px; margin: 0 auto 28px; font-size: 17px; color: var(--dim); }
@@ -76,7 +78,7 @@
 <body>
 <div class="wrap">
   <header>
-    <div class="brand"><span class="brand-dot"></span> Akatikito</div>
+    <div class="brand"><img src="logo.png" alt="Akatikito" style="width:32px;height:32px;border-radius:8px"> Akatikito</div>
     <div class="lang-switch" role="group" aria-label="Language">
       <button class="lang-btn active" onclick="setLang('en', this)">English</button>
       <button class="lang-btn" onclick="setLang('el', this)">Ελληνικά</button>
@@ -85,12 +87,16 @@
   </header>
 
   <section class="hero">
-    <div class="pill" data-k="pill">Open Source · Local-First · Windows Desktop AI Agent</div>
-    <h1 data-k="h1">Your local AI assistant & coding agent — with real security.</h1>
-    <p class="lead" data-k="lead">Runs cleanly in its own native desktop window with zero console clutter, Windows DPAPI secret encryption, safe file organization with Undo, Office & PDF creation, isolated Chromium research, MCP hub, and 6 UI languages.</p>
+    <div class="pill" data-k="pill">v2.4.0 · Open Source · Windows Desktop &amp; Android APK</div>
+    <h1 data-k="h1">Your local AI assistant &amp; coding agent — with real security.</h1>
+    <p class="lead" data-k="lead">Runs locally in its own Windows window with Cross-Provider Smart Model Routing, DPAPI secret encryption, safe file tools (Office, PDF, Images, ZIP), 7 built-in skills + SKILL.md import, MCP &amp; Email/Slack/Telegram/Discord channels, and a standalone Android APK.</p>
     <div class="cta-row">
-      <a class="btn primary" href="https://github.com/rodos4312/akatikito-ai/releases" data-k="cta_dl">⬇ Download Portable Release</a>
+      <a class="btn primary" href="https://github.com/rodos4312/akatikito-ai/releases/tag/v2.4.0" data-k="cta_dl">⬇ Download v2.4.0 (Windows &amp; APK)</a>
+      <a class="btn" href="https://github.com/rodos4312/akatikito-ai/releases/download/v2.4.0/Akatikito-Mobile-arm64.apk" data-k="cta_apk">📱 Android APK v1.7.0</a>
       <a class="btn" href="https://github.com/rodos4312/akatikito-ai" data-k="cta_gh">★ View on GitHub</a>
+    </div>
+    <div class="hero-shot">
+      <img src="screenshots/desktop-home.png" alt="Akatikito AI Desktop v2.4.0 interface" loading="lazy">
     </div>
   </section>
 
@@ -140,10 +146,11 @@ Install.cmd</pre>
 <script>
 const COPY = {
   en: {
-    pill: "Open Source · Local-First · Windows Desktop AI Agent",
+    pill: "v2.4.0 · Open Source · Windows Desktop & Android APK",
     h1: "Your local AI assistant & coding agent — with real security.",
-    lead: "Runs cleanly in its own native desktop window with zero console clutter, Windows DPAPI secret encryption, safe file organization with Undo, Office & PDF creation, isolated Chromium research, MCP hub, and 6 UI languages.",
-    cta_dl: "⬇ Download Portable Release",
+    lead: "Runs locally in its own Windows window with Cross-Provider Smart Model Routing, DPAPI secret encryption, safe file tools (Office, PDF, Images, ZIP), 7 built-in skills + SKILL.md import, MCP & Email/Slack/Telegram/Discord channels, and a standalone Android APK.",
+    cta_dl: "⬇ Download v2.4.0 (Windows & APK)",
+    cta_apk: "📱 Android APK v1.7.0",
     cta_gh: "★ View on GitHub",
     c1_t: "🔐 Windows DPAPI & Owner Approvals",
     c1_p: "API keys, MCP credentials, and bot tokens are encrypted per Windows user via CryptProtectData. Dangerous commands and file reorganizations always require explicit owner approval.",
