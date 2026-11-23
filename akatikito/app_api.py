@@ -274,6 +274,19 @@ class AppState:
             self.settings.ui_language = lang
             if self.agent:
                 self.agent.config.ui_language = lang
+        if 'ui_theme' in data:
+            theme = str(data.get('ui_theme') or '').strip().lower()
+            if theme not in ('dark', 'light'):
+                return {'error': 'Μη έγκυρο θέμα εμφάνισης.'}
+            self.settings.ui_theme = theme
+        if 'ui_font_size' in data:
+            try:
+                fsize = int(data.get('ui_font_size'))
+                if not 12 <= fsize <= 18:
+                    raise ValueError('Εκτός ορίων (12–18).')
+                self.settings.ui_font_size = fsize
+            except (TypeError, ValueError) as exc:
+                return {'error': str(exc)}
         if self.agent and 'checkpoints' in data:
             from .checkpoints import Checkpoints
             self.agent.config.checkpoints=self.settings.checkpoints
@@ -357,6 +370,7 @@ class AppState:
             updated.max_steps = config.max_steps
             updated.verify_command = (verify or "").strip()
             updated.project = project
+            updated.remember_project(project)
             if key:
                 updated.set_key(provider, key)
                 updated.key_origins[provider] = destination
@@ -413,6 +427,7 @@ class AppState:
             "connected": agent is not None,
             "busy": self.busy,
             "project": str(agent.ws.root) if agent else self.settings.project,
+            "recent_projects": list(self.settings.recent_projects),
             "model": agent.config.model if agent else self.settings.model,
             "provider": self.settings.provider,
             "mode": agent.mode if agent else modes.DEFAULT_MODE,
@@ -444,7 +459,7 @@ class AppState:
             'agenda':self.agenda_list().get('tasks',[]),
             'approvals':self.approvals.pending()+remote_approvals,
             'learning':self.learning_summary(),
-            'preferences':{'autonomous':self.settings.autonomous,'cautious_edits':self.settings.cautious_edits,'checkpoints':self.settings.checkpoints,'supports_vision':bool(agent and agent.config.supports_vision),'advanced_view':self.settings.advanced_view,'daily_budget':self.settings.daily_budget,'ui_language':self.settings.ui_language},
+            'preferences':{'autonomous':self.settings.autonomous,'cautious_edits':self.settings.cautious_edits,'checkpoints':self.settings.checkpoints,'supports_vision':bool(agent and agent.config.supports_vision),'advanced_view':self.settings.advanced_view,'daily_budget':self.settings.daily_budget,'ui_language':self.settings.ui_language,'ui_theme':self.settings.ui_theme,'ui_font_size':self.settings.ui_font_size},
         }
 
     # ---------------------------------------------------------------- chat
@@ -1481,6 +1496,56 @@ class AppState:
         except Exception as exc:
             return {'error': str(exc)}
 
+    def switch_project(self, project: str):
+        """1-click switch to a recent or newly picked project folder using current provider/model."""
+        if self.busy or self.self_update:
+            return {'error': 'Περίμενε να ολοκληρωθεί η τρέχουσα εργασία.'}
+        target = str(project or '').strip()
+        if not target:
+            return {'error': 'Διάλεξε φάκελο project.'}
+        p = Path(target).expanduser().resolve()
+        if not p.is_dir():
+            return {'error': f'Ο φάκελος δεν βρέθηκε: {target}'}
+        return self.connect(
+            provider=self.settings.provider,
+            base_url=self.settings.base_url,
+            model=self.settings.model,
+            api_key='',
+            project=str(p),
+            max_steps=self.settings.max_steps,
+            verify=self.settings.verify_command,
+        )
+
+    def open_in_os(self, path: str, reveal: bool = False):
+        """Safely open a workspace file with its default Windows app or reveal it in Explorer."""
+        import subprocess
+        from .workspace import Workspace
+
+        _EXEC_BLOCKED = {
+            '.exe', '.bat', '.cmd', '.ps1', '.vbs', '.vbe', '.js', '.jse',
+            '.wsf', '.wsh', '.msi', '.msp', '.scr', '.com', '.pif', '.hta', '.reg',
+        }
+        try:
+            if not isinstance(path, str) or not path.strip():
+                raise ValueError('Δώσε διαδρομή αρχείου.')
+            ws = Workspace(self._files_root())
+            target = ws.resolve(path)
+            if not target.exists():
+                raise ValueError('Το αρχείο δεν βρέθηκε στο project.')
+            if reveal:
+                if os.name == 'nt':
+                    subprocess.Popen(['explorer.exe', '/select,', str(target)])
+                return {'ok': True, 'path': ws.relative(target), 'action': 'reveal'}
+            if not target.is_file():
+                raise ValueError('Μπορείς να ανοίξεις μόνο κανονικό αρχείο.')
+            if target.suffix.lower() in _EXEC_BLOCKED:
+                raise PermissionError(f'Για ασφάλεια δεν επιτρέπεται άμεση εκτέλεση αρχείου {target.suffix}. Χρησιμοποίησε «Φάκελος».')
+            if os.name == 'nt':
+                os.startfile(str(target))  # noqa: S606
+            return {'ok': True, 'path': ws.relative(target), 'action': 'open'}
+        except (OSError, ValueError, PermissionError) as exc:
+            return {'error': str(exc)}
+
     def list_project_tree(self, path='.', project=None, offset=0, limit=100, version=''):
         from .file_view import list_tree
         try:
@@ -1773,6 +1838,10 @@ def make_handler(state: AppState) -> type:
                 self._send(state.routines_add(data))
             elif path == '/api/routines/delete':
                 self._send(state.routines_delete(data.get('id', '')))
+            elif path == '/api/project/switch':
+                self._send(state.switch_project(data.get('project', '')))
+            elif path == '/api/files/open-os':
+                self._send(state.open_in_os(data.get('path', ''), data.get('reveal') is True))
             elif path == '/api/approval':
                 self._send(state.answer_approval(data.get('id',''),data.get('allow') is True,data.get('always') is True))
             elif path == '/api/learning':

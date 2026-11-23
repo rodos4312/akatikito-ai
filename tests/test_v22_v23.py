@@ -208,3 +208,45 @@ def test_app_state_v22_v23_endpoints(tmp_path, monkeypatch):
     # Routines list
     rtns = state.routines_list()
     assert len(rtns.get("routines") or []) >= 4
+
+
+def test_everyday_ux_preferences_recent_projects_and_open_os(tmp_path, monkeypatch):
+    from akatikito.app_api import AppState
+    from akatikito.settings import Settings
+
+    # Settings persistence for theme, font size, recent_projects
+    cfg_path = tmp_path / "settings.json"
+    s = Settings()
+    s.ui_theme = "light"
+    s.ui_font_size = 16
+    s.remember_project(str(tmp_path / "projA"))
+    s.remember_project(str(tmp_path / "projB"))
+    s.remember_project(str(tmp_path / "projA"))  # dedupes and moves to front
+    s.save(cfg_path)
+
+    loaded = Settings.load(cfg_path)
+    assert loaded.ui_theme == "light"
+    assert loaded.ui_font_size == 16
+    assert len(loaded.recent_projects) == 2
+    assert loaded.recent_projects[0].endswith("projA")
+
+    # open_in_os blocks executable files and outside-workspace traversal
+    state = AppState()
+    proj = tmp_path / "work"
+    proj.mkdir()
+    state.settings.project = str(proj)
+    (proj / "evil.bat").write_text("@echo hi\n", encoding="utf-8")
+    (proj / "notes.txt").write_text("hello", encoding="utf-8")
+
+    res_exec = state.open_in_os("evil.bat", reveal=False)
+    assert "error" in res_exec
+
+    res_escape = state.open_in_os("../settings.json", reveal=False)
+    assert "error" in res_escape
+
+    # Safe file open mocked so we don't spawn a window during tests
+    opened = []
+    monkeypatch.setattr("os.startfile", lambda p: opened.append(p), raising=False)
+    res_ok = state.open_in_os("notes.txt", reveal=False)
+    assert res_ok.get("ok") is True
+    assert opened and opened[0].endswith("notes.txt")

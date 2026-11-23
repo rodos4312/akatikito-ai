@@ -86,6 +86,9 @@ class Settings:
     voice_model: str = 'base'
     voice_language: str = 'el'
     ui_language: str = 'el'
+    ui_theme: str = 'dark'
+    ui_font_size: int = 14
+    recent_projects: list[str] = field(default_factory=list)
     onboarding_complete: bool = False
     warning: str = field(default="", compare=False)
 
@@ -114,6 +117,20 @@ class Settings:
         settings.voice_model=data.get('voice_model') if data.get('voice_model') in ('base','small') else 'base'
         settings.voice_language=data.get('voice_language') if data.get('voice_language') in ('el','en','ru','de','es','fr','auto') else 'el'
         settings.ui_language=normalize_lang(data.get('ui_language')) if data.get('ui_language') in SUPPORTED_LANGUAGES else 'el'
+        settings.ui_theme=data.get('ui_theme') if data.get('ui_theme') in ('dark','light') else 'dark'
+        try: settings.ui_font_size=max(12,min(18,int(data.get('ui_font_size',14))))
+        except (TypeError,ValueError): settings.ui_font_size=14
+        rp = data.get('recent_projects')
+        if isinstance(rp, list):
+            seen = set()
+            clean_rp = []
+            for item in rp:
+                if isinstance(item, str) and item.strip():
+                    k = item.strip().casefold()
+                    if k not in seen:
+                        seen.add(k)
+                        clean_rp.append(item.strip())
+            settings.recent_projects = clean_rp[:10]
         settings.provider = str(data.get("provider") or settings.provider)
         settings.base_url = str(data.get("base_url") or "")
         settings.model = str(data.get("model") or "")
@@ -152,6 +169,7 @@ class Settings:
         payload = {
             'onboarding_complete':self.onboarding_complete,
             'voice_model':self.voice_model,'voice_language':self.voice_language,'ui_language':self.ui_language,
+            'ui_theme':self.ui_theme,'ui_font_size':int(self.ui_font_size),'recent_projects':list(self.recent_projects[:10]),
             "version": 1,
             "provider": self.provider,
             "base_url": self.base_url,
@@ -189,6 +207,14 @@ class Settings:
 
     def has_key(self, provider: str) -> bool:
         return bool(self.key_for(provider))
+
+    def remember_project(self, path: str) -> None:
+        clean = str(path or "").strip()
+        if not clean:
+            return
+        key = clean.casefold()
+        self.recent_projects = [clean] + [p for p in self.recent_projects if p.casefold() != key]
+        self.recent_projects = self.recent_projects[:10]
 
     def forget_key(self, provider: str) -> None:
         if provider in self.keys:

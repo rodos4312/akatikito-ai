@@ -7,13 +7,58 @@
   :root {
     --bg: #0f1117; --panel: #161a23; --panel2: #1c212d; --border: #2a3040;
     --text: #e6e9f0; --dim: #8b93a7; --accent: #4f8cff; --green: #3fb96f;
-    --red: #e05555; --yellow: #d9a537; --radius: 10px;
+    --red: #e05555; --yellow: #d9a537; --radius: 10px; --ui-font: 14px;
+  }
+  body[data-theme="light"] {
+    --bg: #f4f6fb; --panel: #ffffff; --panel2: #eef2f9; --border: #d5dce8;
+    --text: #141925; --dim: #556078; --accent: #2563eb; --green: #16803c;
+    --red: #dc2626; --yellow: #b45309;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body { height: 100%; }
   body {
-    font-family: "Segoe UI", system-ui, sans-serif; background: var(--bg);
+    font-family: "Segoe UI", system-ui, sans-serif; font-size: var(--ui-font, 14px); background: var(--bg);
     color: var(--text); display: flex; height: 100vh; overflow: hidden;
+  }
+  #drop-overlay {
+    display: none; position: fixed; inset: 0; z-index: 1200;
+    background: rgba(37, 99, 235, 0.16); backdrop-filter: blur(3px);
+    align-items: center; justify-content: center; pointer-events: none;
+  }
+  #drop-overlay.show { display: flex; }
+  #drop-overlay .drop-box {
+    background: var(--panel); border: 2px dashed var(--accent); border-radius: 16px;
+    padding: 28px 36px; font-size: 16px; font-weight: 600; color: var(--text);
+    box-shadow: 0 12px 36px rgba(0,0,0,0.35);
+  }
+  #proj-label { cursor: pointer; padding: 3px 8px; border-radius: 6px; border: 1px solid transparent; }
+  #proj-label:hover { background: var(--panel2); border-color: var(--border); }
+  #proj-menu {
+    display: none; position: fixed; top: 48px; left: 326px; z-index: 950;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    padding: 8px; min-width: 280px; max-width: 440px; box-shadow: 0 10px 28px rgba(0,0,0,0.35);
+    flex-direction: column; gap: 4px;
+  }
+  #cmd-palette {
+    display: none; position: fixed; inset: 0; z-index: 1100;
+    background: rgba(0,0,0,0.55); align-items: flex-start; justify-content: center; padding-top: 10vh;
+  }
+  #cmd-palette .cmd-box {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    width: min(560px, 92vw); padding: 12px; display: flex; flex-direction: column; gap: 8px;
+    box-shadow: 0 16px 48px rgba(0,0,0,0.45);
+  }
+  #cmd-list { display: flex; flex-direction: column; gap: 4px; max-height: 46vh; overflow-y: auto; }
+  .cmd-item {
+    background: transparent; border: 1px solid transparent; border-radius: 8px; color: var(--text);
+    padding: 8px 10px; text-align: left; cursor: pointer; font-size: 13px;
+    display: flex; justify-content: space-between; align-items: center; gap: 8px;
+  }
+  .cmd-item:hover, .cmd-item.active { background: var(--panel2); border-color: var(--accent); }
+  #slash-menu {
+    display: none; margin: 0 16px 6px; background: var(--panel); border: 1px solid var(--accent);
+    border-radius: 10px; padding: 6px; max-height: 180px; overflow-y: auto;
+    flex-direction: column; gap: 3px;
   }
   /* ---------- πλαϊνό μενού ---------- */
   #sidebar {
@@ -222,55 +267,55 @@ body.simple-view .pro-only,body.simple-view #chat>.steps:not(.important-step),bo
       <button class="btn primary" data-i18n="btn_new_session" onclick="newSession()">＋ Νέα συνομιλία</button>
     </div>
 
-    <div class="menu-card" id="routines-card">
-      <div style="display:flex;justify-content:space-between;align-items:center">
-        <h4 data-i18n="card_routines">⚡ Ρουτίνες 1-Κλικ</h4>
-        <button class="btn" data-i18n="btn_add_routine" style="width:auto;padding:3px 8px;font-size:11px" onclick="toggleRoutineForm()">＋ Νέα Ρουτίνα</button>
+    <details class="set-group" id="routines-card">
+      <summary data-i18n="card_routines">⚡ Ρουτίνες 1-Κλικ</summary>
+      <div class="set-body">
+        <button class="btn" data-i18n="btn_add_routine" style="font-size:11.5px;padding:4px 8px" onclick="toggleRoutineForm()">＋ Νέα Ρουτίνα</button>
+        <div id="routine-form" style="display:none;flex-direction:column;gap:6px;background:var(--panel);padding:8px;border-radius:8px;border:1px solid var(--accent)">
+          <input id="routine-name" placeholder="Όνομα ρουτίνας (π.χ. Έλεγχος τιμολογίων)" style="background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 8px;font-size:12px">
+          <textarea id="routine-prompt" rows="2" placeholder="Εντολή προς τον βοηθό…" style="background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 8px;font-size:12px;resize:vertical"></textarea>
+          <button class="btn primary" style="padding:6px;font-size:12px" onclick="addUserRoutine()">💾 Αποθήκευση Ρουτίνας</button>
+        </div>
+        <div id="routines-list" style="display:flex;flex-direction:column;gap:5px;max-height:150px;overflow-y:auto"></div>
       </div>
-      <div id="routine-form" style="display:none;flex-direction:column;gap:6px;background:var(--panel);padding:8px;border-radius:8px;border:1px solid var(--accent)">
-        <input id="routine-name" placeholder="Όνομα ρουτίνας (π.χ. Έλεγχος τιμολογίων)" style="background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 8px;font-size:12px">
-        <textarea id="routine-prompt" rows="2" placeholder="Εντολή προς τον βοηθό…" style="background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 8px;font-size:12px;resize:vertical"></textarea>
-        <button class="btn primary" style="padding:6px;font-size:12px" onclick="addUserRoutine()">💾 Αποθήκευση Ρουτίνας</button>
-      </div>
-      <div id="routines-list" style="display:flex;flex-direction:column;gap:5px;max-height:150px;overflow-y:auto"></div>
-    </div>
+    </details>
 
-    <div class="menu-card">
-      <div style="display:flex;justify-content:space-between;align-items:center">
-        <h4 data-i18n="card_agenda">⏰ Ατζέντα & Υπενθυμίσεις</h4>
-        <button class="btn" data-i18n="btn_add" style="width:auto;padding:3px 8px;font-size:11px" onclick="toggleAgendaForm()">＋ Προσθήκη</button>
-      </div>
-      <div id="agenda-form" style="display:none;flex-direction:column;gap:6px;background:var(--panel);padding:8px;border-radius:8px;border:1px solid var(--accent)">
-        <input id="agenda-title" data-i18n-placeholder="agenda_title_ph" placeholder="Τίτλος ή Εντολή Agent (π.χ. /skills ή Σύνοψη ειδήσεων)" style="background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 8px;font-size:12px">
-        <div style="display:flex;gap:6px">
-          <input id="agenda-date" type="date" style="flex:1;background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:5px 8px;font-size:12px">
-          <input id="agenda-time" type="time" value="10:00" style="width:95px;background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:5px 8px;font-size:12px">
+    <details class="set-group" id="agenda-card" ontoggle="if(this.open)loadAgenda()">
+      <summary data-i18n="card_agenda">⏰ Ατζέντα & Υπενθυμίσεις</summary>
+      <div class="set-body">
+        <button class="btn" data-i18n="btn_add" style="font-size:11.5px;padding:4px 8px" onclick="toggleAgendaForm()">＋ Προσθήκη</button>
+        <div id="agenda-form" style="display:none;flex-direction:column;gap:6px;background:var(--panel);padding:8px;border-radius:8px;border:1px solid var(--accent)">
+          <input id="agenda-title" data-i18n-placeholder="agenda_title_ph" placeholder="Τίτλος ή Εντολή Agent (π.χ. /skills ή Σύνοψη ειδήσεων)" style="background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 8px;font-size:12px">
+          <div style="display:flex;gap:6px">
+            <input id="agenda-date" type="date" style="flex:1;background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:5px 8px;font-size:12px">
+            <input id="agenda-time" type="time" value="10:00" style="width:95px;background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:5px 8px;font-size:12px">
+          </div>
+          <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+            <select id="agenda-repeat" style="flex:1;background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:5px 6px;font-size:11px">
+              <option value="none" data-i18n="agenda_rep_none">🔁 Μία φορά</option>
+              <option value="daily" data-i18n="agenda_rep_daily">🔁 Κάθε μέρα</option>
+              <option value="weekly" data-i18n="agenda_rep_weekly">🔁 Κάθε εβδομάδα</option>
+              <option value="monthly" data-i18n="agenda_rep_monthly">🔁 Κάθε μήνα</option>
+            </select>
+            <select id="agenda-mode" style="width:100px;background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:5px 6px;font-size:11px" title="Λειτουργία αυτόματης εκτέλεσης">
+              <option value="assistant" data-i18n="mode_assistant">Βοηθός</option>
+              <option value="ask" data-i18n="mode_ask">Ερώτηση</option>
+              <option value="code" data-i18n="mode_code">Κώδικας</option>
+              <option value="debug" data-i18n="mode_debug">Debug</option>
+            </select>
+            <label style="display:flex;align-items:center;gap:4px;font-size:11px;cursor:pointer" title="Όταν έρθει η ώρα, ο Agent θα εκτελέσει αυτόματα την εντολή!">
+              <input id="agenda-autorun" type="checkbox" style="width:auto"> 🤖 Auto-Run
+            </label>
+          </div>
+          <button class="btn primary" data-i18n="btn_save_agenda" style="padding:6px" onclick="addAgendaTask()">💾 Αποθήκευση στην Ατζέντα</button>
         </div>
-        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
-          <select id="agenda-repeat" style="flex:1;background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:5px 6px;font-size:11px">
-            <option value="none" data-i18n="agenda_rep_none">🔁 Μία φορά</option>
-            <option value="daily" data-i18n="agenda_rep_daily">🔁 Κάθε μέρα</option>
-            <option value="weekly" data-i18n="agenda_rep_weekly">🔁 Κάθε εβδομάδα</option>
-            <option value="monthly" data-i18n="agenda_rep_monthly">🔁 Κάθε μήνα</option>
-          </select>
-          <select id="agenda-mode" style="width:100px;background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:5px 6px;font-size:11px" title="Λειτουργία αυτόματης εκτέλεσης">
-            <option value="assistant" data-i18n="mode_assistant">Βοηθός</option>
-            <option value="ask" data-i18n="mode_ask">Ερώτηση</option>
-            <option value="code" data-i18n="mode_code">Κώδικας</option>
-            <option value="debug" data-i18n="mode_debug">Debug</option>
-          </select>
-          <label style="display:flex;align-items:center;gap:4px;font-size:11px;cursor:pointer" title="Όταν έρθει η ώρα, ο Agent θα εκτελέσει αυτόματα την εντολή!">
-            <input id="agenda-autorun" type="checkbox" style="width:auto"> 🤖 Auto-Run
-          </label>
-        </div>
-        <button class="btn primary" data-i18n="btn_save_agenda" style="padding:6px" onclick="addAgendaTask()">💾 Αποθήκευση στην Ατζέντα</button>
+        <div id="agenda-list" style="display:flex;flex-direction:column;gap:5px;max-height:140px;overflow-y:auto"></div>
+        <details style="margin-top:4px" ontoggle="if(this.open)loadScheduledJobs()">
+          <summary class="hint" data-i18n="sched_history" style="cursor:pointer">⏱️ Ιστορικό Αυτόματων Εκτελέσεων</summary>
+          <div id="scheduled-list" style="display:flex;flex-direction:column;gap:5px;margin-top:6px;max-height:150px;overflow-y:auto"></div>
+        </details>
       </div>
-      <div id="agenda-list" style="display:flex;flex-direction:column;gap:5px;max-height:140px;overflow-y:auto"></div>
-      <details style="margin-top:4px" ontoggle="if(this.open)loadScheduledJobs()">
-        <summary class="hint" data-i18n="sched_history" style="cursor:pointer">⏱️ Ιστορικό Αυτόματων Εκτελέσεων</summary>
-        <div id="scheduled-list" style="display:flex;flex-direction:column;gap:5px;margin-top:6px;max-height:150px;overflow-y:auto"></div>
-      </details>
-    </div>
+    </details>
 
     <div class="menu-card">
       <h4 data-i18n="card_sessions">🗂️ Αποθηκευμένες Συνομιλίες</h4>
@@ -327,12 +372,16 @@ body.simple-view .pro-only,body.simple-view #chat>.steps:not(.important-step),bo
 
 <main id="main">
   <div id="topbar">
-    <span id="proj-label">—</span>
+    <span id="proj-label" onclick="toggleRecentProjectsMenu()" title="Κλικ για γρήγορη εναλλαγή project">—</span>
     <span id="app-origin" class="badge" title="Φάκελος εγκατάστασης της εφαρμογής"></span>
     <span class="spacer"></span>
     <span class="badge" id="mode-badge">—</span>
     <span class="badge" id="model-badge">—</span>
     <span class="badge" id="busy-badge">💤 αδρανής</span>
+    <button class="btn" id="cmd-open-btn" data-i18n="cmd_palette_btn" style="width:auto;padding:4px 8px;font-size:12px" onclick="openCommandPalette()" title="Ctrl+K">⌘ Εντολές</button>
+    <button class="btn" id="theme-toggle" style="width:auto;padding:4px 8px;font-size:12px" onclick="toggleTheme()" title="Light / Dark">☀️</button>
+    <button class="btn" style="width:auto;padding:4px 6px;font-size:11px" onclick="adjustFontSize(-1)" title="Μικρότερα γράμματα">A-</button>
+    <button class="btn" style="width:auto;padding:4px 6px;font-size:11px" onclick="adjustFontSize(1)" title="Μεγαλύτερα γράμματα">A+</button>
     <select id="ui-lang" onchange="changeUiLanguage(this.value)" aria-label="Interface Language" title="Γλώσσα διεπαφής / Interface Language" style="width:auto;background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:4px 7px;font-size:12px;cursor:pointer">
       <option value="el">🌐 ΕΛ</option>
       <option value="en">🌐 EN</option>
@@ -610,10 +659,11 @@ body.simple-view .pro-only,body.simple-view #chat>.steps:not(.important-step),bo
       <button class="qcard" id="qcard-4" onclick="useQuickPrompt(i18nText('q4_prompt'))"><strong data-i18n="q4_title">⏰ Οργάνωση & Ατζέντα</strong><span data-i18n="q4_sub">Υπενθυμίσεις με τοπική ειδοποίηση Windows</span></button>
     </div>
     <div id="chat"></div>
+    <div id="slash-menu" role="listbox" aria-label="Slash Commands"></div>
     <div id="inputbar">
       <button class="btn" style="width:auto;flex:0 0 auto" title="Προσθήκη αρχείου ή εικόνας" aria-label="Προσθήκη συνημμένου" onclick="chooseAttachments()">📎</button>
       <button class="btn" style="width:auto;flex:0 0 auto" title="Στιγμιότυπο Οθόνης (Screenshot 1-κλικ)" aria-label="Στιγμιότυπο οθόνης" onclick="captureScreenAttachment()">📸</button>
-      <textarea id="prompt" rows="1" data-i18n-placeholder="prompt_placeholder" placeholder="Γράψε τι θέλεις… (π.χ. «ψάξε στο internet για…» ή «φτιάξε ένα Excel με…»)" onkeydown="onKey(event)" oninput="grow(this)"></textarea>
+      <textarea id="prompt" rows="1" data-i18n-placeholder="prompt_placeholder" placeholder="Γράψε τι θέλεις… (π.χ. «ψάξε στο internet για…» ή «φτιάξε ένα Excel με…»)" onkeydown="onKey(event)" oninput="grow(this); updateSlashMenu(this)"></textarea>
       <button id="voice-record" class="btn" style="width:auto;flex:0 0 auto" aria-label="Υπαγόρευση φωνής" aria-pressed="false" onclick="toggleVoice()">🎙</button><button id="voice-cancel-record" class="btn" style="width:auto;display:none" onclick="cancelVoice()" aria-label="Ακύρωση υπαγόρευσης">✕</button>
       <button id="stopbtn" data-i18n="btn_stop" onclick="stopAgent()">■ Σταμάτα</button>
       <button class="btn" data-i18n="btn_paste" style="width:auto" onclick="pasteInto(document.getElementById('prompt'))">📋 Επικόλληση</button>
@@ -676,6 +726,10 @@ body.simple-view .pro-only,body.simple-view #chat>.steps:not(.important-step),bo
     <div id="file-rich" style="display:none;overflow:auto;max-height:42vh;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px"></div>
     <pre id="file-text" tabindex="0"></pre>
     <div class="file-controls"><button class="btn" id="file-prev" data-i18n="btn_prev" onclick="filePage(false)">← Πίσω</button><button class="btn" id="file-next" data-i18n="btn_next" onclick="filePage(true)">Συνέχεια →</button><button class="btn" id="file-refresh" data-i18n="btn_refresh" onclick="refreshFile()">Ανανέωση</button></div>
+    <div style="display:flex;gap:5px;flex-wrap:wrap">
+      <button class="btn" id="file-open-os" data-i18n="btn_open_os" style="flex:1;font-size:11.5px" onclick="openCurrentFileInOs(false)">📂 Άνοιγμα στα Windows</button>
+      <button class="btn" id="file-reveal-os" data-i18n="btn_reveal_os" style="width:auto;font-size:11.5px" onclick="openCurrentFileInOs(true)">📁 Φάκελος</button>
+    </div>
     <button class="btn" id="file-insert" data-i18n="btn_insert_path" onclick="insertFilePath()">＋ Διαδρομή στο μήνυμα</button>
     <span class="hint" data-i18n="hint_readonly_file">Μόνο ανάγνωση. Το περιεχόμενο δεν στέλνεται στο μοντέλο με το άνοιγμα.</span>
   </section>
@@ -694,6 +748,14 @@ body.simple-view .pro-only,body.simple-view #chat>.steps:not(.important-step),bo
   </div>
 </div>
 <div id="channel-session-overlay" style="display:none" role="dialog" aria-label="Ιστορικό καναλιού"></div>
+<div id="proj-menu" role="menu" aria-label="Πρόσφατα Projects"></div>
+<div id="drop-overlay"><div class="drop-box" data-i18n="drop_hint">📎 Άφησε εδώ PDF, Word, Excel, CSV, κείμενο ή εικόνα για άμεση επισύναψη</div></div>
+<div id="cmd-palette" role="dialog" aria-modal="true" onclick="if(event.target===this)closeCommandPalette()">
+  <div class="cmd-box">
+    <input id="cmd-input" data-i18n-placeholder="cmd_palette_ph" placeholder="Γράψε εντολή, project, ρουτίνα ή ρύθμιση… (Esc για κλείσιμο)" oninput="renderCommandPalette(this.value)" onkeydown="onCmdKey(event)" style="background:var(--panel2);border:1px solid var(--accent);border-radius:8px;color:var(--text);padding:10px 12px;font-size:14px">
+    <div id="cmd-list"></div>
+  </div>
+</div>
 <script src="/onboarding.js"></script>
 <script>
 let connected = false, busy = false, lastSeq = 0, pollTimer = null;
@@ -1288,12 +1350,21 @@ async function pickFolder() {
 
 // Ίδιος μηχανισμός προχείρου και συντομεύσεων, χωρίς άδειες WebView.
 document.addEventListener("keydown", function(e) {
-  if (e.key === "Escape" && busy) { stopAgent(); return; }
+  if (e.key === "Escape") {
+    const pal = document.getElementById("cmd-palette");
+    if (pal && pal.style.display === "flex") { closeCommandPalette(); return; }
+    const pm = document.getElementById("proj-menu");
+    if (pm && pm.style.display === "flex") { pm.style.display = "none"; return; }
+    const sm = document.getElementById("slash-menu");
+    if (sm && sm.style.display === "flex") { sm.style.display = "none"; return; }
+    if (busy) { stopAgent(); return; }
+  }
   if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
   const k = (e.key || "").toLowerCase();
   if (k === "k" && !e.shiftKey) {
-    const p = document.getElementById("prompt");
-    if (p) { e.preventDefault(); p.focus(); return; }
+    e.preventDefault();
+    openCommandPalette();
+    return;
   }
   if (k === "b" && !e.shiftKey) { e.preventDefault(); toggleFiles(); return; }
   if (k === "e" && e.shiftKey) { e.preventDefault(); exportChatMarkdown(); return; }
@@ -1489,13 +1560,25 @@ function addStep(kind, data) {
     const head = document.createElement("div");
     head.textContent = "↳ αποτέλεσμα";
     if (data.path && ["edit_file","write_file","convert_data_file","create_word_document","create_excel_sheet","create_pdf_document"].includes(data.name)) {
+      const targetPath = String(data.path);
       const btn = document.createElement("button");
       btn.className = "btn";
       btn.style.cssText = "width:auto;display:inline-block;padding:1px 8px;font-size:11px;margin-left:6px";
-      btn.textContent = "📄 Προβολή " + data.path;
-      const targetPath = String(data.path);
+      btn.textContent = "📄 " + targetPath;
       btn.onclick = () => openProjectFile(targetPath);
       head.appendChild(btn);
+      const osBtn = document.createElement("button");
+      osBtn.className = "btn";
+      osBtn.style.cssText = "width:auto;display:inline-block;padding:1px 7px;font-size:11px;margin-left:4px";
+      osBtn.textContent = i18nText('btn_open_os', '📂 Άνοιγμα στα Windows');
+      osBtn.onclick = () => openFileInOs(targetPath, false);
+      head.appendChild(osBtn);
+      const revBtn = document.createElement("button");
+      revBtn.className = "btn";
+      revBtn.style.cssText = "width:auto;display:inline-block;padding:1px 7px;font-size:11px;margin-left:4px";
+      revBtn.textContent = i18nText('btn_reveal_os', '📁 Φάκελος');
+      revBtn.onclick = () => openFileInOs(targetPath, true);
+      head.appendChild(revBtn);
     }
     const outDiv = document.createElement("div");
     outDiv.className = "out";
@@ -1954,6 +2037,7 @@ async function loadRoutines() {
   if (!box) return;
   try {
     const r = await api('/api/routines/list', {});
+    cachedRoutines = r.routines || [];
     box.replaceChildren();
     for (const item of (r.routines || [])) {
       const row = document.createElement('div');
@@ -2139,6 +2223,7 @@ async function loadLearning(offset=0){
   const heading=text=>{const el=document.createElement('p');el.textContent=text;panel.appendChild(el);};
   const card=text=>{const el=document.createElement('div');el.className='hint';el.style.whiteSpace='pre-wrap';el.style.marginBottom='12px';el.textContent=text;panel.appendChild(el);return el;};
   const profile=result.profile||{},skills=result.skills||{};
+  cachedSkills = Array.isArray(skills.catalog) ? skills.catalog : [];
   heading(i18nText('mem_proposals_hdr', 'Προτάσεις μνήμης — ενεργοποιούνται μόνο μετά την έγκριση'));
   for(const row of (profile.proposals||[])){
     const scope=row.target==='global'?'⚠ ΓΕΝΙΚΗ ΜΝΗΜΗ — ισχύει σε ΟΛΑ τα projects\n':'Προφίλ χρήστη\n';
@@ -2493,6 +2578,9 @@ function updateBadges(s) {
   renderApprovals(s.approvals);
   document.getElementById('autonomous').checked=!!s.preferences?.autonomous;
   document.getElementById('cautious-edits').checked=!!s.preferences?.cautious_edits;
+  if (s.preferences?.ui_theme && s.preferences.ui_theme !== currentTheme) applyTheme(s.preferences.ui_theme);
+  if (s.preferences?.ui_font_size && s.preferences.ui_font_size !== currentFontSize) applyFontSize(s.preferences.ui_font_size);
+  if (Array.isArray(s.recent_projects)) recentProjects = s.recent_projects;
   document.getElementById('autonomous').disabled=!!s.busy;
   document.getElementById('cautious-edits').disabled=!!s.busy;
   updateFiles(s);
@@ -3004,6 +3092,225 @@ async function viewChannelSession(session){
   uiText('h2',r.title+' · '+r.source.platform,overlay);uiText('p','Προεπισκόπηση ιστορικού. Η συνέχεια γίνεται από το αντίστοιχο κανάλι.',overlay);
   learningButton(overlay,'Κλείσιμο',()=>{overlay.style.display='none';});learningButton(overlay,'Ανανέωση',()=>viewChannelSession(session));
   for(const row of r.transcript||[]){uiText('strong',row.role==='user'?'Χρήστης':'Akatikito',overlay);const text=uiText('pre',row.text,overlay);text.style.whiteSpace='pre-wrap';}
+}
+
+let currentTheme = 'dark', currentFontSize = 14, recentProjects = [], cachedSkills = [], cachedRoutines = [];
+function applyTheme(theme) {
+  currentTheme = theme === 'light' ? 'light' : 'dark';
+  if (document.body && typeof document.body.setAttribute === 'function') {
+    document.body.setAttribute('data-theme', currentTheme);
+  }
+  const btn = document.getElementById('theme-toggle');
+  if (btn) btn.textContent = currentTheme === 'light' ? '🌙' : '☀️';
+}
+async function toggleTheme() {
+  const next = currentTheme === 'light' ? 'dark' : 'light';
+  applyTheme(next);
+  try { await api('/api/preferences', {ui_theme: next}); } catch (_) {}
+}
+function applyFontSize(size) {
+  const n = Math.max(12, Math.min(18, parseInt(size || 14, 10) || 14));
+  currentFontSize = n;
+  if (document.documentElement && document.documentElement.style) {
+    document.documentElement.style.setProperty('--ui-font', n + 'px');
+  }
+}
+async function adjustFontSize(delta) {
+  const next = Math.max(12, Math.min(18, currentFontSize + delta));
+  if (next === currentFontSize) return;
+  applyFontSize(next);
+  try { await api('/api/preferences', {ui_font_size: next}); } catch (_) {}
+}
+async function openFileInOs(path, reveal=false) {
+  if (!path) return;
+  try {
+    const r = await api('/api/files/open-os', {path, reveal: !!reveal});
+    if (r.error) showNotice('err', r.error);
+  } catch (e) { showNotice('err', e.message || String(e)); }
+}
+function openCurrentFileInOs(reveal=false) {
+  if (fileView && fileView.path) openFileInOs(fileView.path, reveal);
+}
+function toggleRecentProjectsMenu() {
+  const menu = document.getElementById('proj-menu');
+  if (!menu) return;
+  if (menu.style.display === 'flex') { menu.style.display = 'none'; return; }
+  menu.replaceChildren();
+  const hdr = document.createElement('div');
+  hdr.className = 'hint';
+  hdr.style.padding = '2px 6px 4px';
+  hdr.textContent = i18nText('proj_recent_hdr', 'Πρόσφατα Projects');
+  menu.appendChild(hdr);
+  const list = [...new Set([currentProject, ...recentProjects].filter(Boolean))];
+  for (const proj of list) {
+    const btn = document.createElement('button');
+    btn.className = 'cmd-item';
+    btn.textContent = (proj === currentProject ? '✓ ' : '📁 ') + proj;
+    btn.onclick = () => { menu.style.display = 'none'; switchProjectTo(proj); };
+    menu.appendChild(btn);
+  }
+  const sep = document.createElement('div');
+  sep.style.borderTop = '1px solid var(--border)';
+  sep.style.margin = '4px 0';
+  menu.appendChild(sep);
+  const browse = document.createElement('button');
+  browse.className = 'cmd-item';
+  browse.textContent = i18nText('proj_browse_other', '📁 Άνοιγμα άλλου φακέλου…');
+  browse.onclick = () => { menu.style.display = 'none'; browseAndSwitchProject(); };
+  menu.appendChild(browse);
+  menu.style.display = 'flex';
+}
+async function switchProjectTo(proj) {
+  if (!proj || proj === currentProject) return;
+  if (busy) { showNotice('err', 'Περίμενε να ολοκληρωθεί η εργασία.'); return; }
+  showNotice('ok', 'Αλλαγή project: ' + proj);
+  const r = await api('/api/project/switch', {project: proj});
+  if (r.error) { showNotice('err', r.error); return; }
+  updateBadges(r);
+  await loadSessions();
+  loadProjectProfile().catch(() => {});
+}
+async function browseAndSwitchProject() {
+  const picked = await api('/api/pick-folder', {});
+  if (picked && picked.path) await switchProjectTo(picked.path);
+  else if (picked && picked.error) showNotice('err', picked.error);
+}
+let cmdPaletteItems = [], cmdPaletteIdx = 0;
+function buildCommandPaletteItems() {
+  const items = [
+    {label: i18nText('cmd_new_chat', '＋ Νέα Συνομιλία'), group: 'Chat', run: () => newSession()},
+    {label: i18nText('cmd_toggle_theme', '☀️/🌙 Αλλαγή Θέματος (Φωτεινό / Σκοτεινό)'), group: 'UI', run: () => toggleTheme()},
+    {label: i18nText('cmd_open_files', '📄 Άνοιγμα / Κλείσιμο Μπάρας Αρχείων'), group: 'Files', run: () => toggleFiles()},
+    {label: i18nText('cmd_check_updates', '🔄 Έλεγχος Ενημερώσεων GitHub'), group: 'Update', run: () => { showTab('sess'); checkGithubUpdates(); }},
+    {label: i18nText('cmd_health_check', '🩺 Έλεγχος Υγείας Συστήματος'), group: 'System', run: () => { showTab('sess'); loadSystemHealth(); }},
+    {label: i18nText('proj_browse_other', '📁 Άνοιγμα άλλου φακέλου…'), group: 'Project', run: () => browseAndSwitchProject()},
+    {label: i18nText('tab_providers', '🤖 Πάροχοι / Μοντέλα'), group: 'Tab', run: () => showTab('providers')},
+    {label: i18nText('tab_plugins', '🔌 Πρόσθετα'), group: 'Tab', run: () => showTab('plugins')},
+    {label: i18nText('tab_skills', '📘 Skills'), group: 'Tab', run: () => showTab('skills')},
+    {label: i18nText('tab_memory', '🧠 Μνήμη'), group: 'Tab', run: () => showTab('memory')},
+    {label: i18nText('tab_set', '⚙️ Ρυθμίσεις'), group: 'Tab', run: () => showTab('set')},
+  ];
+  for (const p of recentProjects) {
+    if (p && p !== currentProject) items.push({label: '📁 ' + p, group: 'Project', run: () => switchProjectTo(p)});
+  }
+  for (const r of cachedRoutines) {
+    const nm = r.builtin ? i18nText('rtn_' + r.id, r.name) : r.name;
+    items.push({label: '⚡ ' + nm, group: 'Routine', run: () => { showTab('sess'); useQuickPrompt(r.prompt); }});
+  }
+  for (const sk of cachedSkills) {
+    items.push({label: '/' + sk.name + ' — ' + (sk.description || ''), group: 'Skill', run: () => { showTab('sess'); useQuickPrompt('/' + sk.name + ' '); }});
+  }
+  return items;
+}
+function openCommandPalette() {
+  const pal = document.getElementById('cmd-palette');
+  const inp = document.getElementById('cmd-input');
+  if (!pal || !inp) return;
+  pal.style.display = 'flex';
+  inp.value = '';
+  cmdPaletteIdx = 0;
+  renderCommandPalette('');
+  inp.focus();
+}
+function closeCommandPalette() {
+  const pal = document.getElementById('cmd-palette');
+  if (pal) pal.style.display = 'none';
+}
+function renderCommandPalette(query) {
+  const listEl = document.getElementById('cmd-list');
+  if (!listEl) return;
+  const q = (query || '').trim().toLowerCase();
+  const all = buildCommandPaletteItems();
+  cmdPaletteItems = q ? all.filter(x => (x.label + ' ' + x.group).toLowerCase().includes(q)) : all;
+  if (cmdPaletteIdx >= cmdPaletteItems.length) cmdPaletteIdx = 0;
+  listEl.replaceChildren();
+  cmdPaletteItems.slice(0, 20).forEach((item, idx) => {
+    const btn = document.createElement('button');
+    btn.className = 'cmd-item' + (idx === cmdPaletteIdx ? ' active' : '');
+    const left = document.createElement('span'); left.textContent = item.label;
+    const right = document.createElement('span'); right.className = 'hint'; right.textContent = item.group;
+    btn.append(left, right);
+    btn.onclick = () => { closeCommandPalette(); item.run(); };
+    listEl.appendChild(btn);
+  });
+}
+function onCmdKey(e) {
+  if (e.key === 'Escape') { e.preventDefault(); closeCommandPalette(); return; }
+  if (e.key === 'ArrowDown') { e.preventDefault(); cmdPaletteIdx = (cmdPaletteIdx + 1) % Math.max(1, cmdPaletteItems.length); renderCommandPalette(e.target.value); return; }
+  if (e.key === 'ArrowUp') { e.preventDefault(); cmdPaletteIdx = (cmdPaletteIdx - 1 + Math.max(1, cmdPaletteItems.length)) % Math.max(1, cmdPaletteItems.length); renderCommandPalette(e.target.value); return; }
+  if (e.key === 'Enter' && cmdPaletteItems[cmdPaletteIdx]) { e.preventDefault(); const fn = cmdPaletteItems[cmdPaletteIdx].run; closeCommandPalette(); fn(); }
+}
+function updateSlashMenu(textarea) {
+  const menu = document.getElementById('slash-menu');
+  if (!menu || !textarea) return;
+  const val = String(textarea.value || '');
+  if (!val.startsWith('/') || val.includes(' ') || val.includes('\n')) { menu.style.display = 'none'; return; }
+  const q = val.slice(1).toLowerCase();
+  const base = [
+    {name: 'learn', description: 'Distill current conversation into a reusable Skill'},
+    ...cachedSkills,
+  ];
+  const matches = base.filter(s => (s.name || '').toLowerCase().includes(q)).slice(0, 8);
+  if (!matches.length) { menu.style.display = 'none'; return; }
+  menu.replaceChildren();
+  for (const sk of matches) {
+    const btn = document.createElement('button');
+    btn.className = 'cmd-item';
+    btn.textContent = '/' + sk.name + (sk.description ? ' — ' + sk.description : '');
+    btn.onclick = () => {
+      textarea.value = '/' + sk.name + ' ';
+      menu.style.display = 'none';
+      textarea.focus();
+      grow(textarea);
+    };
+    menu.appendChild(btn);
+  }
+  menu.style.display = 'flex';
+}
+// Drag & Drop files + Ctrl+V image paste onto chat
+if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+  let dragDepth = 0;
+  window.addEventListener('dragenter', (e) => {
+    if (e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files')) {
+      dragDepth++;
+      const ov = document.getElementById('drop-overlay');
+      if (ov) ov.classList.add('show');
+    }
+  });
+  window.addEventListener('dragleave', () => {
+    dragDepth = Math.max(0, dragDepth - 1);
+    if (dragDepth === 0) {
+      const ov = document.getElementById('drop-overlay');
+      if (ov) ov.classList.remove('show');
+    }
+  });
+  window.addEventListener('dragover', (e) => {
+    if (e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files')) e.preventDefault();
+  });
+  window.addEventListener('drop', (e) => {
+    dragDepth = 0;
+    const ov = document.getElementById('drop-overlay');
+    if (ov) ov.classList.remove('show');
+    if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length) {
+      e.preventDefault();
+      attachFiles(e.dataTransfer.files);
+    }
+  });
+  window.addEventListener('paste', (e) => {
+    const items = e.clipboardData && e.clipboardData.items;
+    if (!items) return;
+    const imgFiles = [];
+    for (const item of items) {
+      if (item.kind === 'file' && item.type && item.type.startsWith('image/')) {
+        const f = item.getAsFile();
+        if (f) imgFiles.push(f);
+      }
+    }
+    if (imgFiles.length) {
+      e.preventDefault();
+      attachFiles(imgFiles);
+    }
+  });
 }
 
 // ---------- εκκίνηση ----------
