@@ -2,10 +2,12 @@
 from __future__ import annotations
 
 
-def test_mobile_bridge_pairing_login_and_auth():
+def test_mobile_bridge_pairing_login_and_auth(tmp_path):
     from akatikito.app_api import AppState
+    from akatikito.mobile_bridge import MobileBridge
 
     state = AppState()
+    state.mobile_bridge = MobileBridge(state, store_path=tmp_path / "mobile_bridge.json")
     assert state.mobile_bridge.active is False
 
     info = state.mobile_bridge.start(port=0, host="127.0.0.1")

@@ -8,15 +8,18 @@ PARALLEL_READS = frozenset(('list_files', 'read_file', 'search_in_file', 'search
 
 def mutation_paths(name, args, result):
     """One mutation protocol for tools, repair, task state, UI and context."""
-    if name not in ('edit_file','write_file','create_word_document','create_excel_sheet','create_pdf_document','convert_data_file','apply_file_operations','undo_file_operations'):
+    if name not in ('edit_file','write_file','create_word_document','create_excel_sheet','create_pdf_document','convert_data_file','pdf_toolkit','image_tools','zip_manager','apply_file_operations','undo_file_operations'):
         return ()
     reported=getattr(result,'changed_paths',None)
     if reported is not None:
         return tuple(dict.fromkeys(p for p in reported if isinstance(p,str) and p))
     if not str(result).startswith('ΕΓΙΝΕ'):
         return ()
-    if name == 'convert_data_file':
-        paths=[args.get('output_path')]
+    if name in ('convert_data_file', 'pdf_toolkit', 'image_tools'):
+        paths=[args.get('output_path') or args.get('source_path')]
+    elif name == 'zip_manager':
+        act = str(args.get('action') or '').strip().lower()
+        paths=[args.get('archive_path') if act == 'create' else args.get('destination')]
     elif isinstance(args.get('files'),list):
         paths=[item.get('path') for item in args['files'] if isinstance(item,dict)]
     else:

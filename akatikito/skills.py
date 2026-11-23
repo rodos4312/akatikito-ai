@@ -861,3 +861,74 @@ class Skills:
                 data["proposals"] = [r for r in data["proposals"] if r["id"] != proposal_id]
                 self._save(data)
             return {"ok": True}
+
+    def import_markdown(self, raw_markdown: str, scope: str = "user") -> dict:
+        """Import an external SKILL.md (Hermes, Claude Code, Cursor, Agensi.io) safely."""
+        from .injection_guard import scan_prompt_injection
+
+        raw = str(raw_markdown or "").strip()
+        if not raw or len(raw) > MAX_BODY:
+            raise ValueError("Δώσε έγκυρο κείμενο SKILL.md (έως 40.000 χαρακτήρες).")
+        hits = scan_prompt_injection(raw)
+        if hits:
+            raise ValueError(f"Απορρίφθηκε για ασφάλεια — εντοπίστηκαν ύποπτες οδηγίες Prompt Injection ({', '.join(hits)}).")
+
+        parsed = _parse_skill_text(raw)
+        name = str(parsed.get("title") or parsed.get("name") or "").strip().strip("\"'").lower()
+        if not name:
+            # Try first Markdown heading (# Title)
+            m_hdr = re.search(r"^#\s+(.+)$", raw, re.M)
+            if m_hdr:
+                slug = re.sub(r"[^a-z0-9]+", "-", _strip_accents(m_hdr.group(1))).strip("-")
+                name = slug[:60]
+        name = re.sub(r"[^a-z0-9-]+", "-", name).strip("-")
+        if not name or not name[0].isalpha():
+            name = "imported-" + (name or uuid.uuid4().hex[:6])
+        name = name[:60]
+
+        desc = str(parsed.get("description") or "").strip().strip("\"'")
+        if not desc:
+            body_clean = raw.split("---", 2)[2] if raw.startswith("---") and raw.count("---") >= 2 else raw
+            for ln in body_clean.splitlines():
+                s = ln.strip().lstrip("#-* ").strip()
+                if len(s) >= 12:
+                    desc = s[:180]
+                    break
+        if not desc:
+            desc = f"Εισαγόμενη συνταγή ({name})"
+
+        body_clean = raw.split("---", 2)[2].strip() if raw.startswith("---") and raw.count("---") >= 2 else raw
+        steps = list(parsed.get("steps") or [])
+        if not steps:
+            extracted: list[str] = []
+            for ln in body_clean.splitlines():
+                s = ln.strip()
+                if not s or s.startswith("#") or s.startswith("```"):
+                    continue
+                s = re.sub(r"^(?:[-*]|\d+[.)])\s+", "", s).strip()
+                if s:
+                    extracted.append(s)
+            steps = extracted
+        # Preserve original instructions faithfully without truncating or injecting synthetic filler steps.
+        if not steps:
+            steps = [body_clean]
+        # Keep the full original markdown body intact in template if it contains extra headings/code blocks
+        orig_template = parsed.get("template") or ""
+        if not orig_template and len(body_clean) > sum(len(s) for s in steps) + 40:
+            orig_template = body_clean[:10000]
+
+        cat = str(parsed.get("category") or "general").strip().lower()
+        if cat not in VALID_CATEGORIES:
+            cat = "general"
+
+        return self.save_owner_skill(
+            name=name,
+            description=desc,
+            steps=steps,
+            scope=scope if scope in ("user", "project") else "user",
+            category=cat,
+            triggers=parsed.get("triggers") or [],
+            notes=parsed.get("notes") or [],
+            required_tools=parsed.get("required_tools") or [],
+            template=orig_template,
+        )

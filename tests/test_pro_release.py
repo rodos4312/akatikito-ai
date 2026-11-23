@@ -204,6 +204,6 @@ def test_windowless_app_icon_and_github_pages_kit(tmp_path, monkeypatch):
     assert "pythonw.exe" in cmd_txt
     docs_html = (ROOT / "docs" / "index.html").read_text(encoding="utf-8")
     docs_js = re.findall(r"<script>(.*?)</script>", docs_html, re.S)[-1]
-    assert subprocess.run(["node", "--check"], input=docs_js, text=True, capture_output=True).returncode == 0
+    assert subprocess.run(["node", "--check"], input=docs_js, text=True, encoding="utf-8", capture_output=True).returncode == 0
 
 

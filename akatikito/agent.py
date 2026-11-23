@@ -77,6 +77,9 @@ class Akatikito:
         self.repair = RepairState(self.ws)
         self.ws.write_guard = self.repair.guard
         self.model = model or OpenAIModel(self.config)
+        self._default_model_client = self.model
+        self._default_model_name = self.config.model
+        self._default_base_url = self.config.base_url
         self.events = Events()
         self.messages: list[dict] = []
         self.tokens = {
@@ -160,7 +163,10 @@ class Akatikito:
         from .model import OpenAIModel
 
         self.config.model = name
+        self.config.base_url = self._default_base_url
         self.model = OpenAIModel(self.config)
+        self._default_model_client = self.model
+        self._default_model_name = name
         self.events.emit("model", model=name)
 
     # ------------------------------------------------------------------ prompt
@@ -685,6 +691,77 @@ class Akatikito:
         fresh = not self.messages
         if self.config.auto_mode and not self._manual_mode:
             self._set_mode("assistant" if is_slash_learn else modes.classify(effective), reason="αυτόματα από την εργασία")
+        # Cross-Provider Smart Model Routing (0 extra tokens): ONLY active when fast_model or smart_model is configured.
+        # When neither is set, leave self.model untouched (preserving external/test model clients).
+        fast_m = str(getattr(self.config, "fast_model", "") or "").strip()
+        smart_m = str(getattr(self.config, "smart_model", "") or "").strip()
+        has_images = any(
+            isinstance(b, dict) and b.get("type") == "image_url"
+            for b in (getattr(self, "_attachment_blocks", None) or [])
+        )
+        if self.config.auto_mode and (fast_m or smart_m) and not has_images:
+            from dataclasses import replace as _dc_replace
+
+            base_m = getattr(self, "_default_model_name", self.config.model)
+            base_url = getattr(self, "_default_base_url", self.config.base_url)
+            base_client = getattr(self, "_default_model_client", self.model)
+            low_eff = effective.casefold()
+            complex_hints = (
+                "debug", "refactor", "αρχιτεκτον", "έρευνα", "ερευνα", "research", "ανάλυσ", "αναλυσ",
+                "σύγκριν", "συγκριν", "τιμολόγ", "τιμολογ", "excel", "security", "audit", "κώδικ", "κωδικ",
+                "φτιάξε", "φτιαξε", "υλοποίη", "υλοποιη", "διόρθωσ", "διορθωσ", "script", "python",
+            )
+            is_complex = (
+                self.mode in ("code", "debug", "architect")
+                or is_direct_skill
+                or len(effective) > 320
+                or any(k in low_eff for k in complex_hints)
+            )
+            tier = "smart" if is_complex else "fast"
+            routed_m = (smart_m or base_m) if is_complex else (fast_m or base_m)
+            routed_url = str(getattr(self.config, f"{tier}_base_url", "") or "").strip()
+            routed_key = str(getattr(self.config, f"{tier}_api_key", "") or "").strip()
+            is_diff_endpoint = bool(routed_url and routed_url != base_url)
+            is_local_ep = ("127.0.0.1" in routed_url) or ("localhost" in routed_url)
+            if is_diff_endpoint and not routed_key and not is_local_ep:
+                # Never send the primary provider's API key to a different provider endpoint!
+                self.model = base_client
+                self.config.model = base_m
+                self.config.base_url = base_url
+            elif is_diff_endpoint and routed_m:
+                cache = getattr(self, "_routed_models", None)
+                if cache is None:
+                    cache = {}
+                    self._routed_models = cache
+                ck = (routed_url, routed_m)
+                if ck not in cache:
+                    routed_cfg = _dc_replace(
+                        self.config,
+                        model=routed_m,
+                        base_url=routed_url,
+                        api_key=routed_key,
+                    )
+                    cache[ck] = OpenAIModel(routed_cfg)
+                self.model = cache[ck]
+                self.config.model = routed_m
+                self.config.base_url = routed_url
+                self.events.emit("model_routed", model=routed_m, tier=tier)
+            else:
+                self.model = base_client
+                self.config.base_url = base_url
+                target_m = routed_m or base_m
+                self.config.model = target_m
+                if hasattr(self.model, "model"):
+                    self.model.model = target_m
+                if target_m != base_m:
+                    self.events.emit("model_routed", model=target_m, tier=tier)
+        elif (fast_m or smart_m) and hasattr(self, "_default_model_client"):
+            # Routing was configured, but this turn is manual or has images -> restore default model
+            self.model = self._default_model_client
+            self.config.model = self._default_model_name
+            self.config.base_url = self._default_base_url
+            if hasattr(self.model, "model"):
+                self.model.model = self._default_model_name
         self._turn_tools = set(self.allowed_tools())
         if read_only(effective) and not is_learn_intent and not is_direct_skill:
             self._turn_tools &= set(modes.allowed_tools("ask"))

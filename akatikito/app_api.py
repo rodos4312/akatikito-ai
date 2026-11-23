@@ -73,7 +73,8 @@ class AppState:
         from .gateway_control import GatewayControl
         self.gateway=GatewayControl(DEFAULT_PATH.parent)
         from .mobile_bridge import MobileBridge
-        self.mobile_bridge = MobileBridge(self)
+        self.mobile_bridge = MobileBridge(self, DEFAULT_PATH.parent / 'mobile_bridge.json')
+        self.mobile_bridge.maybe_autostart()
 
     # ---------------------------------------------------------------- βοηθητικά
 
@@ -232,6 +233,12 @@ class AppState:
                     triggers=data.get('triggers'),notes=data.get('notes'),
                     required_tools=data.get('required_tools'),template=str(data.get('template') or ''))
                 result['note']=f"Αποθηκεύτηκε η συνταγή /{result['name']}."
+            elif action=='skill_import':
+                result=Skills(self._files_root()).import_markdown(
+                    str(data.get('markdown') or ''),
+                    scope=str(data.get('scope') or 'user'),
+                )
+                result['note']=f"Εισήχθη με ασφάλεια η συνταγή /{result['name']}."
             elif action=='skill_delete':
                 result=Skills(self._files_root()).delete_owner_skill(str(data.get('name','')).strip())
                 result['note']=f"Διαγράφηκε η συνταγή /{result['name']}."
@@ -241,6 +248,20 @@ class AppState:
         except (OSError,ValueError) as exc:
             return {'error':str(exc)}
 
+    def _resolve_routing_creds(self, provider_name: str) -> tuple[str, str]:
+        p = str(provider_name or '').strip()
+        if not p:
+            return '', ''
+        url = str(PROVIDERS.get(p, '') or '').strip()
+        if not url:
+            return '', ''
+        key = self.settings.key_for(p)
+        is_local = ('127.0.0.1' in url) or ('localhost' in url)
+        if not key and not is_local:
+            # Never route to a remote provider that has no saved API key of its own
+            return '', ''
+        return url, key
+
     def set_preferences(self, data):
         if self.busy:return {'error':'Περίμενε να ολοκληρωθεί η εργασία.'}
         for key in ('autonomous','cautious_edits','checkpoints','advanced_view','supports_vision'):
@@ -249,6 +270,46 @@ class AppState:
             if name in data:
                 if type(data[name]) is not bool:return {'error':'Χρειάζεται boolean προτίμηση.'}
                 setattr(self.settings,name,data[name])
+        if 'fast_provider' in data:
+            val = str(data.get('fast_provider') or '').strip()
+            self.settings.fast_provider = val
+            if self.agent is not None:
+                self.agent.config.fast_provider = val
+                fu, fk = self._resolve_routing_creds(val)
+                self.agent.config.fast_base_url = fu
+                self.agent.config.fast_api_key = fk
+        if 'fast_model' in data:
+            val = str(data.get('fast_model') or '').strip()
+            self.settings.fast_model = val
+            if self.agent is not None:
+                self.agent.config.fast_model = val
+        if 'smart_provider' in data:
+            val = str(data.get('smart_provider') or '').strip()
+            self.settings.smart_provider = val
+            if self.agent is not None:
+                self.agent.config.smart_provider = val
+                su, sk = self._resolve_routing_creds(val)
+                self.agent.config.smart_base_url = su
+                self.agent.config.smart_api_key = sk
+        if 'smart_model' in data:
+            val = str(data.get('smart_model') or '').strip()
+            self.settings.smart_model = val
+            if self.agent is not None:
+                self.agent.config.smart_model = val
+        if 'auto_mode' in data and type(data['auto_mode']) is bool:
+            if self.agent is not None:
+                self.agent.config.auto_mode = data['auto_mode']
+                if data['auto_mode']:
+                    self.agent._manual_mode = False
+        if 'model' in data:
+            val = str(data.get('model') or '').strip()
+            if val:
+                self.settings.model = val
+                if self.agent is not None:
+                    self.agent.config.model = val
+                    self.agent._default_model_name = val
+                    if hasattr(self.agent.model, 'model'):
+                        self.agent.model.model = val
         if 'daily_budget' in data or 'prices' in data:
             import math
             try:
@@ -350,8 +411,18 @@ class AppState:
                             or (PROVIDER_MODELS.get(provider) or [""])[0])
             if not picked_model:
                 return {"error": "Διάλεξε μοντέλο για αυτόν τον πάροχο ή φόρτωσε τη λίστα μοντέλων."}
+            fu, fk = self._resolve_routing_creds(self.settings.fast_provider)
+            su, sk = self._resolve_routing_creds(self.settings.smart_provider)
             config = Config(
                 model=picked_model,
+                fast_provider=self.settings.fast_provider,
+                fast_model=self.settings.fast_model,
+                fast_base_url=fu,
+                fast_api_key=fk,
+                smart_provider=self.settings.smart_provider,
+                smart_model=self.settings.smart_model,
+                smart_base_url=su,
+                smart_api_key=sk,
                 base_url=resolved_url,
                 api_key=key,
                 max_steps=max(1,min(150,steps)),
@@ -427,6 +498,10 @@ class AppState:
             "gateway":gateway,
             "app_root": str(APP_ROOT),
             "connected": agent is not None,
+            "fast_provider": self.settings.fast_provider,
+            "fast_model": self.settings.fast_model,
+            "smart_provider": self.settings.smart_provider,
+            "smart_model": self.settings.smart_model,
             "busy": self.busy,
             "project": str(agent.ws.root) if agent else self.settings.project,
             "recent_projects": list(self.settings.recent_projects),
@@ -1530,7 +1605,7 @@ class AppState:
             return {'error': str(exc), 'active': False}
 
     def mobile_bridge_stop(self):
-        return self.mobile_bridge.stop()
+        return self.mobile_bridge.stop(user_initiated=True)
 
     def open_in_os(self, path: str, reveal: bool = False):
         """Safely open a workspace file with its default Windows app or reveal it in Explorer."""

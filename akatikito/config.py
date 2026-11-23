@@ -10,6 +10,14 @@ from dataclasses import dataclass
 class Config:
     # Μοντέλο (OpenAI-compatible: DeepSeek, OpenRouter, Ollama, ...)
     model: str = os.getenv("AKATIKITO_MODEL", "deepseek-chat")
+    fast_provider: str = ""
+    fast_model: str = ""   # Προαιρετικό οικονομικό/γρήγορο μοντέλο για απλές εργασίες (Auto routing)
+    fast_base_url: str = ""
+    fast_api_key: str = ""
+    smart_provider: str = ""
+    smart_model: str = ""  # Προαιρετικό ισχυρό μοντέλο για δύσκολες/reasoning εργασίες
+    smart_base_url: str = ""
+    smart_api_key: str = ""
     base_url: str = os.getenv("AKATIKITO_BASE_URL", "https://api.deepseek.com/v1")
     api_key: str = os.getenv("AKATIKITO_API_KEY", "")
     temperature: float = 0.0

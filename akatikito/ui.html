@@ -62,26 +62,46 @@
   }
   /* ---------- πλαϊνό μενού ---------- */
   #sidebar {
-    width: 310px; min-width: 310px; background: var(--panel);
+    width: 272px; min-width: 272px; background: var(--panel);
     border-right: 1px solid var(--border); display: flex; flex-direction: column;
-    overflow-y: auto; padding: 14px; gap: 10px;
+    overflow-y: auto; padding: 12px; gap: 8px;
   }
   #sidebar p, #sidebar .hint { overflow-wrap:anywhere; }
-  #logo { font-size: 20px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+  #logo { font-size: 18px; font-weight: 700; display: flex; align-items: center; gap: 8px; padding: 2px 4px 4px; }
   #logo .sub { font-size: 11px; color: var(--dim); font-weight: 400; }
-  .tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .tabs { display: flex; flex-direction: column; gap: 2px; }
   .tabs button {
-    flex: 1; padding: 8px; border: 1px solid var(--border); border-radius: 8px;
-    background: var(--panel2); color: var(--text); cursor: pointer; font-size: 12.5px;
-    transition: all .15s; text-align: center;
+    width: 100%; padding: 7px 10px; border: 1px solid transparent; border-radius: 8px;
+    background: transparent; color: var(--dim); cursor: pointer; font-size: 13px;
+    transition: all .12s; text-align: left; display: flex; align-items: center; gap: 8px;
   }
-  .tabs button:hover { border-color: var(--accent); }
-  .tabs button.active { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
-  .menu-card { background: var(--panel2); border: 1px solid var(--border); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
-  .menu-card h4 { font-size: 13.5px; color: var(--text); display: flex; align-items: center; gap: 6px; margin-bottom: 2px; }
+  .tabs button:hover { background: var(--panel2); color: var(--text); }
+  .tabs button.active { background: rgba(79, 140, 255, 0.16); border-color: rgba(79, 140, 255, 0.35); color: var(--accent); font-weight: 600; }
+  body[data-theme="light"] .tabs button.active { background: rgba(37, 99, 235, 0.10); border-color: rgba(37, 99, 235, 0.25); color: var(--accent); }
+  .menu-card { background: var(--panel2); border: 1px solid var(--border); border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+  .menu-card h4 { font-size: 13px; color: var(--text); display: flex; align-items: center; gap: 6px; margin-bottom: 2px; }
   #chat-workspace { display:flex; flex:1; min-height:0; flex-direction:column; }
-  #management { flex:1; min-height:0; padding:24px; overflow-y:auto; }
-  #management > div { max-width:960px; margin:0 auto; }
+  #management { flex:1; min-height:0; padding:20px 24px; overflow-y:auto; }
+  #management > div { max-width:1120px; margin:0 auto; }
+  /* ---------- Master-Detail 2-στηλη σύγχρονη διάταξη ---------- */
+  .md-split { display: grid; grid-template-columns: 240px 1fr; gap: 18px; align-items: start; }
+  .md-list {
+    display: flex; flex-direction: column; gap: 4px; background: var(--panel);
+    border: 1px solid var(--border); border-radius: 12px; padding: 10px;
+    position: sticky; top: 0; max-height: calc(100vh - 130px); overflow-y: auto;
+  }
+  .md-list-sec { font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--dim); padding: 8px 8px 3px; font-weight: 600; }
+  .md-item {
+    width: 100%; background: transparent; border: 1px solid transparent; border-radius: 8px;
+    color: var(--text); padding: 7px 9px; text-align: left; cursor: pointer; font-size: 12.5px;
+    display: flex; align-items: center; justify-content: space-between; gap: 8px; transition: all .12s;
+  }
+  .md-item:hover { background: var(--panel2); }
+  .md-item.active { background: rgba(79, 140, 255, 0.16); border-color: rgba(79, 140, 255, 0.35); color: var(--accent); font-weight: 600; }
+  .md-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; background: var(--border); }
+  .md-dot.on { background: var(--green); }
+  .md-detail { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+  @media (max-width: 860px) { .md-split { grid-template-columns: 1fr; } .md-list { position: static; max-height: none; } }
   #management .field { margin-bottom:6px; }
   #management p { overflow-wrap:anywhere; line-height:1.55; }
   #plugin-catalog { display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:14px; }
@@ -234,6 +254,7 @@ body.simple-view .pro-only,body.simple-view #chat>.steps:not(.important-step),bo
   <div id="logo">🛠️ Akatikito <span class="sub" id="ver"></span></div>
   <div class="tabs" role="tablist" aria-label="Κύριο Μενού Κατηγοριών">
     <button id="tab-sess" class="active" data-i18n="tab_sess" onclick="showTab('sess')">💬 Συνομιλίες</button>
+    <button id="tab-agenda" data-i18n="tab_agenda" onclick="showTab('agenda')">⏰ Ατζέντα & Jobs</button>
     <button id="tab-providers" data-i18n="tab_providers" onclick="showTab('providers')">🤖 Πάροχοι / Μοντέλα</button>
     <button id="tab-plugins" data-i18n="tab_plugins" onclick="showTab('plugins')">🔌 Πρόσθετα</button>
     <button id="tab-skills" data-i18n="tab_skills" onclick="showTab('skills')">📘 Skills</button>
@@ -280,47 +301,11 @@ body.simple-view .pro-only,body.simple-view #chat>.steps:not(.important-step),bo
       </div>
     </details>
 
-    <details class="set-group" id="agenda-card" ontoggle="if(this.open)loadAgenda()">
-      <summary data-i18n="card_agenda">⏰ Ατζέντα & Υπενθυμίσεις</summary>
-      <div class="set-body">
-        <button class="btn" data-i18n="btn_add" style="font-size:11.5px;padding:4px 8px" onclick="toggleAgendaForm()">＋ Προσθήκη</button>
-        <div id="agenda-form" style="display:none;flex-direction:column;gap:6px;background:var(--panel);padding:8px;border-radius:8px;border:1px solid var(--accent)">
-          <input id="agenda-title" data-i18n-placeholder="agenda_title_ph" placeholder="Τίτλος ή Εντολή Agent (π.χ. /skills ή Σύνοψη ειδήσεων)" style="background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 8px;font-size:12px">
-          <div style="display:flex;gap:6px">
-            <input id="agenda-date" type="date" style="flex:1;background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:5px 8px;font-size:12px">
-            <input id="agenda-time" type="time" value="10:00" style="width:95px;background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:5px 8px;font-size:12px">
-          </div>
-          <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
-            <select id="agenda-repeat" style="flex:1;background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:5px 6px;font-size:11px">
-              <option value="none" data-i18n="agenda_rep_none">🔁 Μία φορά</option>
-              <option value="daily" data-i18n="agenda_rep_daily">🔁 Κάθε μέρα</option>
-              <option value="weekly" data-i18n="agenda_rep_weekly">🔁 Κάθε εβδομάδα</option>
-              <option value="monthly" data-i18n="agenda_rep_monthly">🔁 Κάθε μήνα</option>
-            </select>
-            <select id="agenda-mode" style="width:100px;background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:5px 6px;font-size:11px" title="Λειτουργία αυτόματης εκτέλεσης">
-              <option value="assistant" data-i18n="mode_assistant">Βοηθός</option>
-              <option value="ask" data-i18n="mode_ask">Ερώτηση</option>
-              <option value="code" data-i18n="mode_code">Κώδικας</option>
-              <option value="debug" data-i18n="mode_debug">Debug</option>
-            </select>
-            <label style="display:flex;align-items:center;gap:4px;font-size:11px;cursor:pointer" title="Όταν έρθει η ώρα, ο Agent θα εκτελέσει αυτόματα την εντολή!">
-              <input id="agenda-autorun" type="checkbox" style="width:auto"> 🤖 Auto-Run
-            </label>
-          </div>
-          <button class="btn primary" data-i18n="btn_save_agenda" style="padding:6px" onclick="addAgendaTask()">💾 Αποθήκευση στην Ατζέντα</button>
-        </div>
-        <div id="agenda-list" style="display:flex;flex-direction:column;gap:5px;max-height:140px;overflow-y:auto"></div>
-        <details style="margin-top:4px" ontoggle="if(this.open)loadScheduledJobs()">
-          <summary class="hint" data-i18n="sched_history" style="cursor:pointer">⏱️ Ιστορικό Αυτόματων Εκτελέσεων</summary>
-          <div id="scheduled-list" style="display:flex;flex-direction:column;gap:5px;margin-top:6px;max-height:150px;overflow-y:auto"></div>
-        </details>
-      </div>
-    </details>
-
     <div class="menu-card">
       <h4 data-i18n="card_sessions">🗂️ Αποθηκευμένες Συνομιλίες</h4>
+      <input id="session-search" data-i18n-placeholder="search_sessions_ph" placeholder="🔍 Αναζήτηση συνομιλιών…" oninput="filterSessionsList(this.value)" style="background:var(--bg);border:1px solid var(--border);border-radius:7px;color:var(--text);padding:6px 8px;font-size:12px">
       <div class="field"><label data-i18n="lbl_source">Προέλευση</label><select id="session-source" onchange="loadSessions()"><option value="" data-i18n="src_all">Όλες</option><option value="desktop" data-i18n="src_desktop">Εφαρμογή</option><option value="telegram">Telegram</option><option value="discord">Discord</option></select></div>
-      <div id="sessions" style="display:flex;flex-direction:column;gap:6px"></div>
+      <div id="sessions" style="display:flex;flex-direction:column;gap:5px"></div>
     </div>
 
     <button class="btn danger" id="stopside" data-i18n="btn_stop" onclick="stopAgent()" style="display:none">■ Σταμάτα</button>
@@ -339,12 +324,6 @@ body.simple-view .pro-only,body.simple-view #chat>.steps:not(.important-step),bo
           <button class="btn" data-i18n="btn_gh_check" style="font-size:11.5px" onclick="checkGithubUpdates()">🔄 Έλεγχος Ενημερώσεων GitHub</button>
           <div id="gh-update-status" class="hint"></div>
           <button class="btn primary" id="gh-update-install" data-i18n="btn_gh_install" style="display:none;font-size:11.5px" onclick="installGithubUpdate()">⬇️ Εγκατάσταση Ενημέρωσης</button>
-        </div>
-        <div id="mobile-bridge-box" style="display:flex;flex-direction:column;gap:5px;border-top:1px solid var(--border);padding-top:6px">
-          <div style="display:flex;gap:5px">
-            <button class="btn" id="mobile-bridge-btn" style="flex:1;font-size:11.5px" onclick="toggleMobileBridge()">📱 Σύνδεση Κινητού (PC Login)</button>
-          </div>
-          <div id="mobile-bridge-info" class="hint" style="white-space:pre-wrap;word-break:break-all"></div>
         </div>
         <div style="display:flex;flex-direction:column;gap:5px;border-top:1px solid var(--border);padding-top:6px">
           <label for="project-profile" data-i18n="lbl_trust_profile" style="font-size:11.5px">🛡️ Επίπεδο Εμπιστοσύνης Project</label>
@@ -378,7 +357,8 @@ body.simple-view .pro-only,body.simple-view #chat>.steps:not(.important-step),bo
 
 <main id="main">
   <div id="topbar">
-    <span id="proj-label" onclick="toggleRecentProjectsMenu()" title="Κλικ για γρήγορη εναλλαγή project">—</span>
+    <span id="proj-label" onclick="toggleRecentProjectsMenu()" title="Κλικ για πρόσφατα projects" style="cursor:pointer;padding:3px 8px;border:1px solid var(--border);border-radius:7px;background:var(--panel2)">—</span>
+    <button class="btn" id="proj-change-btn" data-i18n="proj_browse_other" style="width:auto;padding:4px 9px;font-size:12px" onclick="browseAndSwitchProject()" title="Επιλογή φακέλου έργου (Project Folder)">📂 Αλλαγή Φακέλου…</button>
     <span id="app-origin" class="badge" title="Φάκελος εγκατάστασης της εφαρμογής"></span>
     <span class="spacer"></span>
     <span class="badge" id="mode-badge">—</span>
@@ -405,107 +385,166 @@ body.simple-view .pro-only,body.simple-view #chat>.steps:not(.important-step),bo
 
   <!-- ΚΕΝΤΡΙΚΗ ΟΘΟΝΗ ΔΙΑΧΕΙΡΙΣΗΣ (Ανοίγει σε όλο το πλάτος όταν επιλέγεις καρτέλα εκτός Συνομιλιών) -->
   <section id="management" style="display:none" aria-label="Διαχείριση">
-    <!-- 2. ΠΑΡΟΧΟΙ / ΜΟΝΤΕΛΑ -->
-    <div id="view-providers" style="display:none;flex-direction:column;gap:14px">
-      <h2 data-i18n="hdr_providers">🤖 Πάροχοι LLM & Μοντέλα</h2>
-      <div class="menu-card">
-        <h4 data-i18n="prov_wizard_title">🧭 Οδηγός Πρώτης Εκκίνησης</h4>
-        <div id="welcome" class="hint" data-i18n="prov_wizard_hint">1. Διάλεξε φάκελο εργασίας. 2. Πάροχο AI και κλειδί. 3. Δοκίμασε τη σύνδεση με φόρτωση μοντέλων. 4. Επίλεξε μοντέλο και πάτα Σύνδεση.</div>
-        <button class="btn" data-i18n="prov_wizard_btn" style="width:auto;align-self:flex-start" onclick="openSetup()">Άνοιγμα οδηγού ρύθμισης (Βήμα-Βήμα)</button>
+    <!-- 1b. ΑΤΖΕΝΤΑ & ΠΡΟΓΡΑΜΜΑΤΙΣΜΕΝΕΣ ΕΡΓΑΣΙΕΣ -->
+    <div id="view-agenda" style="display:none;flex-direction:column;gap:14px">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+        <h2 data-i18n="card_agenda">⏰ Ατζέντα & Υπενθυμίσεις</h2>
+        <button class="btn primary" data-i18n="btn_add" style="width:auto" onclick="toggleAgendaForm()">＋ Προσθήκη</button>
       </div>
-      <div class="menu-card">
-        <h4 data-i18n="prov_conn_title">📁 Φάκελος Project & Σύνδεση</h4>
-        <div class="field">
-          <label data-i18n="prov_lbl_folder">Φάκελος project</label>
-          <div style="display:flex; gap:6px; align-items:center;">
-            <input id="project" placeholder="D:\…" style="flex:1 1 auto; min-width:0;">
-            <button class="btn" data-i18n="prov_btn_choose" onclick="pickFolder()" title="Διάλεξε φάκελο από τα Windows" style="width:auto; flex:0 0 auto; white-space:nowrap;">📁 Διάλεξε</button>
-          </div>
+      <div id="agenda-form" style="display:none;flex-direction:column;gap:10px;background:var(--panel);padding:16px;border-radius:12px;border:1px solid var(--accent)">
+        <input id="agenda-title" data-i18n-placeholder="agenda_title_ph" placeholder="Τίτλος ή Εντολή Agent (π.χ. /skills ή Σύνοψη ειδήσεων)" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:8px 10px;font-size:13px">
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+          <input id="agenda-date" type="date" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:7px 10px;font-size:13px">
+          <input id="agenda-time" type="time" value="10:00" style="width:110px;background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:7px 10px;font-size:13px">
+          <select id="agenda-repeat" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:7px 10px;font-size:12.5px">
+            <option value="none" data-i18n="agenda_rep_none">🔁 Μία φορά</option>
+            <option value="daily" data-i18n="agenda_rep_daily">🔁 Κάθε μέρα</option>
+            <option value="weekly" data-i18n="agenda_rep_weekly">🔁 Κάθε εβδομάδα</option>
+            <option value="monthly" data-i18n="agenda_rep_monthly">🔁 Κάθε μήνα</option>
+          </select>
+          <select id="agenda-mode" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:7px 10px;font-size:12.5px" title="Λειτουργία αυτόματης εκτέλεσης">
+            <option value="assistant" data-i18n="mode_assistant">Βοηθός</option>
+            <option value="ask" data-i18n="mode_ask">Ερώτηση</option>
+            <option value="code" data-i18n="mode_code">Κώδικας</option>
+            <option value="debug" data-i18n="mode_debug">Debug</option>
+          </select>
+          <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;cursor:pointer" title="Όταν έρθει η ώρα, ο Agent θα εκτελέσει αυτόματα την εντολή!">
+            <input id="agenda-autorun" type="checkbox" style="width:auto"> 🤖 Auto-Run
+          </label>
         </div>
-        <div class="field">
-          <label data-i18n="prov_lbl_provider">Πάροχος</label>
-          <select id="provider" onchange="onProvider()"></select>
-          <span class="hint" id="provider-hint"></span>
+        <button class="btn primary" data-i18n="btn_save_agenda" style="width:auto;align-self:flex-start" onclick="addAgendaTask()">💾 Αποθήκευση στην Ατζέντα</button>
+      </div>
+      <div class="md-split" style="grid-template-columns:1fr 1fr">
+        <div class="menu-card">
+          <h4 data-i18n="card_agenda">⏰ Ατζέντα & Υπενθυμίσεις</h4>
+          <div id="agenda-list" style="display:flex;flex-direction:column;gap:6px"></div>
         </div>
-        <div class="field" id="custom-url-row" style="display:none">
-          <label data-i18n="prov_lbl_url">Διεύθυνση (base URL)</label>
-          <input id="base_url" placeholder="https://…/v1">
+        <div class="menu-card">
+          <h4 data-i18n="sched_history">⏱️ Ιστορικό Αυτόματων Εκτελέσεων</h4>
+          <div id="scheduled-list" style="display:flex;flex-direction:column;gap:6px"></div>
         </div>
-        <div class="field">
-          <label data-i18n="prov_lbl_apikey">Κλειδί API</label>
-          <div style="display:flex; gap:6px; align-items:center;">
-            <input id="api_key" type="password" placeholder="sk-…" style="flex:1 1 auto; min-width:0; width:auto;">
-            <button class="btn" data-i18n="btn_paste" onclick="pasteKey()" title="Επικόλληση από το πρόχειρο" style="width:auto; flex:0 0 auto; white-space:nowrap;">📋 Επικόλληση</button>
-          </div>
-          <span class="hint" id="key-hint"></span>
-        </div>
-        <button class="btn" data-i18n="prov_btn_test" onclick="loadModels()">⟳ Δοκιμή σύνδεσης / Φόρτωση μοντέλων</button>
-        <div class="field">
-          <label data-i18n="lbl_model">Μοντέλο</label>
-          <select id="model-pick"></select>
-          <input id="model-other" placeholder="…ή γράψε άλλο όνομα" oninput="modelOther=this.value">
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-          <div class="field">
-            <label data-i18n="prov_lbl_steps">Μέγιστα βήματα</label>
-            <input id="max_steps" type="number" value="50" min="1" max="150">
-          </div>
-          <div class="field">
-            <label data-i18n="prov_lbl_verify">Αυτόματος έλεγχος (προαιρετικό)</label>
-            <input id="verify" placeholder="π.χ. python -m pytest -q">
-            <span class="hint" id="verify-hint"></span>
-          </div>
-        </div>
-        <button class="btn primary" data-i18n="prov_btn_connect" onclick="connect()">⚡ Σύνδεση</button>
       </div>
     </div>
 
-    <!-- 3. ΠΡΟΣΘΕΤΑ (ΚΑΝΑΛΙΑ TELEGRAM/DISCORD + GATEWAY + MCP) -->
-    <div id="view-plugins" style="display:none;flex-direction:column;gap:14px">
-      <h2 data-i18n="hdr_plugins">🔌 Πρόσθετα Καναλιών & Εργαλεία MCP</h2>
-      <div class="menu-card">
-        <h4 data-i18n="plg_channels_title">📱 Κανάλια Επικοινωνίας (Telegram / Discord)</h4>
-        <p class="hint" data-i18n="plg_channels_hint">Εγκατάσταση → ρύθμιση → εκκίνηση gateway. Η εγκατάσταση δεν ενεργοποιεί σύνδεση ή μοντέλο χωρίς την έγκρισή σου.</p>
-        <div id="plugin-catalog"></div>
-        <div class="field" style="margin-top:6px">
-          <label data-i18n="plg_github_lbl">Πρόσθετο από δημόσιο GitHub (Channel API v1)</label>
-          <div style="display:flex;gap:6px">
-            <input id="plugin-source" placeholder="https://github.com/owner/repository" style="flex:1">
-            <button class="btn" data-i18n="plg_preview_btn" style="width:auto" onclick="previewPlugin(document.getElementById('plugin-source').value)">Προεπισκόπηση εγκατάστασης</button>
+    <!-- 2. ΠΑΡΟΧΟΙ / ΜΟΝΤΕΛΑ -->
+    <div id="view-providers" style="display:none;flex-direction:column;gap:14px">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+        <h2 data-i18n="hdr_providers">🤖 Πάροχοι LLM & Μοντέλα</h2>
+        <button class="btn" data-i18n="prov_wizard_btn" style="width:auto;font-size:12px" onclick="openSetup()">🧭 Άνοιγμα οδηγού ρύθμισης (Βήμα-Βήμα)</button>
+      </div>
+      <div class="md-split">
+        <div class="md-list" id="providers-md-list" aria-label="Λίστα Παρόχων"></div>
+        <div class="md-detail">
+          <div class="menu-card">
+            <h4 data-i18n="prov_conn_title">📁 Φάκελος Project & Σύνδεση</h4>
+            <div id="welcome" class="hint" data-i18n="prov_wizard_hint" style="display:none">1. Διάλεξε φάκελο εργασίας. 2. Πάροχο AI και κλειδί. 3. Δοκίμασε τη σύνδεση με φόρτωση μοντέλων. 4. Επίλεξε μοντέλο και πάτα Σύνδεση.</div>
+            <div class="field">
+              <label data-i18n="prov_lbl_folder">Φάκελος project</label>
+              <div style="display:flex; gap:6px; align-items:center;">
+                <input id="project" placeholder="D:\…" style="flex:1 1 auto; min-width:0;">
+                <button class="btn" data-i18n="prov_btn_choose" onclick="pickFolder()" title="Διάλεξε φάκελο από τα Windows" style="width:auto; flex:0 0 auto; white-space:nowrap;">📁 Διάλεξε</button>
+              </div>
+            </div>
+            <div class="field">
+              <label data-i18n="prov_lbl_provider">Πάροχος</label>
+              <select id="provider" onchange="onProvider(); renderProvidersMasterList();"></select>
+              <span class="hint" id="provider-hint"></span>
+            </div>
+            <div class="field" id="custom-url-row" style="display:none">
+              <label data-i18n="prov_lbl_url">Διεύθυνση (base URL)</label>
+              <input id="base_url" placeholder="https://…/v1">
+            </div>
+            <div class="field">
+              <label data-i18n="prov_lbl_apikey">Κλειδί API</label>
+              <div style="display:flex; gap:6px; align-items:center;">
+                <input id="api_key" type="password" placeholder="sk-…" style="flex:1 1 auto; min-width:0; width:auto;">
+                <button class="btn" data-i18n="btn_paste" onclick="pasteKey()" title="Επικόλληση από το πρόχειρο" style="width:auto; flex:0 0 auto; white-space:nowrap;">📋 Επικόλληση</button>
+              </div>
+              <span class="hint" id="key-hint"></span>
+            </div>
+            <button class="btn" data-i18n="prov_btn_test" onclick="loadModels()">⟳ Δοκιμή σύνδεσης / Φόρτωση μοντέλων</button>
+            <div class="field">
+              <label data-i18n="lbl_model">Μοντέλο</label>
+              <select id="model-pick"></select>
+              <input id="model-other" placeholder="…ή γράψε άλλο όνομα" oninput="modelOther=this.value">
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+              <div class="field">
+                <label data-i18n="prov_lbl_steps">Μέγιστα βήματα</label>
+                <input id="max_steps" type="number" value="50" min="1" max="150">
+              </div>
+              <div class="field">
+                <label data-i18n="prov_lbl_verify">Αυτόματος έλεγχος (προαιρετικό)</label>
+                <input id="verify" placeholder="π.χ. python -m pytest -q">
+                <span class="hint" id="verify-hint"></span>
+              </div>
+            </div>
+            <button class="btn primary" data-i18n="prov_btn_connect" onclick="connect()">⚡ Σύνδεση</button>
           </div>
         </div>
-        <div id="plugin-review"></div>
-        <div id="plugin-config"></div>
       </div>
+    </div>
 
-      <div class="menu-card">
-        <h4 data-i18n="plg_gw_title">🛰️ Υπηρεσία Gateway (Παρασκήνιο)</h4>
-        <div id="gateway-state" class="hint" aria-live="polite"></div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <button class="btn primary" data-i18n="plg_gw_start" style="width:auto" onclick="gatewayAction('start')">▶ Έναρξη gateway</button>
-          <button class="btn" data-i18n="plg_gw_stop" style="width:auto" onclick="gatewayAction('stop')">⏸ Παύση gateway</button>
-          <button class="btn" data-i18n="plg_gw_refresh" style="width:auto" onclick="loadPlugins()">🔄 Ανανέωση κατάστασης</button>
+    <!-- 3. ΠΡΟΣΘΕΤΑ (ΚΑΝΑΛΙΑ TELEGRAM/DISCORD + GATEWAY + MCP) — Master-Detail -->
+    <div id="view-plugins" style="display:none;flex-direction:column;gap:14px">
+      <h2 data-i18n="hdr_plugins">🔌 Πρόσθετα Καναλιών & Εργαλεία MCP</h2>
+      <div class="md-split">
+        <div class="md-list" id="plugins-md-list" aria-label="Κατηγορίες Προσθέτων">
+          <input id="plugins-md-search" data-i18n-placeholder="search_plugins_ph" placeholder="🔍 Αναζήτηση…" oninput="filterPluginsMasterList(this.value)" style="background:var(--bg);border:1px solid var(--border);border-radius:7px;color:var(--text);padding:6px 8px;font-size:12px;margin-bottom:4px">
+          <div class="md-list-sec">Messaging Channels</div>
+          <div id="md-channels-list" style="display:flex;flex-direction:column;gap:3px"></div>
+          <button class="md-item" id="plg-nav-channels" onclick="selectPluginPane('channels', '')"><span>＋ Όλα / Εγκατάσταση</span><span class="md-dot" id="dot-channels"></span></button>
+          <div class="md-list-sec">Gateway & Python Tools</div>
+          <button class="md-item" id="plg-nav-gateway" onclick="selectPluginPane('gateway')"><span>🛰️ Gateway Service</span><span class="md-dot" id="dot-gateway"></span></button>
+          <button class="md-item" id="plg-nav-python" onclick="selectPluginPane('python')"><span>🧩 Python Tool Plugins</span><span class="md-dot on" id="dot-python"></span></button>
+          <div class="md-list-sec">External MCP</div>
+          <div id="md-mcp-list" style="display:flex;flex-direction:column;gap:3px"></div>
+          <button class="md-item" id="plg-nav-mcp" onclick="selectPluginPane('mcp')"><span>＋ Διαχείριση / Νέο MCP</span><span class="md-dot" id="dot-mcp"></span></button>
         </div>
-        <p class="hint" data-i18n="gw_hint_bg">Το gateway συνεχίζει να εξυπηρετεί Telegram/Discord ακόμα και όταν κλείνεις το παράθυρο. Οι εγκρίσεις ενεργειών εμφανίζονται στο παράθυρο.</p>
-      </div>
+        <div class="md-detail">
+          <div class="menu-card" id="plg-pane-channels">
+            <h4 data-i18n="plg_channels_title">📱 Κανάλια Επικοινωνίας (Telegram / Discord)</h4>
+            <p class="hint" data-i18n="plg_channels_hint">Εγκατάσταση → ρύθμιση → εκκίνηση gateway. Η εγκατάσταση δεν ενεργοποιεί σύνδεση ή μοντέλο χωρίς την έγκρισή σου.</p>
+            <div id="plugin-catalog"></div>
+            <div class="field" style="margin-top:6px">
+              <label data-i18n="plg_github_lbl">Πρόσθετο από δημόσιο GitHub (Channel API v1)</label>
+              <div style="display:flex;gap:6px">
+                <input id="plugin-source" placeholder="https://github.com/owner/repository" style="flex:1">
+                <button class="btn" data-i18n="plg_preview_btn" style="width:auto" onclick="previewPlugin(document.getElementById('plugin-source').value)">Προεπισκόπηση εγκατάστασης</button>
+              </div>
+            </div>
+            <div id="plugin-review"></div>
+            <div id="plugin-config"></div>
+          </div>
 
-      <div class="menu-card">
-        <h4 data-i18n="plg_py_title">🧩 Πρόσθετα Εργαλείων Python (1-Κλικ, Χωρίς Node.js / MCP)</h4>
-        <p class="hint" data-i18n="plg_py_hint">Ενσωματωμένα εργαλεία Python που μπορείς να ενεργοποιείς ή να απενεργοποιείς με 1 κλικ.</p>
-        <div id="tool-plugins-catalog" style="display:flex;flex-direction:column;gap:8px"></div>
-      </div>
+          <div class="menu-card" id="plg-pane-gateway" style="display:none">
+            <h4 data-i18n="plg_gw_title">🛰️ Υπηρεσία Gateway (Παρασκήνιο)</h4>
+            <div id="gateway-state" class="hint" aria-live="polite"></div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button class="btn primary" data-i18n="plg_gw_start" style="width:auto" onclick="gatewayAction('start')">▶ Έναρξη gateway</button>
+              <button class="btn" data-i18n="plg_gw_stop" style="width:auto" onclick="gatewayAction('stop')">⏸ Παύση gateway</button>
+              <button class="btn" data-i18n="plg_gw_refresh" style="width:auto" onclick="loadPlugins()">🔄 Ανανέωση κατάστασης</button>
+            </div>
+            <p class="hint" data-i18n="gw_hint_bg">Το gateway συνεχίζει να εξυπηρετεί Telegram/Discord ακόμα και όταν κλείνεις το παράθυρο. Οι εγκρίσεις ενεργειών εμφανίζονται στο παράθυρο.</p>
+          </div>
 
-      <div class="menu-card">
-        <h4 data-i18n="plg_mcp_title">🧰 Εξωτερικά Εργαλεία MCP (Model Context Protocol)</h4>
-        <div class="field">
-          <label>MCP servers (data/mcp.json)</label>
-          <div id="mcp-servers" style="display:flex;flex-direction:column;gap:8px"></div>
-          <span class="hint" data-i18n="mcp_hint_sec">Τοπικοί stdio ή HTTP servers. Κάθε νέα ή τροποποιημένη σύνδεση ζητά ρητή έγκριση. Τα κλειδιά αποθηκεύονται συγκαλυμμένα.</span>
-        </div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <button class="btn" data-i18n="plg_mcp_add" style="width:auto" onclick="toggleMcpForm()">＋ Προσθήκη / Επεξεργασία MCP</button>
-          <button class="btn" data-i18n="plg_mcp_import" style="width:auto" onclick="toggleMcpImport()">📋 Εισαγωγή από JSON (Claude / Cursor)</button>
-        </div>
+          <div class="menu-card" id="plg-pane-python" style="display:none">
+            <h4 data-i18n="plg_py_title">🧩 Πρόσθετα Εργαλείων Python (1-Κλικ, Χωρίς Node.js / MCP)</h4>
+            <p class="hint" data-i18n="plg_py_hint">Ενσωματωμένα εργαλεία Python που μπορείς να ενεργοποιείς ή να απενεργοποιείς με 1 κλικ.</p>
+            <div id="tool-plugins-catalog" style="display:flex;flex-direction:column;gap:8px"></div>
+          </div>
+
+          <div class="menu-card" id="plg-pane-mcp" style="display:none">
+            <h4 data-i18n="plg_mcp_title">🧰 Εξωτερικά Εργαλεία MCP (Model Context Protocol)</h4>
+            <div class="field">
+              <label>MCP servers (data/mcp.json)</label>
+              <div id="mcp-servers" style="display:flex;flex-direction:column;gap:8px"></div>
+              <span class="hint" data-i18n="mcp_hint_sec">Τοπικοί stdio ή HTTP servers. Κάθε νέα ή τροποποιημένη σύνδεση ζητά ρητή έγκριση. Τα κλειδιά αποθηκεύονται συγκαλυμμένα.</span>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button class="btn" data-i18n="plg_mcp_add" style="width:auto" onclick="toggleMcpForm()">＋ Προσθήκη / Επεξεργασία MCP</button>
+              <button class="btn" data-i18n="plg_mcp_import" style="width:auto" onclick="toggleMcpImport()">📋 Εισαγωγή από JSON (Claude / Cursor)</button>
+            </div>
         <div id="mcp-import-box" style="display:none;flex-direction:column;gap:8px;background:var(--panel);padding:12px;border-radius:8px;border:1px solid var(--border)">
           <label>Επικόλλησε έτοιμο JSON (π.χ. <code>{"mcpServers": {...}}</code>)</label>
           <textarea id="mcp-import-json" rows="6" placeholder='{"mcpServers":{"notion":{"command":"npx","args":["-y","@notionhq/notion-mcp-server"],"env":{"NOTION_TOKEN":"ntn_..."}}}}'></textarea>
@@ -546,17 +585,34 @@ body.simple-view .pro-only,body.simple-view #chat>.steps:not(.important-step),bo
           <label style="display:flex;align-items:center;gap:8px;font-size:12px"><input id="mcp-autoconnect" type="checkbox" style="width:auto"> 🔁 Αυτόματη επανασύνδεση στην εκκίνηση (μόνο όσο οι ρυθμίσεις μένουν αμετάβλητες μετά την έγκριση)</label>
           <button class="btn primary" style="width:auto" onclick="saveMcpServer()">💾 Αποθήκευση MCP Server</button>
         </div>
+          </div>
+        </div>
       </div>
     </div>
 
     <!-- 4. SKILLS / ΣΥΝΤΑΓΕΣ ΕΡΓΑΣΙΑΣ -->
     <div id="view-skills" style="display:none;flex-direction:column;gap:14px">
-      <h2 data-i18n="hdr_skills">📘 Skills / Συνταγές Εργασίας</h2>
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+        <h2 data-i18n="hdr_skills">📘 Skills / Συνταγές Εργασίας</h2>
+        <input id="skill-search" data-i18n-placeholder="search_skills_ph" placeholder="🔍 Αναζήτηση skill…" oninput="filterSkillsCards(this.value)" style="max-width:260px;background:var(--panel);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:12.5px">
+      </div>
       <div class="menu-card">
         <div style="display:flex;gap:8px;flex-wrap:wrap">
           <button class="btn" data-i18n="sk_btn_refresh" style="width:auto" onclick="loadLearning()">🔄 Ανανέωση skills</button>
           <button class="btn primary" data-i18n="sk_btn_new" style="width:auto" onclick="toggleSkillForm()">＋ Δημιουργία νέας συνταγής (Skill)</button>
+          <button class="btn" data-i18n="sk_btn_import" style="width:auto" onclick="toggleSkillImportForm()">📥 Εισαγωγή SKILL.md (Hermes / Claude / Cursor)</button>
           <button class="btn" data-i18n="sk_btn_learn" style="width:auto;border-color:var(--accent)" onclick="triggerLearnCommand()">🧠 /learn — Απόσταξη συνομιλίας σε Skill</button>
+        </div>
+        <div id="skill-import-form" style="display:none;flex-direction:column;gap:8px;background:var(--panel);padding:12px;border-radius:8px;border:1px solid var(--accent)">
+          <div class="field"><label>Επικόλλησε οποιοδήποτε SKILL.md (Hermes, Claude Code, Cursor, Agensi.io) ή φόρτωσε αρχείο .md</label>
+            <input type="file" id="skill-import-file" accept=".md,.txt" onchange="loadSkillImportFile(this)" style="font-size:12px">
+          </div>
+          <textarea id="skill-import-md" rows="6" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:8px;font-size:12px;font-family:monospace" placeholder="---&#10;name: my-skill&#10;description: ...&#10;---&#10;1. Βήμα 1&#10;2. Βήμα 2&#10;3. Βήμα 3"></textarea>
+          <div style="display:flex;gap:8px;align-items:center">
+            <select id="skill-import-scope" style="width:auto;background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 8px;font-size:12px"><option value="user">Σε όλα τα projects μου</option><option value="project">Μόνο στο τρέχον project</option></select>
+            <button class="btn primary" style="width:auto" onclick="importExternalSkill()">📥 Έλεγχος Ασφαλείας & Εισαγωγή</button>
+            <button class="btn" style="width:auto" onclick="toggleSkillImportForm()">Ακύρωση</button>
+          </div>
         </div>
         <div id="skill-form" style="display:none;flex-direction:column;gap:8px;background:var(--panel);padding:12px;border-radius:8px;border:1px solid var(--accent)">
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
@@ -613,6 +669,62 @@ body.simple-view .pro-only,body.simple-view #chat>.steps:not(.important-step),bo
           </select>
         </div>
       </div>
+      <div class="menu-card" id="mobile-bridge-box">
+        <h4 data-i18n="hdr_mobile">📱 Σύνδεση Κινητού (Akatikito Mobile)</h4>
+        <div class="hint" data-i18n="mobile_desc">Σύνδεσε την εφαρμογή Android του Ακατίκητου με τον υπολογιστή σου μέσω QR (αυτόματα με Tailscale 4G/5G ή τοπικό Wi-Fi).</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px">
+          <button class="btn primary" id="mobile-bridge-btn" data-i18n="mobile_btn_start" style="width:auto" onclick="toggleMobileBridge()">📱 Ενεργοποίηση Σύνδεσης Κινητού (QR / Tailscale)</button>
+        </div>
+        <div id="mobile-bridge-info" class="hint" style="white-space:pre-wrap;word-break:break-all;margin-top:6px"></div>
+      </div>
+
+      <div class="menu-card" id="smart-routing-box">
+        <h4>⚡🧠 Smart Model Routing (Auto)</h4>
+        <div class="hint">Όρισε διαφορετικό Πάροχο + Μοντέλο για απλές εργασίες (π.χ. GLM / Gemini Flash) και για δύσκολες / reasoning εργασίες (π.χ. DeepSeek Pro / Claude). Χρησιμοποιεί τα αποθηκευμένα API keys σου!</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:6px">
+          <div class="field">
+            <label>⚡ Πάροχος Απλών Εργασιών</label>
+            <select id="fast-provider" onchange="saveModelRouting()">
+              <option value="">(Ίδιος με ενεργό)</option>
+              <option value="DeepSeek">DeepSeek</option>
+              <option value="Google Gemini">Google Gemini</option>
+              <option value="Anthropic (Claude)">Anthropic (Claude)</option>
+              <option value="OpenAI">OpenAI</option>
+              <option value="Z.ai (GLM)">Z.ai (GLM)</option>
+              <option value="OpenRouter">OpenRouter</option>
+              <option value="NanoGPT (συνδρομή)">NanoGPT (συνδρομή)</option>
+              <option value="NanoGPT (credits)">NanoGPT (credits)</option>
+              <option value="Ollama (τοπικό)">Ollama (τοπικό)</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>⚡ Μοντέλο Απλών Εργασιών</label>
+            <input id="fast-model" placeholder="π.χ. glm-4.5-air / gemini-2.5-flash / deepseek-chat" onchange="saveModelRouting()">
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:4px">
+          <div class="field">
+            <label>🧠 Πάροχος Δύσκολων / Reasoning</label>
+            <select id="smart-provider" onchange="saveModelRouting()">
+              <option value="">(Ίδιος με ενεργό)</option>
+              <option value="DeepSeek">DeepSeek</option>
+              <option value="Google Gemini">Google Gemini</option>
+              <option value="Anthropic (Claude)">Anthropic (Claude)</option>
+              <option value="OpenAI">OpenAI</option>
+              <option value="Z.ai (GLM)">Z.ai (GLM)</option>
+              <option value="OpenRouter">OpenRouter</option>
+              <option value="NanoGPT (συνδρομή)">NanoGPT (συνδρομή)</option>
+              <option value="NanoGPT (credits)">NanoGPT (credits)</option>
+              <option value="Ollama (τοπικό)">Ollama (τοπικό)</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>🧠 Μοντέλο Δύσκολων / Reasoning</label>
+            <input id="smart-model" placeholder="π.χ. deepseek-reasoner / gemini-2.5-pro / claude-sonnet-4" onchange="saveModelRouting()">
+          </div>
+        </div>
+      </div>
+
       <div class="menu-card">
         <h4 data-i18n="hdr_security">🛡️ Ασφάλεια & Εγκρίσεις</h4>
         <div class="field"><label><input id="autonomous" type="checkbox" style="width:auto" onchange="savePreferences()"> <span data-i18n="set_chk_auto">Αυτόνομη εκτέλεση συνηθισμένων εντολών</span></label><span class="hint" data-i18n="set_chk_auto_hint">Οι επικίνδυνες εντολές χρειάζονται πάντα έγκριση.</span></div>
@@ -782,8 +894,9 @@ async function api(path, body) {
 
 function showTab(name) {
   if (name === 'llm') name = 'providers';
-  if (!['sess','providers','plugins','skills','memory','set'].includes(name)) return;
-  for (const key of ['sess','providers','plugins','skills','memory','set']) {
+  const allTabs = ['sess','agenda','providers','plugins','skills','memory','set'];
+  if (!allTabs.includes(name)) return;
+  for (const key of allTabs) {
     const btn = document.getElementById('tab-' + key);
     const view = document.getElementById('view-' + key);
     if (btn) {
@@ -796,6 +909,7 @@ function showTab(name) {
   document.getElementById('chat-workspace').style.display = name === 'sess' ? 'flex' : 'none';
   document.getElementById('files-panel').style.display = name === 'sess' ? '' : 'none';
   document.getElementById('files-toggle').disabled = name !== 'sess';
+  if (name === 'agenda') { loadAgenda().catch(() => {}); loadScheduledJobs().catch(() => {}); }
   if (name === 'skills' || name === 'memory') loadLearning().catch(e => showNotice('err', e.message));
   if (name === 'plugins') loadPlugins().catch(e => showNotice('err', e.message));
 }
@@ -2164,13 +2278,27 @@ async function loadI18n(lang) {
     if (r && r.strings) applyI18nStrings(r.lang || lang || 'el', r.strings);
   } catch (_) {}
 }
+async function saveModelRouting() {
+  const fpEl = document.getElementById('fast-provider');
+  const fastEl = document.getElementById('fast-model');
+  const spEl = document.getElementById('smart-provider');
+  const smartEl = document.getElementById('smart-model');
+  const r = await api('/api/preferences', {
+    fast_provider: (fpEl?.value || '').trim(),
+    fast_model: (fastEl?.value || '').trim(),
+    smart_provider: (spEl?.value || '').trim(),
+    smart_model: (smartEl?.value || '').trim(),
+  });
+  if (r && r.error) { showNotice('err', r.error); return; }
+  showNotice('ok', '✅ Smart Model Routing saved');
+}
 async function changeUiLanguage(lang) {
   if (!lang) return;
   const r = await api('/api/preferences', {ui_language: lang});
   if (r && r.error) { showNotice('err', r.error); return; }
   await loadI18n(lang);
   try {
-    await Promise.allSettled([loadAgenda(), loadRoutines(), loadLearning(learningOffset), loadPlugins(), loadProviders()]);
+    await Promise.allSettled([loadAgenda(), loadRoutines(), loadLearning(learningOffset), loadPlugins(), loadProviders(), refreshMobileBridge()]);
     const st = await api('/api/status');
     if (st && !st.error) updateBadges(st);
   } catch (_) {}
@@ -2257,29 +2385,48 @@ async function loadLearning(offset=0){
     learningButton(box,i18nText('btn_approve','Έγκριση συνταγής'),()=>learningAction('skill_approve',row.id,undefined,row.signature));
     learningButton(box,i18nText('btn_reject','Απόρριψη'),()=>learningAction('skill_reject',row.id,undefined,row.signature));
   }
-  heading(i18nText('sk_catalog_hdr', 'Διαθέσιμες συνταγές'));
-  for(const row of(skills.catalog||[])){
+  const renderSkillCard = row => {
     const cat=row.category?` [${row.category}]`:'';
-    const uses=row.uses?` · χρήσεις: ${row.uses}`:'';
-    const tel=row.telemetry?` · ✓${row.telemetry.successes||0}/✗${row.telemetry.failures||0}${row.telemetry.needs_healing?' ⚠️ χρειάζεται patch':''}`:'';
+    const uses=row.uses?` · ${i18nText('sk_lbl_uses','χρήσεις')}: ${row.uses}`:'';
+    const tel=row.telemetry?` · ✓${row.telemetry.successes||0}/✗${row.telemetry.failures||0}${row.telemetry.needs_healing?' ⚠️ patch':''}`:'';
     const trigs=(row.triggers&&row.triggers.length)?` · triggers: ${row.triggers.join(', ')}`:'';
-    const tools=(row.required_tools&&row.required_tools.length)?` · εργαλεία: ${row.required_tools.join(', ')}`:'';
-    const box=card('/'+row.name+cat+' · '+row.description+' ('+({builtin:'έτοιμη συνταγή',user:'για όλα τα projects',project:'για αυτό το project','legacy-project':'για αυτό το project'}[row.source]||'τοπική')+uses+tel+trigs+tools+')');
-    if(Array.isArray(row.steps)&&row.steps.length){
+    const tools=(row.required_tools&&row.required_tools.length)?` · ${i18nText('sk_lbl_tools','εργαλεία')}: ${row.required_tools.join(', ')}`:'';
+    const srcMap={
+      builtin: i18nText('sk_src_builtin','ενσωματωμένο skill'),
+      user: i18nText('sk_src_user','δικό σου / AI (global)'),
+      project: i18nText('sk_src_project','δικό σου / AI (project)'),
+      'legacy-project': i18nText('sk_src_project','δικό σου / AI (project)'),
+    };
+    const srcLabel=srcMap[row.source]||i18nText('sk_src_local','τοπικό');
+    const desc = row.source==='builtin' ? i18nText('sk_bi_desc_'+row.name, row.description) : row.description;
+    const box=card('/'+row.name+cat+' · '+desc+' ('+srcLabel+uses+tel+trigs+tools+')');
+    const biSteps = row.source==='builtin' ? i18nText('sk_bi_steps_'+row.name, '') : '';
+    if(biSteps || (Array.isArray(row.steps)&&row.steps.length)){
       const details=document.createElement('div');details.className='out';details.style.marginTop='6px';
-      let txt=row.steps.map((s,i)=>`${i+1}. ${s}`).join('\n');
-      if(Array.isArray(row.notes)&&row.notes.length)txt+='\n\nΠαγίδες / Σημειώσεις:\n'+row.notes.map(n=>'- '+n).join('\n');
-      if(row.template)txt+='\n\nΠρότυπο / Snippet:\n'+row.template;
+      let txt=biSteps || row.steps.map((s,i)=>`${i+1}. ${s}`).join('\n');
+      if(Array.isArray(row.notes)&&row.notes.length)txt+='\n\n'+i18nText('sk_lbl_notes','Παγίδες / Σημειώσεις')+':\n'+row.notes.map(n=>'- '+n).join('\n');
+      if(row.template)txt+='\n\n'+i18nText('sk_lbl_template','Πρότυπο / Snippet')+':\n'+row.template;
       details.textContent=txt;box.appendChild(details);
     }
     const actions=document.createElement('div');actions.style.cssText='display:flex;gap:6px;flex-wrap:wrap;margin-top:6px';
     learningButton(actions,i18nText('sk_run_btn', '▶ Εκτέλεση στο Chat'),()=>runSkillInChat(row.name));
     if(row.source!=='builtin'){
-      learningButton(actions,'✏️ Επεξεργασία',()=>editOwnerSkill(row));
-      learningButton(actions,'🗑 Διαγραφή',()=>deleteOwnerSkill(row.name));
+      learningButton(actions,i18nText('sk_btn_edit','✏️ Επεξεργασία'),()=>editOwnerSkill(row));
+      learningButton(actions,i18nText('sk_btn_delete','🗑 Διαγραφή'),()=>deleteOwnerSkill(row.name));
     }
     box.appendChild(actions);
+  };
+  const allCatalog = skills.catalog || [];
+  const customSkills = allCatalog.filter(r => r.source !== 'builtin');
+  const builtinSkills = allCatalog.filter(r => r.source === 'builtin');
+  heading(i18nText('sk_custom_hdr', '🧑‍💻 Δικά σου & AI Skills') + ' · ' + customSkills.length);
+  if(customSkills.length){
+    for(const row of customSkills) renderSkillCard(row);
+  }else{
+    card(i18nText('sk_custom_empty', 'Δεν έχεις προσθέσει ή μάθει ακόμα δικά σου skills — πάτα «📥 Εισαγωγή SKILL.md» ή άφησε τον Ακατίκητο να προτείνει νέα από την εργασία σου.'));
   }
+  heading(i18nText('sk_builtin_hdr', '📦 Ενσωματωμένα Skills') + ' · ' + builtinSkills.length);
+  for(const row of builtinSkills) renderSkillCard(row);
   panel=document.getElementById('learning-content');
   heading('Ιστορικό αναθεωρήσεων: '+(profile.revision_count||0));
   for(const row of(profile.history||[])){
@@ -2514,6 +2661,14 @@ async function createOwnerSkill() {
 
 let mcpSignature='';
 function updateBadges(s) {
+  const fpEl = document.getElementById('fast-provider');
+  const fEl = document.getElementById('fast-model');
+  const spEl = document.getElementById('smart-provider');
+  const sEl = document.getElementById('smart-model');
+  if (fpEl && document.activeElement !== fpEl && typeof s.fast_provider === 'string') fpEl.value = s.fast_provider;
+  if (fEl && document.activeElement !== fEl && typeof s.fast_model === 'string') fEl.value = s.fast_model;
+  if (spEl && document.activeElement !== spEl && typeof s.smart_provider === 'string') spEl.value = s.smart_provider;
+  if (sEl && document.activeElement !== sEl && typeof s.smart_model === 'string') sEl.value = s.smart_model;
   const learning=s.learning||{};
   const memLabel = i18nText('tab_memory', '🧠 Μνήμη');
   document.getElementById('tab-memory').textContent=learning.pending ? memLabel + ' · ' + learning.pending : memLabel;
@@ -2523,6 +2678,7 @@ function updateBadges(s) {
   const mcp=s.mcp||{},mcpKey=JSON.stringify([mcp,s.busy]);
   if(mcpKey!==mcpSignature){
     mcpSignature=mcpKey;const panel=document.getElementById('mcp-servers');panel.replaceChildren();
+    renderDynamicMcpList(mcp);
     for(const name of (mcp.configured||[])){
       const cfg = mcp.configs?.[name] || {};
       const active=(mcp.connected||[]).includes(name);
@@ -2943,6 +3099,7 @@ async function loadProviders() {
   document.getElementById("saved-keys").innerHTML = html ? "<h3 class='sec'>" + esc(i18nText('saved_keys_hdr', 'Αποθηκευμένα κλειδιά')) + "</h3>" + html : "";
   if (r.warning) showNotice("err", r.warning);
   onProvider();
+  renderProvidersMasterList();
 }
 
 function onProvider() {
@@ -3022,6 +3179,8 @@ function uiText(tag,text,parent){const el=document.createElement(tag);el.textCon
 function renderGateway(g){
   const panel=document.getElementById('gateway-state');
   if(!panel)return;
+  const dotGw = document.getElementById('dot-gateway');
+  if (dotGw && dotGw.classList) dotGw.classList.toggle('on', !!g.running);
   panel.textContent=g.running?i18nText('gw_running','Gateway ενεργό')+' · '+(g.provider||'')+' / '+(g.model||''):i18nText('gw_paused','Gateway σε παύση');
   for(const [name,row] of Object.entries(g.channels||{}))uiText('p',name+': '+row.state+(row.message?' · '+row.message:''),panel);
   if(g.queue?.held)uiText('p','Μηνύματα σε αναμονή σύνδεσης ή από παλιές ρυθμίσεις: '+g.queue.held+'. Διατηρούνται και δεν εκτελούνται σε διαφορετικό project/bot.',panel);
@@ -3048,8 +3207,11 @@ async function loadPlugins(){
   }
   const panel=document.getElementById('plugin-catalog');panel.replaceChildren();
   const rows=[...(r.available||[]),...(r.installed||[]).filter(x=>!(r.available||[]).some(a=>a.id===x.id))];
+  renderDynamicChannelsList(rows, r.installed||[], r.channels||{});
   for(const row of rows){
     const card=uiText('div',row.name+' · '+row.version,panel);card.className='field';
+    if (card.dataset) card.dataset.channelId = row.id;
+    if (selectedChannelFilter && selectedChannelFilter !== row.id) card.style.display = 'none';
     uiText('p',i18nText('ch_desc_default', row.description||'Κανάλι επικοινωνίας'),card);
     const installed=(r.installed||[]).find(x=>x.id===row.id);
     if(installed){
@@ -3330,20 +3492,24 @@ function renderMobileBridge(r) {
   mobileBridgeActive = !!(r && r.active);
   const btn = document.getElementById('mobile-bridge-btn');
   const info = document.getElementById('mobile-bridge-info');
-  if (btn) btn.textContent = mobileBridgeActive ? '⏹ Απενεργοποίηση Σύνδεσης Κινητού' : '📱 Σύνδεση Κινητού (QR / Tailscale)';
+  if (btn) btn.textContent = mobileBridgeActive
+    ? i18nText('mobile_btn_stop', '⏹ Απενεργοποίηση Σύνδεσης Κινητού')
+    : i18nText('mobile_btn_start', '📱 Ενεργοποίηση Σύνδεσης Κινητού (QR / Tailscale)');
   if (!info) return;
   info.replaceChildren();
   if (!mobileBridgeActive) return;
   if (r.qr_data_uri) {
     const img = document.createElement('img');
     img.src = r.qr_data_uri;
-    img.alt = 'QR Code Σύνδεσης Κινητού';
-    img.style.cssText = 'width:170px;height:170px;border-radius:8px;background:#fff;padding:4px;display:block;margin:4px auto';
+    img.alt = 'Mobile Pairing QR Code';
+    img.style.cssText = 'width:190px;height:190px;border-radius:10px;background:#fff;padding:6px;display:block;margin:8px 0';
     info.appendChild(img);
   }
   const meta = document.createElement('div');
-  const via = r.via_tailscale ? '✅ Tailscale (4G/5G & Wi-Fi)' : '📶 Τοπικό Wi-Fi';
-  meta.textContent = `${via}\nΣυσκευές: ${r.paired_devices || 0} · Σκάναρε το QR από το Akatikito Mobile!`;
+  const via = r.via_tailscale ? i18nText('mobile_via_ts', '✅ Tailscale (4G/5G & Wi-Fi)') : i18nText('mobile_via_lan', '📶 Τοπικό Wi-Fi');
+  const scanHint = i18nText('mobile_scan_hint', 'Συνδεδεμένες συσκευές: {n} · Σκάναρε το QR από το Akatikito Mobile!').replace('{n}', String(r.paired_devices || 0));
+  const urls = [r.url, (r.lan_url && r.lan_url !== r.url) ? `LAN: ${r.lan_url}` : ''].filter(Boolean).join(' · ');
+  meta.textContent = `${via}\n${urls}\n${scanHint}`;
   info.appendChild(meta);
 }
 async function toggleMobileBridge() {
@@ -3355,6 +3521,178 @@ async function toggleMobileBridge() {
     copyText(r.pairing_uri);
     showNotice('ok', 'Ενεργοποιήθηκε η Σύνδεση Κινητού! Το Pairing URI αντιγράφηκε στο πρόχειρο.');
   }
+}
+
+let selectedChannelFilter = '';
+function selectPluginPane(which, channelId) {
+  selectedChannelFilter = (which === 'channels' && channelId) ? String(channelId) : '';
+  for (const name of ['channels', 'gateway', 'python', 'mcp']) {
+    const pane = document.getElementById('plg-pane-' + name);
+    const nav = document.getElementById('plg-nav-' + name);
+    if (pane) pane.style.display = name === which ? '' : 'none';
+    if (nav && nav.classList) nav.classList.toggle('active', name === which && !selectedChannelFilter);
+  }
+  const chList = document.getElementById('md-channels-list');
+  if (chList && chList.children) {
+    for (const btn of chList.children) {
+      if (btn.classList) btn.classList.toggle('active', which === 'channels' && btn.dataset?.channelId === selectedChannelFilter);
+    }
+  }
+  const cat = document.getElementById('plugin-catalog');
+  if (cat && cat.children) {
+    for (const card of cat.children) {
+      const cid = card.dataset?.channelId || '';
+      card.style.display = (!selectedChannelFilter || !cid || cid === selectedChannelFilter) ? '' : 'none';
+    }
+  }
+}
+function channelIconFor(id) {
+  const k = String(id || '').toLowerCase();
+  if (k.includes('telegram')) return '✈️ ';
+  if (k.includes('discord')) return '💬 ';
+  if (k.includes('mail') || k.includes('gmail')) return '📧 ';
+  if (k.includes('slack')) return '💼 ';
+  if (k.includes('whatsapp')) return '📱 ';
+  if (k.includes('sms')) return '📲 ';
+  return '🔌 ';
+}
+function renderDynamicChannelsList(rows, installedList, channelsCfg) {
+  const list = document.getElementById('md-channels-list');
+  if (!list) return;
+  list.replaceChildren();
+  let anyActive = false;
+  for (const row of (rows || [])) {
+    const inst = (installedList || []).find(x => x.id === row.id);
+    const cfg = (channelsCfg || {})[row.id] || {};
+    const isOn = Boolean(inst && cfg.enabled);
+    if (isOn) anyActive = true;
+    const btn = document.createElement('button');
+    btn.className = 'md-item' + (selectedChannelFilter === row.id ? ' active' : '');
+    if (btn.dataset) btn.dataset.channelId = row.id;
+    const lbl = document.createElement('span');
+    lbl.textContent = channelIconFor(row.id) + (row.name || row.id);
+    const dot = document.createElement('span');
+    dot.className = 'md-dot' + (isOn ? ' on' : '');
+    dot.title = isOn ? 'Ενεργό' : (inst ? 'Εγκατεστημένο' : 'Διαθέσιμο');
+    btn.append(lbl, dot);
+    btn.onclick = () => {
+      selectPluginPane('channels', row.id);
+      if (inst) configureChannel(row.id);
+    };
+    list.appendChild(btn);
+  }
+  const dotCh = document.getElementById('dot-channels');
+  if (dotCh && dotCh.classList) dotCh.classList.toggle('on', anyActive);
+}
+function renderDynamicMcpList(mcp) {
+  const list = document.getElementById('md-mcp-list');
+  if (!list) return;
+  list.replaceChildren();
+  const configured = mcp?.configured || [];
+  const connected = mcp?.connected || [];
+  for (const name of configured) {
+    const isOn = connected.includes(name);
+    const btn = document.createElement('button');
+    btn.className = 'md-item';
+    const lbl = document.createElement('span');
+    lbl.textContent = '🧰 ' + name;
+    const dot = document.createElement('span');
+    dot.className = 'md-dot' + (isOn ? ' on' : '');
+    btn.append(lbl, dot);
+    btn.onclick = () => selectPluginPane('mcp');
+    list.appendChild(btn);
+  }
+  const dotMcp = document.getElementById('dot-mcp');
+  if (dotMcp && dotMcp.classList) dotMcp.classList.toggle('on', connected.length > 0);
+}
+function filterPluginsMasterList(query) {
+  const q = String(query || '').trim().toLowerCase();
+  for (const containerId of ['md-channels-list', 'md-mcp-list']) {
+    const box = document.getElementById(containerId);
+    if (!box || !box.children) continue;
+    for (const row of box.children) {
+      const txt = (row.textContent || '').toLowerCase();
+      row.style.display = (!q || txt.includes(q)) ? '' : 'none';
+    }
+  }
+}
+function renderProvidersMasterList() {
+  const list = document.getElementById('providers-md-list');
+  const sel = document.getElementById('provider');
+  if (!list || !sel || !sel.options) return;
+  list.replaceChildren();
+  const hdr = document.createElement('div');
+  hdr.className = 'md-list-sec';
+  hdr.textContent = 'LLM Providers';
+  list.appendChild(hdr);
+  const current = sel.value;
+  for (const opt of sel.options) {
+    const name = opt.value;
+    const btn = document.createElement('button');
+    btn.className = 'md-item' + (name === current ? ' active' : '');
+    const lbl = document.createElement('span');
+    lbl.textContent = name;
+    const dot = document.createElement('span');
+    dot.className = 'md-dot' + ((savedKeys && savedKeys[name]) ? ' on' : '');
+    btn.append(lbl, dot);
+    btn.onclick = () => {
+      sel.value = name;
+      onProvider();
+      renderProvidersMasterList();
+    };
+    list.appendChild(btn);
+  }
+}
+function filterSessionsList(query) {
+  const box = document.getElementById('sessions');
+  if (!box || !box.children) return;
+  const q = String(query || '').trim().toLowerCase();
+  for (const row of box.children) {
+    const txt = (row.textContent || '').toLowerCase();
+    row.style.display = (!q || txt.includes(q)) ? '' : 'none';
+  }
+}
+function filterSkillsCards(query) {
+  const box = document.getElementById('skills-content');
+  if (!box || !box.children) return;
+  const q = String(query || '').trim().toLowerCase();
+  for (const child of box.children) {
+    if (child.tagName === 'P') continue;
+    const txt = (child.textContent || '').toLowerCase();
+    child.style.display = (!q || txt.includes(q)) ? '' : 'none';
+  }
+}
+
+function toggleSkillImportForm() {
+  const f = document.getElementById('skill-import-form');
+  if (f) f.style.display = f.style.display === 'none' ? 'flex' : 'none';
+}
+function loadSkillImportFile(input) {
+  const file = input?.files?.[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    const ta = document.getElementById('skill-import-md');
+    if (ta) ta.value = String(reader.result || '');
+  };
+  reader.readAsText(file, 'utf-8');
+}
+async function importExternalSkill() {
+  const ta = document.getElementById('skill-import-md');
+  const scope = document.getElementById('skill-import-scope')?.value || 'user';
+  const md = (ta?.value || '').trim();
+  if (!md) { showNotice('err', 'Επικόλλησε ή φόρτωσε ένα αρχείο SKILL.md.'); return; }
+  const r = await api('/api/learning/action', {
+    action: 'skill_import',
+    project: learningProject || currentProject,
+    markdown: md,
+    scope,
+  });
+  if (r.error) { showNotice('err', r.error); return; }
+  if (ta) ta.value = '';
+  toggleSkillImportForm();
+  showNotice('ok', r.note || 'Η συνταγή εισήχθη με επιτυχία!');
+  await loadLearning(learningOffset);
 }
 
 // ---------- εκκίνηση ----------

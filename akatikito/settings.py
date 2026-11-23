@@ -69,6 +69,10 @@ class Settings:
     provider: str = "DeepSeek"
     base_url: str = ""
     model: str = ""
+    fast_provider: str = ""
+    fast_model: str = ""
+    smart_provider: str = ""
+    smart_model: str = ""
     max_steps: int = 50
     verify_command: str = ""
     project: str = ""
@@ -153,6 +157,10 @@ class Settings:
         except (TypeError,ValueError): settings.daily_budget=0
         settings.model_prices=data.get('model_prices',{}) if isinstance(data.get('model_prices'),dict) else {}
         settings.autonomous = data.get('autonomous') is True
+        settings.fast_provider = str(data.get('fast_provider') or '').strip()
+        settings.fast_model = str(data.get('fast_model') or '').strip()
+        settings.smart_provider = str(data.get('smart_provider') or '').strip()
+        settings.smart_model = str(data.get('smart_model') or '').strip()
         settings.cautious_edits = data.get('cautious_edits') is True
         settings.checkpoints = data.get('checkpoints',True) is True
         settings.allowed_commands = [str(x) for x in data.get('allowed_commands',[]) if isinstance(x,str)] if isinstance(data.get('allowed_commands'),list) else []
@@ -174,6 +182,10 @@ class Settings:
             "provider": self.provider,
             "base_url": self.base_url,
             "model": self.model,
+            "fast_provider": self.fast_provider,
+            "fast_model": self.fast_model,
+            "smart_provider": self.smart_provider,
+            "smart_model": self.smart_model,
             "max_steps": int(self.max_steps),
             "verify_command": self.verify_command,
             "project": self.project,

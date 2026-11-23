@@ -25,6 +25,76 @@ def text_key(text):
     return " ".join(unicodedata.normalize("NFC", str(text)).split())
 
 
+_STOPWORDS = frozenset({
+    # Greek common stopwords (NEVER include negations like δεν/μην/όχι/ποτέ!)
+    "ο", "η", "το", "οι", "τα", "του", "της", "των", "τον", "την", "τις", "τους",
+    "ενα", "ενας", "μια", "και", "κι", "με", "σε", "απο", "για", "να", "θα", "οτι",
+    "πως", "που", "στο", "στη", "στην", "στον", "στα", "στις", "στους", "εχει", "ειναι",
+    "αλλα", "ομως", "πιο", "πολυ", "καθε", "αυτο", "αυτη", "αυτος",
+    "χρηστης", "χρηστη", "θελει", "θελω", "προτιμα", "προτιμω", "πρεπει", "μπορει",
+    # English common stopwords (NEVER include negations like not/no/never!)
+    "the", "and", "for", "with", "that", "this", "from", "are", "was", "were", "have",
+    "has", "had", "but", "user", "wants", "prefer", "prefers", "should", "must",
+})
+
+_NEGATION_WORDS = frozenset({
+    "δεν", "δε", "μην", "μη", "οχι", "ποτε", "χωρις", "αποφευγ", "απαγορευ",
+    "not", "no", "never", "dont", "without", "avoid", "forbidden", "disable", "disabled",
+})
+
+
+def _has_negation(text: str) -> bool:
+    norm = unicodedata.normalize("NFD", str(text).casefold())
+    plain = "".join(c for c in norm if not unicodedata.combining(c))
+    words = re.findall(r"[a-zα-ω0-9']+", plain)
+    for w in words:
+        clean = w.replace("'", "")
+        if clean in _NEGATION_WORDS or any(clean.startswith(p) for p in ("αποφευγ", "απαγορευ")):
+            return True
+    return False
+
+
+def _semantic_tokens(text: str) -> set[str]:
+    norm = unicodedata.normalize("NFD", str(text).casefold())
+    plain = "".join(c for c in norm if not unicodedata.combining(c))
+    words = re.findall(r"[a-zα-ω0-9_]+", plain)
+    out: set[str] = set()
+    for w in words:
+        if len(w) < 3 or w in _STOPWORDS:
+            continue
+        # Light stem (first 5 chars for longer inflected Greek/English words)
+        out.add(w[:5] if len(w) > 5 and not w.isdigit() else w)
+    return out
+
+
+def _numbers_and_paths(text: str) -> set[str]:
+    return set(re.findall(r"\b\d+(?:[.,]\d+)?\b|[a-zA-Z]:\\[^\s]+|/[^\s/]+/[^\s]+", str(text)))
+
+
+def is_near_duplicate(text_a: str, text_b: str) -> bool:
+    """Return True when two multi-word memory notes express essentially the same rule/preference.
+    Short values (like 'Ναι' / 'Αθήνα') on different topics are NEVER merged.
+    """
+    # Never merge opposite instructions (positive vs negative polarity).
+    if _has_negation(text_a) != _has_negation(text_b):
+        return False
+    # Never merge entries that carry different concrete numbers or file paths.
+    np_a, np_b = _numbers_and_paths(text_a), _numbers_and_paths(text_b)
+    if (np_a or np_b) and np_a != np_b:
+        return False
+    tok_a, tok_b = _semantic_tokens(text_a), _semantic_tokens(text_b)
+    if len(tok_a) < 2 or len(tok_b) < 2:
+        return False
+    if text_key(text_a).casefold() == text_key(text_b).casefold():
+        return True
+    inter = len(tok_a & tok_b)
+    if inter < 2:
+        return False
+    jaccard = inter / len(tok_a | tok_b)
+    containment = inter / min(len(tok_a), len(tok_b))
+    return jaccard >= 0.45 or containment >= 0.65
+
+
 def _guard(*texts):
     from . import memory_guard
     for text in texts:
@@ -123,11 +193,24 @@ class Profile:
             if not replaces and any(text_key(r["text"]) == text_key(text) and r["kind"] == kind and r["status"] == status
                    for r in same):
                 return "Υπάρχει ήδη αυτή η μνήμη· δεν γράφτηκε ξανά."
+            # Smart near-duplicate check across ALL topics to prevent redundant memories
+            near_matches = [
+                r for r in data["entries"]
+                if r["kind"] == kind and r["status"] == status and is_near_duplicate(r["text"], text)
+            ]
+            if not replaces and near_matches:
+                new_toks = _semantic_tokens(text)
+                for nm in near_matches:
+                    old_toks = _semantic_tokens(nm["text"])
+                    if len(new_toks - old_toks) <= 1 and len(nm["text"]) >= len(text):
+                        return f"Υπάρχει ήδη παρόμοια μνήμη («{nm['topic']}»)· δεν γράφτηκε ξανά."
             for row in data["proposals"]:
-                if (row.get('target') != 'global' and topic_key(row["topic"]) == topic_key(topic) and text_key(row["text"]) == text_key(text)
+                if (row.get('target') != 'global' and (
+                        (topic_key(row["topic"]) == topic_key(topic) and text_key(row["text"]) == text_key(text))
+                        or is_near_duplicate(row["text"], text))
                         and row["kind"] == kind and row["status"] == status):
-                    return "Υπάρχει ήδη η ίδια πρόταση μνήμης· περιμένει έγκριση."
-            replaced = sorted({r["id"] for r in same} | set(replaces or []))
+                    return "Υπάρχει ήδη παρόμοια πρόταση μνήμης· περιμένει έγκριση."
+            replaced = sorted({r["id"] for r in same} | {r["id"] for r in near_matches} | set(replaces or []))
             known = {r["id"] for r in data["entries"]}
             if not set(replaced) <= known:
                 raise ValueError("Η αναθεώρηση αναφέρεται σε μνήμη που δεν υπάρχει πια.")
@@ -250,6 +333,23 @@ class Profile:
                 else:
                     kept.append(row)
                     seen.add(key)
+            # Second pass: merge near-duplicate entries (keeping the richest/longest text)
+            deduped = []
+            for row in kept:
+                matched_idx = None
+                for i, existing in enumerate(deduped):
+                    if existing["kind"] == row["kind"] and existing["status"] == row["status"] and is_near_duplicate(existing["text"], row["text"]):
+                        matched_idx = i
+                        break
+                if matched_idx is not None:
+                    if len(row["text"]) > len(deduped[matched_idx]["text"]):
+                        merged.append(deduped[matched_idx])
+                        deduped[matched_idx] = row
+                    else:
+                        merged.append(row)
+                else:
+                    deduped.append(row)
+            kept = deduped
             if merged:
                 data["entries"] = kept
                 data["revisions"].append({"action": "consolidate_exact_duplicates", "at": now, "before": merged})

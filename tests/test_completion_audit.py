@@ -129,9 +129,18 @@ def test_existing_read_only_memory_is_not_current_task_permission(tmp_path):
 
 
 def test_timeout_keeps_output_and_enters_the_repair_state(tmp_path,monkeypatch):
-    timeout=subprocess.TimeoutExpired('python -m pytest',1,output=b'before timeout\n',stderr=b'diagnostic\n')
-    def fail(*a,**kw):raise timeout
-    monkeypatch.setattr(tools.subprocess,'run',fail)
+    timeout_err=subprocess.TimeoutExpired('python -m pytest',1,output=b'before timeout\n',stderr=b'diagnostic\n')
+    class FakePopen:
+        pid = 99999
+        returncode = 124
+        def __init__(self, *a, **kw): self._timed_out = False
+        def communicate(self, timeout=None):
+            if not self._timed_out:
+                self._timed_out = True
+                raise timeout_err
+            return (b'', b'')
+        def kill(self): pass
+    monkeypatch.setattr(tools.subprocess,'Popen',FakePopen)
     result=run_command(Workspace(tmp_path),'python -m pytest',timeout=1)
     assert result.startswith('returncode=124') and 'before timeout' in result and 'diagnostic' in result
     script=[{'tool_calls':[tool_call('run_command',command='python -m pytest')]},{'content':'done'}]

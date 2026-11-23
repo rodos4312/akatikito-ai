@@ -16,7 +16,7 @@ from pathlib import Path
 
 from .secret_store import is_dpapi_available, redact_secrets
 
-APP_VERSION = "2.3.0"
+APP_VERSION = "2.4.0"
 
 _TS_GRAMMARS = (
     "tree_sitter_c",

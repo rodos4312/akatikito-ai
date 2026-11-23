@@ -1,0 +1,15 @@
+{
+  "id": "email",
+  "name": "Email (IMAP/SMTP)",
+  "version": "1.0.0",
+  "api_version": 1,
+  "kind": "channel",
+  "entry": "adapter.py",
+  "files": [
+    "adapter.py"
+  ],
+  "permissions": [
+    "IMAP4_SSL / SMTP_SSL: λήψη νέων email και αποστολή απαντήσεων"
+  ],
+  "description": "Σύνδεση με Gmail, Outlook ή εταιρικό email (IMAP/SMTP). Token μορφής: email@domain.com|app_password|imap.host|smtp.host"
+}

@@ -1,0 +1,15 @@
+{
+  "id": "slack",
+  "name": "Slack",
+  "version": "1.0.0",
+  "api_version": 1,
+  "kind": "channel",
+  "entry": "adapter.py",
+  "files": [
+    "adapter.py"
+  ],
+  "permissions": [
+    "Slack Web API: λήψη μηνυμάτων καναλιών και αποστολή απαντήσεων"
+  ],
+  "description": "Σύνδεση με Slack Workspace (Bot Token xoxb-... με δικαιώματα channels:history, im:history, chat:write)."
+}
