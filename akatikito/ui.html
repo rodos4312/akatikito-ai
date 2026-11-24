@@ -601,8 +601,9 @@
   <div id="files-error" role="status" aria-live="polite"></div>
   <div id="file-list"></div>
   <section id="file-preview" hidden aria-label="Προεπισκόπηση αρχείου">
-    <div style="display:flex;justify-content:space-between;align-items:center;gap:6px"><strong id="file-title"></strong><button class="btn" id="file-md-toggle" data-i18n="btn_preview_md" style="display:none;width:auto;padding:3px 7px;font-size:11px" onclick="toggleMarkdownPreview()">📖 Μορφοποιημένο</button></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:6px"><strong id="file-title"></strong><div style="display:flex;gap:4px"><button class="btn" id="file-diff-toggle" style="width:auto;padding:3px 7px;font-size:11px" onclick="toggleFileDiff()">🔍 Diff</button><button class="btn" id="file-md-toggle" data-i18n="btn_preview_md" style="display:none;width:auto;padding:3px 7px;font-size:11px" onclick="toggleMarkdownPreview()">📖 Μορφοποιημένο</button></div></div>
     <div id="file-info" class="hint"></div>
+    <div id="file-diff-box" class="diff-box" style="display:none"></div>
     <div id="file-rich" style="display:none;overflow:auto;max-height:42vh;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px"></div>
     <pre id="file-text" tabindex="0"></pre>
     <div class="file-controls"><button class="btn" id="file-prev" data-i18n="btn_prev" onclick="filePage(false)">← Πίσω</button><button class="btn" id="file-next" data-i18n="btn_next" onclick="filePage(true)">Συνέχεια →</button><button class="btn" id="file-refresh" data-i18n="btn_refresh" onclick="refreshFile()">Ανανέωση</button></div>

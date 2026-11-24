@@ -287,6 +287,8 @@ def make_handler(state: AppState) -> type:
             elif path == '/api/files/open':
                 self._send(state.open_file(data.get('path',''), data.get('offset',0), data.get('version',''),
                                           data.get('project'), data.get('session_id')))
+            elif path == '/api/files/diff':
+                self._send(state.file_diff(data.get('path', ''), data.get('backup_id', '')))
             elif path == "/api/upgrade/start":
                 self._send(state.start_upgrade())
             elif path == "/api/upgrade/check":

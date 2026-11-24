@@ -704,3 +704,77 @@ async function toggleSimpleProMode() {
   await savePreferences();
 }
 let currentUiLang = 'el', i18nStrings = {};
+
+async function toggleFileDiff() {
+  const box = document.getElementById('file-diff-box');
+  const txt = document.getElementById('file-text');
+  const btn = document.getElementById('file-diff-toggle');
+  if (!box || !currentFile || !currentFile.path) return;
+  if (box.style.display !== 'none') {
+    box.style.display = 'none';
+    if (txt) txt.style.display = '';
+    if (btn) btn.textContent = '🔍 Diff';
+    return;
+  }
+  box.style.display = 'flex';
+  if (txt) txt.style.display = 'none';
+  if (btn) btn.textContent = '📄 Κείμενο';
+  box.replaceChildren();
+  const loading = document.createElement('span');
+  loading.className = 'hint';
+  loading.textContent = 'Φόρτωση αλλαγών…';
+  box.appendChild(loading);
+  try {
+    const r = await api('/api/files/diff', {path: currentFile.path});
+    box.replaceChildren();
+    if (r.error) { const er = document.createElement('span'); er.className = 'hint'; er.textContent = r.error; box.appendChild(er); return; }
+    const head = document.createElement('div');
+    head.className = 'diff-head';
+    const stat = document.createElement('span');
+    stat.textContent = (r.is_new ? 'Νέο αρχείο · ' : '') + '+' + (r.added || 0) + ' / -' + (r.removed || 0);
+    head.appendChild(stat);
+    if (r.backup_id) {
+      const rb = document.createElement('button');
+      rb.className = 'btn';
+      rb.style.cssText = 'width:auto;padding:2px 7px;font-size:11px';
+      rb.textContent = '↩️ Επαναφορά πριν την αλλαγή';
+      rb.onclick = () => restoreDiffBackup(r.backup_id);
+      head.appendChild(rb);
+    }
+    box.appendChild(head);
+    if (!r.has_changes) {
+      const noCh = document.createElement('span');
+      noCh.className = 'hint';
+      noCh.textContent = 'Δεν υπάρχουν διαφορές από το τελευταίο αντίγραφο.';
+      box.appendChild(noCh);
+      return;
+    }
+    for (const row of (r.lines || [])) {
+      const el = document.createElement('div');
+      el.className = 'diff-line' + (row.kind ? ' diff-' + row.kind : '');
+      el.textContent = row.text || '';
+      box.appendChild(el);
+    }
+    if (r.truncated) {
+      const tr = document.createElement('span');
+      tr.className = 'hint';
+      tr.textContent = '… (περικοπή στις 600 γραμμές)';
+      box.appendChild(tr);
+    }
+  } catch (e) { showNotice('err', e.message || String(e)); }
+}
+async function restoreDiffBackup(backupId) {
+  if (!backupId || !window.confirm('Να γίνει επαναφορά του αρχείου στην προηγούμενη έκδοση;')) return;
+  try {
+    const r = await api('/api/restore', {backup: backupId});
+    if (r.error) { showNotice('err', r.error); return; }
+    showNotice('ok', '↩️ Επαναφέρθηκε το αρχείο: ' + (r.restored || ''));
+    const box = document.getElementById('file-diff-box');
+    if (box) box.style.display = 'none';
+    const txt = document.getElementById('file-text');
+    if (txt) txt.style.display = '';
+    const btn = document.getElementById('file-diff-toggle');
+    if (btn) btn.textContent = '🔍 Diff';
+    await refreshFile();
+  } catch (e) { showNotice('err', e.message || String(e)); }
+}

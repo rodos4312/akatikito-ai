@@ -240,3 +240,11 @@ body.simple-view .pro-only,body.simple-view #chat>.steps:not(.important-step),bo
   .tree-row { display: flex; align-items: center; gap: 6px; padding: 4px 8px; border-radius: 6px; cursor: pointer; font-size: 12.5px; color: var(--text); background: transparent; border: 1px solid transparent; width: 100%; text-align: left; }
   .tree-row:hover { background: var(--panel2); border-color: var(--border); }
   .tree-row .sz { margin-left: auto; font-size: 11px; color: var(--dim); }
+
+.diff-box{font:11.5px/1.4 Consolas,monospace;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:6px;max-height:42vh;overflow:auto;display:flex;flex-direction:column;gap:2px}
+.diff-head{display:flex;justify-content:space-between;align-items:center;gap:6px;padding-bottom:4px;border-bottom:1px solid var(--border);font-family:system-ui,sans-serif;font-size:11.5px}
+.diff-line{white-space:pre-wrap;overflow-wrap:anywhere;padding:1px 4px;border-radius:3px}
+.diff-add{background:rgba(34,197,94,.16);color:#22c55e}
+.diff-del{background:rgba(239,68,68,.16);color:#f87171}
+.diff-hunk{color:#60a5fa;font-weight:600}
+.diff-meta{color:var(--muted);font-size:11px}

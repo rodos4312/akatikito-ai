@@ -123,6 +123,15 @@ class FilesStateMixin:
         except (OSError, ValueError, TypeError, PermissionError) as exc:
             return {'error':str(exc)}
 
+    def file_diff(self, path, backup_id=''):
+        from .file_diff import compute_file_diff
+        try:
+            with self._lock:
+                root = self._files_root()
+                return compute_file_diff(root, path, backup_id=str(backup_id or '').strip())
+        except (OSError, ValueError, TypeError, PermissionError) as exc:
+            return {'error': str(exc)}
+
     def project_profile(self, data=None):
         from .project_profiles import PROFILES, ProjectProfiles
         try:
