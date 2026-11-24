@@ -34,16 +34,15 @@ def local_network_only(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
-def isolate_app_data(monkeypatch, tmp_path):
+def isolate_app_data(monkeypatch, tmp_path_factory):
     """Ensure tests NEVER read or write the owner's real data/ directory."""
     from akatikito import agenda as agenda_mod
     from akatikito import doctor as doctor_mod
     from akatikito import memory as memory_mod
     from akatikito import settings as settings_mod
 
-    data_dir = tmp_path / "_test_data"
+    data_dir = tmp_path_factory.mktemp("akatikito_data")
     mem_dir = data_dir / "memory"
-    data_dir.mkdir(parents=True, exist_ok=True)
     mem_dir.mkdir(parents=True, exist_ok=True)
 
     settings_file = data_dir / "settings.json"
