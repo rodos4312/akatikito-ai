@@ -79,8 +79,10 @@ class AppState:
     # ---------------------------------------------------------------- βοηθητικά
 
     def push(self, kind: str, **data) -> None:
-        self.event_seq += 1
-        self.events.put({"seq": self.event_seq, "kind": kind, "data": data, "at": time.time()})
+        with self._lock:
+            self.event_seq += 1
+            seq = self.event_seq
+        self.events.put({"seq": seq, "kind": kind, "data": data, "at": time.time()})
 
     def emit_event(self, event) -> None:
         """Ακροατής για τα γεγονότα του agent → ουρά για το UI."""

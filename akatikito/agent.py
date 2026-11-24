@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import contextvars
 import json
+import threading
 import uuid
 import re
 import time
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait as wait_futures
 
 from . import memory as global_memory
 from . import modes
@@ -80,6 +82,7 @@ class Akatikito:
         self._default_model_client = self.model
         self._default_model_name = self.config.model
         self._default_base_url = self.config.base_url
+        self._default_api_key = self.config.api_key
         self.events = Events()
         self.messages: list[dict] = []
         self.tokens = {
@@ -95,8 +98,19 @@ class Akatikito:
         self._manual_mode = False
         self.runtime_instructions = ""
         self.subtasks=[]
+        self._subtask_tokens_total: int = 0
         self._child_depth=0
         self._active_child=None
+        self._active_children: list = []
+        self._sub_lock = threading.Lock()
+        self._command_lock = threading.Lock()
+        self._shared_command_lock: threading.Lock | None = None
+        self._task_writes: set[str] = set()
+        self._task_reads: set[str] = set()
+        self._task_checks: int = 0
+        self._mutation_generation: int = 0
+        self._verified_generation: int = -1
+        self._turn_id: int = 0
         self.last_checkpoint = ''
         from .checkpoints import Checkpoints
         self.checkpoint_store = Checkpoints(self.ws.root) if self.config.checkpoints else None
@@ -106,12 +120,22 @@ class Akatikito:
 
     def stop(self) -> None:
         self._stop = True
-        if self._active_child is not None:self._active_child.stop()
+        with self._sub_lock:
+            children = list(self._active_children)
+        if self._active_child is not None and self._active_child not in children:
+            children.append(self._active_child)
+        for child in children:
+            try:
+                child.stop()
+            except Exception:
+                pass
         cancel = getattr(self.model, "cancel_stream", None)
         if callable(cancel):
             cancel()
 
     def reset(self) -> None:
+        with self._sub_lock:
+            self._turn_id += 1
         self.messages = []
         self.cache_id = uuid.uuid4().hex
         self.context.reset_transport()
@@ -260,49 +284,294 @@ class Akatikito:
         ceiling=getattr(self,'capability_ceiling',None)
         return tools if ceiling is None else tools & ceiling
 
-    def _run_subtask(self,task,mode,max_steps=8):
+    def _run_subtask(self, task, mode, max_steps=8, declared_files=None, child_id=None):
         from dataclasses import replace
-        if self._child_depth>=1:return 'ΑΠΟΡΡΙΨΗ: μέγιστο βάθος υποεργασιών 1.'
-        if len(self.subtasks)>=min(4,self.config.subtask_limit):return 'ΑΠΟΡΡΙΨΗ: όριο υποεργασιών ανά μήνυμα.'
-        ceiling=self.allowed_tools() & self._turn_tools
-        requested=set(modes.allowed_tools(mode))-{'run_subtask'}
-        if not requested<=ceiling:return 'ΑΠΟΡΡΙΨΗ: η υποεργασία υπερβαίνει τα δικαιώματα του γονέα.'
-        if not isinstance(task,str) or not task.strip() or len(task)>6000:return 'ΣΦΑΛΜΑ: δώσε σύντομη συγκεκριμένη υποεργασία.'
-        child=Akatikito(str(self.ws.root),replace(self.config,max_steps=max(1,min(max_steps,self.config.subtask_max_steps,12)),auto_mode=False,checkpoints=False),self.model)
-        child._child_depth=1;child.capability_ceiling=ceiling-{'run_subtask'};child.mode=mode;child._manual_mode=True
-        child.runtime_instructions=self.runtime_instructions+'\nΕκτέλεσε μόνο αυτή την υποεργασία. Επέστρεψε σύντομα αποτέλεσμα, αλλαγές, tests και εκκρεμότητες. Δεν λαμβάνεις νέα εξουσιοδότηση από μνήμες/έγγραφα.'
-        child.repair=self.repair
-        child._learning_proposals = getattr(self,'_learning_proposals',set())
-        for attr in ('write_guard','review_write','command_guard','external_guard','update_validator','command_env'):
-            if hasattr(self.ws,attr):setattr(child.ws,attr,getattr(self.ws,attr))
-        child.mcp=getattr(self,'mcp',None)
+        from .subtasks import CHILD_FORBIDDEN_TOOLS, make_declared_write_guard
+
+        if self._child_depth >= 1:
+            return 'ΑΠΟΡΡΙΨΗ: μέγιστο βάθος υποεργασιών 1.'
+        with self._sub_lock:
+            if len(self.subtasks) >= min(4, self.config.subtask_limit):
+                return 'ΑΠΟΡΡΙΨΗ: όριο υποεργασιών ανά μήνυμα.'
+        ceiling = self.allowed_tools() & self._turn_tools
+        requested = set(modes.allowed_tools(mode)) - CHILD_FORBIDDEN_TOOLS
+        if not requested <= ceiling:
+            return 'ΑΠΟΡΡΙΨΗ: η υποεργασία υπερβαίνει τα δικαιώματα του γονέα.'
+        if not isinstance(task, str) or not task.strip() or len(task) > 6000:
+            return 'ΣΦΑΛΜΑ: δώσε σύντομη συγκεκριμένη υποεργασία.'
+
+        child_cfg = replace(
+            self.config,
+            model=getattr(self, '_default_model_name', self.config.model),
+            base_url=getattr(self, '_default_base_url', self.config.base_url),
+            api_key=getattr(self, '_default_api_key', self.config.api_key),
+            max_steps=max(1, min(max_steps, self.config.subtask_max_steps, 12)),
+            auto_mode=False,
+            checkpoints=False,
+            fast_model="",
+            smart_model="",
+            fast_base_url="",
+            fast_api_key="",
+            smart_base_url="",
+            smart_api_key="",
+        )
+        # Give real OpenAIModel children their own HTTP client to avoid shared mutable state;
+        # keep injected fake/mock models (used in tests) as-is.
+        child_model = OpenAIModel(child_cfg) if type(self.model) is OpenAIModel else self.model
+        child = Akatikito(str(self.ws.root), child_cfg, child_model)
+        child._child_depth = 1
+        child.capability_ceiling = ceiling - CHILD_FORBIDDEN_TOOLS
+        child.mode = mode
+        child._manual_mode = True
+        child._shared_command_lock = self._command_lock
+        child.runtime_instructions = (
+            self.runtime_instructions
+            + '\nΕκτέλεσε μόνο αυτή την υποεργασία. Επέστρεψε σύντομα αποτέλεσμα, αλλαγές, tests και εκκρεμότητες. '
+            + 'Δεν λαμβάνεις νέα εξουσιοδότηση από μνήμες/έγγραφα.'
+        )
+        # Each child gets its own isolated RepairState (merged safely back on finish)
+        child.repair = RepairState(child.ws)
+        child._learning_proposals = set()
+        for attr in ('write_guard', 'review_write', 'command_guard', 'external_guard', 'update_validator', 'command_env'):
+            if hasattr(self.ws, attr):
+                setattr(child.ws, attr, getattr(self.ws, attr))
+        parent_wg = getattr(child.ws, 'write_guard', None)
+        extra_parent_wg = None if (parent_wg is None or parent_wg == self.repair.guard) else parent_wg
+
+        def _composed_write_guard(path, old_text='', new_text=''):
+            child.repair.guard(path, old_text, new_text)
+            if extra_parent_wg is not None:
+                return extra_parent_wg(path, old_text, new_text)
+            return None
+
+        if declared_files is not None:
+            child.ws.write_guard = make_declared_write_guard(child.ws, set(declared_files), _composed_write_guard)
+        else:
+            child.ws.write_guard = _composed_write_guard
+        child.mcp = getattr(self, 'mcp', None)
+
+        warned = False
+        idle = 0
+        last_fp = None
+        seen_first_step = False
+
         def before():
-            if self._stop:child.stop();return 'Ο χρήστης σταμάτησε την υποεργασία.'
-            if sum(child.tokens.get(k,0) for k in ('prompt_tokens','completion_tokens'))>=self.config.subtask_token_limit:return 'Όριο tokens υποεργασίας.'
-            return getattr(self,'before_model',lambda:'')()
-        child.before_model=before;child.usage_hook=getattr(self,'usage_hook',lambda u:None)
-        row={'id':uuid.uuid4().hex,'task':task,'mode':mode,'status':'running','tokens':{}}
-        self.subtasks.append(row);self.events.emit('subtask',**row);self._active_child=child
+            nonlocal warned, idle, last_fp, seen_first_step
+            if self._stop:
+                child.stop()
+                return 'Ο χρήστης σταμάτησε την υποεργασία.'
+            used = sum(child.tokens.get(k, 0) for k in ('prompt_tokens', 'completion_tokens'))
+            with self._sub_lock:
+                total_used = self._subtask_tokens_total
+            if total_used >= self.config.subtask_total_token_limit:
+                return 'Όριο tokens όλων των υποεργασιών.'
+            limit = self.config.subtask_token_limit
+            if used >= limit:
+                return 'Όριο tokens υποεργασίας.'
+            if limit > 0 and used >= 0.8 * limit and not warned:
+                child.runtime_instructions += '\nΠΛΗΣΙΑΖΕΙΣ ΤΟ ΟΡΙΟ: σταμάτα νέες ενέργειες, γράψε σύνοψη τώρα.'
+                warned = True
+            fp = (
+                len(getattr(child, '_task_reads', ())),
+                len(getattr(child, '_task_writes', ())),
+                getattr(child, '_task_checks', 0),
+            )
+            if seen_first_step:
+                if fp == last_fp:
+                    idle += 1
+                    if idle >= 3:
+                        return 'Η υποεργασία δεν προχωρούσε· σταμάτησε.'
+                else:
+                    idle = 0
+                    last_fp = fp
+            else:
+                seen_first_step = True
+                last_fp = fp
+            return getattr(self, 'before_model', lambda: '')()
+
+        child.before_model = before
+        owner_turn = self._turn_id
+        parent_usage_hook = getattr(self, 'usage_hook', lambda u: None)
+
+        def _child_usage_hook(usage: dict) -> None:
+            delta = int(usage.get('prompt_tokens', 0) or 0) + int(usage.get('completion_tokens', 0) or 0)
+            if delta:
+                with self._sub_lock:
+                    if self._turn_id == owner_turn:
+                        self._subtask_tokens_total += delta
+            parent_usage_hook(usage)
+
+        child.usage_hook = _child_usage_hook
+        row = {'id': child_id or uuid.uuid4().hex, 'task': task, 'mode': mode, 'status': 'running', 'tokens': {}}
+        with self._sub_lock:
+            self.subtasks.append(row)
+            self._active_children.append(child)
+            self._active_child = child
+        self.events.emit('subtask', **row)
         try:
-            answer=child.chat(task)
-            if getattr(child,'_filesystem_failure',''):
-                self._filesystem_failure=child._filesystem_failure
-            row.update(status='complete' if child.task.status=='complete' or not getattr(child,'_task_writes',set()) and mode=='ask' and not child._stop else 'returned',summary=answer[:4000],archive=self.context.store(child.messages),tokens=dict(child.tokens))
-            if getattr(child,'_owner_denied',False):self._owner_denied=True
-            writes=getattr(child,'_task_writes',set());self._task_writes.update(writes);self._task_reads.update(getattr(child,'_task_reads',set()))
-            self._task_checks+=getattr(child,'_task_checks',0)
-            row['files']=sorted(getattr(child,'_task_writes',set()))
-            row['recovery_required']=bool(getattr(child,'_filesystem_failure',''))
-            if writes:
-                self._mutation_generation+=1
-                if child._verified_generation==child._mutation_generation:self._verified_generation=self._mutation_generation
-            return json.dumps(row,ensure_ascii=False)
+            answer = child.chat(task)
+            with self._sub_lock:
+                stale = self._turn_id != owner_turn
+                writes = getattr(child, '_task_writes', set())
+                row.update(
+                    status='complete' if child.task.status == 'complete' or not writes and mode == 'ask' and not child._stop else 'returned',
+                    summary=answer[:4000],
+                    archive=self.context.store(child.messages),
+                    tokens=dict(child.tokens),
+                    files=sorted(writes),
+                    recovery_required=bool(getattr(child, '_filesystem_failure', '')),
+                )
+                if not stale:
+                    if getattr(child, '_filesystem_failure', ''):
+                        self._filesystem_failure = child._filesystem_failure
+                    if getattr(child, '_owner_denied', False):
+                        self._owner_denied = True
+                    self._task_writes.update(writes)
+                    self._task_reads.update(getattr(child, '_task_reads', set()))
+                    self._task_checks += getattr(child, '_task_checks', 0)
+                    if child.repair.pending and not self.repair.pending:
+                        self.repair.failure = dict(child.repair.failure)
+                        self.repair.pending = True
+                    if writes:
+                        self._mutation_generation += 1
+                        if child._verified_generation == child._mutation_generation:
+                            self._verified_generation = self._mutation_generation
+            return json.dumps(row, ensure_ascii=False)
         finally:
-            for k in self.tokens:self.tokens[k]+=child.tokens.get(k,0)
-            for k in ('prompt_tokens','completion_tokens','model_calls','recall_calls','remember_calls'):self.turn_usage[k]+=child.turn_usage.get(k,0)
-            self._active_child=None
-            if row['status']=='running':row['status']='failed'
-            self.events.emit('subtask',**row)
+            with self._sub_lock:
+                if self._turn_id == owner_turn:
+                    for k in self.tokens:
+                        self.tokens[k] += child.tokens.get(k, 0)
+                    for k in ('prompt_tokens', 'completion_tokens', 'model_calls', 'recall_calls', 'remember_calls'):
+                        self.turn_usage[k] += child.turn_usage.get(k, 0)
+                if child in self._active_children:
+                    self._active_children.remove(child)
+                self._active_child = self._active_children[-1] if self._active_children else None
+                if row['status'] == 'running':
+                    row['status'] = 'failed'
+            self.events.emit('subtask', **row)
+
+    def _run_subtasks(self, tasks: list[dict]) -> str:
+        from .subtasks import FileClaims, normalize_claim_path
+
+        if self._child_depth >= 1:
+            return 'ΑΠΟΡΡΙΨΗ: μέγιστο βάθος υποεργασιών 1.'
+        if not isinstance(tasks, list) or not tasks:
+            return 'ΣΦΑΛΜΑ: δώσε λίστα υποεργασιών.'
+        tasks = tasks[: min(4, self.config.subtask_limit)]
+        workers = max(1, min(3, int(getattr(self.config, 'max_parallel_subtasks', 2) or 2)))
+        grace = max(0.0, float(getattr(self.config, 'subtask_grace_seconds', 5.0) or 0.0))
+        claims = FileClaims()
+        results: list = [None] * len(tasks)
+
+        # Pre-validate task specs & normalize file claims so one bad path fails only its own item
+        pending: list[dict] = []
+        for idx, spec in enumerate(tasks):
+            cid = uuid.uuid4().hex
+            if not isinstance(spec, dict):
+                results[idx] = json.dumps({'id': cid, 'status': 'failed', 'error': 'Μη έγκυρη προδιαγραφή υποεργασίας.', 'summary': 'Μη έγκυρη προδιαγραφή υποεργασίας.'}, ensure_ascii=False)
+                continue
+            mode = str(spec.get('mode') or 'ask')
+            task_text = str(spec.get('task') or '')
+            try:
+                max_steps = int(spec.get('max_steps') or 8)
+                raw_files = spec.get('files') or []
+                norm_files = [normalize_claim_path(self.ws, f) for f in raw_files if str(f).strip()]
+                declared = set(raw_files) if mode != 'ask' else None
+            except Exception as exc:
+                results[idx] = json.dumps({'id': cid, 'task': task_text, 'mode': mode, 'status': 'failed', 'error': str(exc), 'summary': str(exc)}, ensure_ascii=False)
+                continue
+            pending.append({
+                'idx': idx,
+                'cid': cid,
+                'mode': mode,
+                'task': task_text,
+                'max_steps': max_steps,
+                'norm_files': norm_files,
+                'declared': declared,
+            })
+
+        def run_one(item: dict):
+            idx = item['idx']
+            cid = item['cid']
+            try:
+                return idx, self._run_subtask(
+                    item['task'],
+                    item['mode'],
+                    max_steps=item['max_steps'],
+                    declared_files=item['declared'],
+                    child_id=cid,
+                )
+            except Exception as exc:
+                return idx, json.dumps({'id': cid, 'task': item['task'], 'mode': item['mode'], 'status': 'failed', 'error': str(exc), 'summary': str(exc)}, ensure_ascii=False)
+            finally:
+                claims.release(cid)
+
+        pool = ThreadPoolExecutor(max_workers=workers, thread_name_prefix='akatikito-sub')
+        in_flight: dict = {}
+        try:
+            while pending or in_flight:
+                if self._stop:
+                    for item in pending:
+                        results[item['idx']] = json.dumps({'id': item['cid'], 'task': item['task'], 'mode': item['mode'], 'status': 'stopped', 'summary': 'Σταμάτησε.'}, ensure_ascii=False)
+                    pending.clear()
+                    if in_flight:
+                        done, not_done = wait_futures(in_flight.keys(), timeout=grace)
+                        for fut in done:
+                            item = in_flight.pop(fut)
+                            try:
+                                i, res = fut.result()
+                                results[i] = res
+                            except Exception as exc:
+                                results[item['idx']] = json.dumps({'id': item['cid'], 'task': item['task'], 'mode': item['mode'], 'status': 'failed', 'error': str(exc), 'summary': str(exc)}, ensure_ascii=False)
+                        for fut in not_done:
+                            item = in_flight.pop(fut)
+                            results[item['idx']] = json.dumps({'id': item['cid'], 'task': item['task'], 'mode': item['mode'], 'status': 'stopped', 'summary': 'Σταμάτησε (λήξη grace period).'}, ensure_ascii=False)
+                    break
+
+                # Schedule any non-conflicting pending tasks into free worker slots
+                scheduled_any = False
+                while len(in_flight) < workers and pending:
+                    picked_pos = None
+                    for pos, item in enumerate(pending):
+                        if item['mode'] == 'ask' or not item['norm_files'] or claims.try_claim(item['cid'], item['norm_files']):
+                            picked_pos = pos
+                            break
+                    if picked_pos is None:
+                        break
+                    item = pending.pop(picked_pos)
+                    fut = pool.submit(contextvars.copy_context().run, run_one, item)
+                    in_flight[fut] = item
+                    scheduled_any = True
+
+                if not in_flight:
+                    if not scheduled_any and pending:
+                        # Defensive fallback: should never happen when in_flight is empty
+                        item = pending.pop(0)
+                        results[item['idx']] = json.dumps({'id': item['cid'], 'task': item['task'], 'mode': item['mode'], 'status': 'failed', 'error': 'Αδυναμία δέσμευσης αρχείων.', 'summary': 'Αδυναμία δέσμευσης αρχείων.'}, ensure_ascii=False)
+                    continue
+
+                done, _ = wait_futures(in_flight.keys(), timeout=0.1, return_when=FIRST_COMPLETED)
+                for fut in done:
+                    item = in_flight.pop(fut)
+                    try:
+                        i, res = fut.result()
+                        results[i] = res
+                    except Exception as exc:
+                        results[item['idx']] = json.dumps({'id': item['cid'], 'task': item['task'], 'mode': item['mode'], 'status': 'failed', 'error': str(exc), 'summary': str(exc)}, ensure_ascii=False)
+        finally:
+            pool.shutdown(wait=not self._stop, cancel_futures=self._stop)
+
+        parsed = []
+        for r in results:
+            if isinstance(r, str):
+                try:
+                    parsed.append(json.loads(r))
+                except ValueError:
+                    parsed.append({'summary': r})
+            else:
+                parsed.append({'status': 'failed'})
+        return json.dumps(parsed, ensure_ascii=False)
 
     def _tool_guard_error(self, name: str, turn_tools: set[str], allow_mode_change: bool = False) -> str | None:
         """Ενιαίος έλεγχος εργαλείων για σειριακή και παράλληλη εκτέλεση."""
@@ -339,6 +608,7 @@ class Akatikito:
             blocked = self.activity.before(name,args)
             if blocked:return blocked,False
             if name == 'run_subtask':return self._run_subtask(**args),False
+            if name == 'run_subtasks':return self._run_subtasks(**args),False
             if name == "complete_task":
                 return self._accept_completion(args), False
             if name == "set_mode":
@@ -402,7 +672,11 @@ class Akatikito:
                 return profile_denial, False
 
             self.ws.organization_scope = "full" if (self.mode in ("code", "debug") and proj_profile == "developer") else "documents"
-            result = self.mcp.call(name,args,self) if getattr(self,'mcp',None) and name in self.mcp.entries else dispatch(self.ws, name, args)
+            if name == "run_command" and self._shared_command_lock is not None:
+                with self._shared_command_lock:
+                    result = dispatch(self.ws, name, args)
+            else:
+                result = self.mcp.call(name,args,self) if getattr(self,'mcp',None) and name in self.mcp.entries else dispatch(self.ws, name, args)
             if name in ("web_search", "web_fetch", "browser_fetch", "web_news", "youtube_transcript", "read_document") or name.startswith("mcp_"):
                 result = guard_untrusted_text(result, source=name)
             if name in ('propose_memory','propose_skill','patch_skill') and not result.startswith(('ΣΦΑΛΜΑ','ΑΠΟΡΡΙΨΗ','ΑΠΟΤΡΟΠΗ','ΕΝΤΟΠΙΣΤΗΚΕ ΠΑΡΟΜΟΙΟ SKILL')):
@@ -636,6 +910,8 @@ class Akatikito:
                 except Exception as exc:self.events.emit('checkpoint_error',text=str(exc))
 
     def _chat(self, text: str, internal: bool = False) -> str:
+        with self._sub_lock:
+            self._turn_id += 1
         self.turn_usage = {"prompt_tokens":0,"completion_tokens":0,"model_calls":0,"recall_calls":0,"remember_calls":0}
         self._used_skills_in_turn = set()
         self._skill_healing_hints = {}
@@ -682,6 +958,7 @@ class Akatikito:
         self._task_checks = self._mutation_generation = 0
         self._verified_generation = -1
         self.subtasks=[]
+        self._subtask_tokens_total = 0
         self._turn_event_start = len(self.events.log)
         self.context.begin_turn()
         self.activity.begin_turn()
@@ -816,8 +1093,13 @@ class Akatikito:
             tools = [t for t in TOOL_SPECS + (self.mcp.specs() if getattr(self,'mcp',None) else []) if t["function"]["name"] in allowed]
             self.events.emit("context", **self.context.metrics)
             self.events.emit("checkpoint")
+            prev_ri = self.runtime_instructions
             reason=getattr(self,'before_model',lambda:'')()
             if reason:return self._progress_report(reason)
+            if self.runtime_instructions != prev_ri:
+                self.messages[0] = {"role": "system", "content": self.policy_prompt()}
+                if request and request[0].get("role") == "system":
+                    request[0] = dict(self.messages[0])
             reply, usage = self._model_reply(request, tools, step)
             for key in self.tokens:
                 self.tokens[key] += usage.get(key, 0)

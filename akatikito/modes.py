@@ -88,7 +88,7 @@ MODES['assistant'] = {
     'tools':list(MODES['ask']['tools'])+['write_file','edit_file','add_reminder','done_reminder','remember'],
     'prompt':'Είσαι γενικός βοηθός. Χρησιμοποίησε έγγραφα, web και υπενθυμίσεις σύμφωνα με το αίτημα. Δεν εκτελείς εντολές συστήματος. Δεν αλλάζεις κώδικα· για προγραμματισμό χρειάζεται Κώδικας. Μην δημιουργείς υπενθύμιση χωρίς αίτημα του χρήστη.'}
 for _mode in MODES.values():
-    _mode['tools'] += ['read_document','search_documents','list_reminders','use_skill','update_todos','run_subtask','list_memory','list_skills','search_past_sessions','git_status_diff','file_operation_history']
+    _mode['tools'] += ['read_document','search_documents','list_reminders','use_skill','update_todos','run_subtask','run_subtasks','list_memory','list_skills','search_past_sessions','git_status_diff','file_operation_history']
 for _name in ('architect','code','debug','assistant'):
     MODES[_name]['tools'] += ['propose_memory','propose_skill','patch_skill']
 

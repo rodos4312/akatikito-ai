@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import threading
 import time
 from dataclasses import dataclass, field
 from typing import Any, Callable
@@ -15,21 +16,24 @@ class Event:
 
 
 class Events:
-    """Απλός πομπός: γράφεσαι με subscribe και δέχεσαι κάθε γεγονός."""
+    """Απλός πομπός: γράφεσαι με subscribe και δέχεσαι κάθε γεγονός (thread-safe)."""
 
     def __init__(self) -> None:
+        self._lock = threading.Lock()
         self._listeners: list[Callable[[Event], None]] = []
         self.log: list[Event] = []
 
     def subscribe(self, listener: Callable[[Event], None]) -> Callable[[Event], None]:
-        self._listeners.append(listener)
+        with self._lock:
+            self._listeners.append(listener)
         return listener
 
     def emit(self, kind: str, **data: Any) -> Event:
         event = Event(kind=kind, data=data)
-        self.log.append(event)
-        # Αντιγράφουμε τη λίστα γιατί ένας listener μπορεί να αλλάξει τη λίστα.
-        for listener in list(self._listeners):
+        with self._lock:
+            self.log.append(event)
+            listeners = list(self._listeners)
+        for listener in listeners:
             try:
                 listener(event)
             except Exception:
@@ -38,5 +42,6 @@ class Events:
         return event
 
     def unsubscribe(self, listener: Callable[[Event], None]) -> None:
-        if listener in self._listeners:
-            self._listeners.remove(listener)
+        with self._lock:
+            if listener in self._listeners:
+                self._listeners.remove(listener)

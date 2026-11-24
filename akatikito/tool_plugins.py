@@ -355,6 +355,9 @@ def _guard_output_write(ws, target: Path, overwrite: bool) -> None:
     from .tools import _protect_live_source
 
     _protect_live_source(target)
+    guard = getattr(ws, "write_guard", None)
+    if callable(guard):
+        guard(target, "", "")
     if target.exists() and not overwrite:
         raise FileExistsError(
             f"Το αρχείο '{ws.relative(target)}' υπάρχει ήδη. Διάλεξε νέο όνομα ή όρισε overwrite=true."
