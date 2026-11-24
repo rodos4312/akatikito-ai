@@ -18,22 +18,25 @@ if not errorlevel 1 (
   ruff check --select F821,F811,E9,F63,F7 --isolated akatikito scripts tests app.py || goto :fail
 )
 
-echo [2/4] UI JavaScript syntax
+echo [2/5] file size ratchet
+"%PY%" scripts\size_check.py || goto :fail
+
+echo [3/5] UI JavaScript syntax
 for %%f in (akatikito\ui\*.js akatikito\onboarding.js) do (
   node --check "%%f" || goto :fail
 )
 
-echo [3/4] node UI tests
+echo [4/5] node UI tests
 for %%f in (tests\*.cjs) do (
   node "%%f" >nul || (echo FAILED: %%f & goto :fail)
 )
 
 if /i "%~1"=="--fast" (
-  echo [4/4] pytest skipped in --fast mode; it runs before push.
+  echo [5/5] pytest skipped in --fast mode; it runs before push.
   goto :ok
 )
 
-echo [4/4] pytest
+echo [5/5] pytest
 "%PY%" -m pytest -q -x -p no:cacheprovider || goto :fail
 
 :ok
