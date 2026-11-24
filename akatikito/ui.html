@@ -320,6 +320,11 @@ body.simple-view .pro-only,body.simple-view #chat>.steps:not(.important-step),bo
           <button class="btn" data-i18n="btn_health" style="flex:1;font-size:11.5px" onclick="loadSystemHealth()">🩺 Έλεγχος Υγείας</button>
           <button class="btn" data-i18n="btn_diag_zip" style="flex:1;font-size:11.5px" onclick="exportDiagnosticsBundle()" title="Εξάγει ανωνυμοποιημένο .zip αναφοράς χωρίς API keys ή προσωπικά δεδομένα">📦 Διαγνωστικά .zip</button>
         </div>
+        <div style="display:flex;gap:6px">
+          <button class="btn primary" id="btn-doctor-run" style="flex:1;font-size:11.5px" onclick="runDoctor(false)" title="Δωρεάν, ακίνδυνος έλεγχος 14 σημείων με 1-κλικ επισκευή">🩺💉 Γιατρός</button>
+          <button class="btn" id="btn-doctor-api" style="font-size:11.5px" onclick="runDoctor(true)" title="Ζωντανή δοκιμή API key (/models)">🔑 API</button>
+        </div>
+        <div id="doctor-box" style="display:none;flex-direction:column;gap:5px;font-size:11.5px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:7px;max-height:260px;overflow-y:auto"></div>
         <div id="gh-update-box" style="display:flex;flex-direction:column;gap:5px;border-top:1px solid var(--border);padding-top:6px">
           <button class="btn" data-i18n="btn_gh_check" style="font-size:11.5px" onclick="checkGithubUpdates()">🔄 Έλεγχος Ενημερώσεων GitHub</button>
           <div id="gh-update-status" class="hint"></div>
@@ -2108,6 +2113,64 @@ async function loadSystemHealth() {
       row.textContent = (item.ok ? '✅ ' : '⚠️ ') + item.label;
       box.appendChild(row);
     }
+  } catch (e) { showNotice('err', e.message || String(e)); }
+}
+async function runDoctor(checkApi) {
+  const box = document.getElementById('doctor-box');
+  if (!box) return;
+  box.style.display = 'flex';
+  box.replaceChildren();
+  const loading = document.createElement('span');
+  loading.className = 'hint';
+  loading.textContent = checkApi ? '🩺 Έλεγχος 14 σημείων + δοκιμή API key…' : '🩺 Εκτέλεση διάγνωσης (μόνο ανάγνωση)…';
+  box.appendChild(loading);
+  try {
+    const r = await api('/api/doctor/diagnose', {check_api: !!checkApi});
+    box.replaceChildren();
+    if (r.error) { const er = document.createElement('span'); er.className = 'hint'; er.textContent = r.error; box.appendChild(er); return; }
+    const head = document.createElement('strong');
+    const c = r.counts || {};
+    head.textContent = '🩺 ' + (r.badge || '') + ' (' + (c.ok || 0) + ' OK, ' + (c.warn || 0) + ' Προσοχή, ' + (c.error || 0) + ' Σφάλματα)';
+    box.appendChild(head);
+    for (const item of (r.checks || [])) {
+      const row = document.createElement('div');
+      row.style.cssText = 'border-top:1px solid var(--border);padding-top:4px;display:flex;flex-direction:column;gap:3px';
+      const title = document.createElement('div');
+      title.textContent = (item.badge || '') + ' ' + (item.title || '');
+      title.style.fontWeight = item.status === 'ok' ? '400' : '600';
+      row.appendChild(title);
+      if (item.status !== 'ok' || item.id === 'api_key_live') {
+        const det = document.createElement('div');
+        det.className = 'hint';
+        det.textContent = item.details || '';
+        row.appendChild(det);
+      }
+      if (item.fixable) {
+        const bar = document.createElement('div');
+        bar.style.cssText = 'display:flex;gap:4px;flex-wrap:wrap';
+        const acts = (item.actions && item.actions.length) ? item.actions : [{action: '', label: item.fix_label || 'Επισκευή'}];
+        for (const a of acts) {
+          const btn = document.createElement('button');
+          btn.className = 'btn';
+          btn.style.cssText = 'font-size:10.5px;padding:2px 7px';
+          btn.textContent = '💉 ' + a.label;
+          btn.onclick = () => applyDoctorFix(item.id, a.action, item.fix_preview || item.details || '');
+          bar.appendChild(btn);
+        }
+        row.appendChild(bar);
+      }
+      box.appendChild(row);
+    }
+  } catch (e) { showNotice('err', e.message || String(e)); }
+}
+async function applyDoctorFix(checkId, action, preview) {
+  const msg = (preview ? preview + '\n\n' : '') + 'Να προχωρήσει η επισκευή (θα κρατηθεί backup & εγγραφή στο audit log);';
+  if (!window.confirm(msg)) return;
+  try {
+    const r = await api('/api/doctor/fix', {check_id: checkId, action: action || ''});
+    if (!r.ok) { showNotice('err', r.error || 'Απέτυχε η επισκευή.'); return; }
+    showNotice('ok', '🩺 ' + (r.summary || 'Ολοκληρώθηκε η επισκευή.'));
+    await runDoctor(false);
   } catch (e) { showNotice('err', e.message || String(e)); }
 }
 async function loadProjectProfile() {

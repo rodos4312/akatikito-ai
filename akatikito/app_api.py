@@ -1369,6 +1369,26 @@ class AppState:
         except Exception as exc:
             return {'error': str(exc)}
 
+    def doctor_diagnose(self, data=None):
+        from .doctor import Doctor
+        try:
+            check_api = bool((data or {}).get('check_api', False))
+            return Doctor(state=self).diagnose(check_api=check_api)
+        except Exception as exc:
+            return {'error': str(exc)}
+
+    def doctor_fix(self, data=None):
+        from .doctor import Doctor
+        try:
+            payload = data or {}
+            cid = str(payload.get('check_id', '') or '').strip()
+            action = str(payload.get('action', '') or '').strip()
+            if not cid:
+                return {'ok': False, 'error': 'Δώσε check_id για επισκευή.'}
+            return Doctor(state=self).apply_fix(cid, action=action)
+        except Exception as exc:
+            return {'ok': False, 'error': str(exc)}
+
     def diagnostics_export(self, data=None):
         from .diagnostics import export_diagnostics_zip
         try:
@@ -1911,6 +1931,10 @@ def make_handler(state: AppState) -> type:
                 self._send(state.scheduled_history(data.get('id','')))
             elif path == '/api/diagnostics/health':
                 self._send(state.diagnostics_health())
+            elif path == '/api/doctor/diagnose':
+                self._send(state.doctor_diagnose(data))
+            elif path == '/api/doctor/fix':
+                self._send(state.doctor_fix(data))
             elif path == '/api/diagnostics/export':
                 self._send(state.diagnostics_export(data))
             elif path == '/api/i18n':
