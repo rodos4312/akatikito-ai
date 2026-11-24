@@ -1,13 +1,13 @@
 """«🩺 Γιατρός» — Human-only read-only diagnostics & 1-click safe repair for Akatikito.
 
 Safety invariants:
-1. ``diagnose()`` is strictly read-only and offline by default (no mutations, no network
-   calls unless ``check_api=True`` is explicitly requested by the human).
+1. ``diagnose()`` is strictly read-only and offline by default (no mutations, no external
+   network calls unless ``check_api=True`` is explicitly requested by the human).
 2. Every ``apply_fix()`` targets ONLY Akatikito's own app/runtime files (never user code,
-   never secrets/API keys, never memory), backs up before mutating, and records an entry
-   in the project's hash-chained ``AuditLog``.
+   never Safe Trash in ``.agent_backups/organizer/``, never secrets/API keys, never memory),
+   backs up before mutating, and records an entry in the project's hash-chained ``AuditLog``.
 3. ``audit_chain`` is NEVER auto-repaired (evidence must remain intact).
-4. Never exposed as an LLM tool — strictly human UI + ``python -m akatikito.doctor`` CLI.
+4. Never exposed as an LLM tool — strictly human UI + ``python -m akatikito.doctor`` / ``Doctor.cmd``.
 """
 from __future__ import annotations
 
@@ -26,6 +26,8 @@ from typing import Any
 
 from .audit_log import AuditLog
 from .mobile_bridge import DEFAULT_MOBILE_PORT, SESSION_TTL_SECONDS
+from .model import PROVIDERS
+from .process_lock import _lock_dir
 from .settings import DEFAULT_PATH, Settings, unmask_secret
 
 BADGES = {
@@ -35,8 +37,12 @@ BADGES = {
 }
 
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+# Exact pattern produced by mobile_bridge.save_upload_stream: .{name}.{8 hex}.part
+_MOBILE_PART_RE = re.compile(r"^\..+\.[0-9a-f]{8}\.part$", re.IGNORECASE)
 _SKIP_SCAN_DIRS = {".git", ".venv", "venv", "node_modules", "__pycache__", ".pytest_cache"}
-_CORE_PACKAGES = ("httpx", "openai", "docx", "openpyxl", "pypdf", "PIL", "segno")
+_CORE_PACKAGES = ("httpx", "openai")
+_FEATURE_PACKAGES = ("docx", "openpyxl", "pypdf", "PIL")
+_STALE_TEMP_SECONDS = 3600  # 1 hour: never touch active uploads or in-flight writes
 
 
 def _item(
@@ -92,6 +98,39 @@ def _pid_alive(pid: int) -> bool:
         return False
 
 
+def _file_lock_is_held(lock_path: Path) -> bool:
+    """Non-blocking probe to test whether a FileLock file is currently held by another process."""
+    try:
+        with lock_path.open("r+b") as stream:
+            if lock_path.stat().st_size == 0:
+                return False
+            stream.seek(0)
+            if os.name == "nt":
+                import msvcrt
+                try:
+                    msvcrt.locking(stream.fileno(), msvcrt.LK_NBLCK, 1)
+                except OSError:
+                    return True
+                try:
+                    stream.seek(0)
+                    msvcrt.locking(stream.fileno(), msvcrt.LK_UNLCK, 1)
+                except OSError:
+                    pass
+                return False
+            import fcntl
+            try:
+                fcntl.flock(stream.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except (OSError, BlockingIOError):
+                return True
+            try:
+                fcntl.flock(stream.fileno(), fcntl.LOCK_UN)
+            except OSError:
+                pass
+            return False
+    except OSError:
+        return True  # Conservative: if we cannot probe it, assume it is in use
+
+
 def _backup_file(path: Path, suffix: str = "bak") -> Path | None:
     if not path.is_file():
         return None
@@ -131,6 +170,19 @@ def _is_port_in_use(port: int, host: str = "127.0.0.1") -> bool:
         return False
 
 
+def _is_akatikito_bridge_on_port(port: int) -> bool:
+    """Check if the listener on localhost:<port> is Akatikito's own MobileBridge."""
+    try:
+        import httpx
+        resp = httpx.get(f"http://127.0.0.1:{port}/api/mobile/ping", timeout=0.5)
+        if resp.status_code == 200:
+            body = resp.json()
+            return bool(isinstance(body, dict) and body.get("app") == "Akatikito" and body.get("bridge"))
+    except Exception:
+        pass
+    return False
+
+
 def _suggest_free_port(start: int = DEFAULT_MOBILE_PORT + 1) -> int:
     for p in range(start, start + 30):
         if not _is_port_in_use(p):
@@ -148,6 +200,7 @@ class Doctor:
         data_dir: str | Path | None = None,
         project_root: str | Path | None = None,
         state: Any = None,
+        lock_dir: str | Path | None = None,
     ) -> None:
         self.app_root = Path(app_root).resolve() if app_root else Path(__file__).resolve().parents[1]
         self.data_dir = Path(data_dir).resolve() if data_dir else DEFAULT_PATH.parent.resolve()
@@ -158,6 +211,7 @@ class Doctor:
         else:
             self.project_root = self.app_root
         self.state = state
+        self._custom_lock_dir = Path(lock_dir).resolve() if lock_dir else None
 
     # ------------------------------------------------------------------ paths
 
@@ -166,8 +220,20 @@ class Doctor:
             ("settings.json", self.data_dir / "settings.json", {}),
             ("mcp.json", self.data_dir / "mcp.json", {}),
             ("mobile_bridge.json", self.data_dir / "mobile_bridge.json", {"auto_start": False, "sessions": {}}),
-            ("agenda.json", self.project_root / ".agent" / "agenda.json", []),
+            ("data/agenda.json", self.data_dir / "agenda.json", []),
+            (".agent/agenda.json", self.project_root / ".agent" / "agenda.json", []),
         ]
+
+    def _scheduled_path(self) -> Path:
+        return self.data_dir / "scheduled.json"
+
+    def _resolve_lock_dir(self) -> Path | None:
+        if self._custom_lock_dir is not None:
+            return self._custom_lock_dir
+        try:
+            return _lock_dir()
+        except Exception:
+            return None
 
     # ------------------------------------------------------------------ checks
 
@@ -245,6 +311,8 @@ class Doctor:
         if own_port == DEFAULT_MOBILE_PORT:
             return _item("mobile_port", f"Θύρα Mobile Bridge ({DEFAULT_MOBILE_PORT})", "ok", f"Η θύρα {DEFAULT_MOBILE_PORT} χρησιμοποιείται κανονικά από το ίδιο το Akatikito.")
         if _is_port_in_use(DEFAULT_MOBILE_PORT):
+            if _is_akatikito_bridge_on_port(DEFAULT_MOBILE_PORT):
+                return _item("mobile_port", f"Θύρα Mobile Bridge ({DEFAULT_MOBILE_PORT})", "ok", f"Η θύρα {DEFAULT_MOBILE_PORT} χρησιμοποιείται ήδη από ανοιχτό Akatikito.")
             alt = _suggest_free_port(DEFAULT_MOBILE_PORT + 1)
             msg = f"Η θύρα {DEFAULT_MOBILE_PORT} είναι πιασμένη από άλλο πρόγραμμα."
             if alt:
@@ -255,15 +323,14 @@ class Doctor:
     def _find_orphan_locks(self) -> list[Path]:
         orphans: list[Path] = []
         now = time.time()
-        roots = [self.data_dir, self.project_root / ".agent"]
-        for r in roots:
+        # 1. PID-based lock files in data/ and .agent/
+        for r in (self.data_dir, self.project_root / ".agent"):
             if not r.is_dir():
                 continue
             for lock_file in r.glob("*.lock"):
                 if not lock_file.is_file():
                     continue
                 try:
-                    age = now - lock_file.stat().st_mtime
                     raw = lock_file.read_text(encoding="utf-8", errors="ignore").strip()
                 except OSError:
                     continue
@@ -277,10 +344,19 @@ class Doctor:
                             pid = int(parsed["pid"])
                     except Exception:
                         pass
-                if pid > 0:
-                    if not _pid_alive(pid):
-                        orphans.append(lock_file)
-                elif age > 300:
+                if pid > 0 and not _pid_alive(pid):
+                    orphans.append(lock_file)
+        # 2. Real FileLock files in _lock_dir() — test with OS non-blocking lock probe + 24h age
+        ldir = self._resolve_lock_dir()
+        if ldir and ldir.is_dir():
+            for lock_file in ldir.glob("*.lock"):
+                if not lock_file.is_file():
+                    continue
+                try:
+                    age = now - lock_file.stat().st_mtime
+                except OSError:
+                    continue
+                if age > 86400 and not _file_lock_is_held(lock_file):
                     orphans.append(lock_file)
         return orphans
 
@@ -301,44 +377,60 @@ class Doctor:
         )
 
     def _find_temp_partials(self) -> list[Path]:
+        """Find ONLY Akatikito's own stale temp/partial files (>1h old). NEVER user *.tmp files."""
         found: list[Path] = []
         now = time.time()
-        for base in (self.data_dir, self.project_root):
-            if not base.is_dir():
+        # 1. App-owned dirs (data/ and .agent/): *.tmp / *.part older than 1 hour
+        for app_dir in (self.data_dir, self.project_root / ".agent"):
+            if not app_dir.is_dir():
                 continue
-            for root_s, dirs, files in os.walk(base):
-                dirs[:] = [d for d in dirs if d not in _SKIP_SCAN_DIRS]
+            for p in app_dir.rglob("*"):
+                if not p.is_file():
+                    continue
+                if not (p.name.endswith(".tmp") or p.name.endswith(".part")):
+                    continue
+                try:
+                    if (now - p.stat().st_mtime) > _STALE_TEMP_SECONDS:
+                        found.append(p)
+                except OSError:
+                    continue
+                if len(found) >= 200:
+                    return found
+        # 2. Project workspace: ONLY exact MobileBridge partial upload pattern `.{name}.{8hex}.part` >1h old
+        if self.project_root.is_dir():
+            for root_s, dirs, files in os.walk(self.project_root):
+                dirs[:] = [d for d in dirs if d not in _SKIP_SCAN_DIRS and d != ".agent"]
                 for fn in files:
-                    if not (fn.endswith(".part") or fn.endswith(".tmp")):
+                    if not _MOBILE_PART_RE.match(fn):
                         continue
                     p = Path(root_s) / fn
                     try:
-                        # Treat dot-prefixed .part files or files older than 2 minutes as stale
-                        if fn.startswith(".") or (now - p.stat().st_mtime) > 120:
+                        if (now - p.stat().st_mtime) > _STALE_TEMP_SECONDS:
                             found.append(p)
                     except OSError:
                         continue
-                if len(found) >= 200:
-                    break
+                    if len(found) >= 200:
+                        return found
         return found
 
     def _check_temp_partials(self) -> dict[str, Any]:
         found = self._find_temp_partials()
         if not found:
-            return _item("temp_partials", "Μισά αρχεία .part / .tmp", "ok", "Δεν υπάρχουν ξεχασμένα .part ή .tmp αρχεία.")
+            return _item("temp_partials", "Μισά αρχεία .part / .tmp", "ok", "Δεν υπάρχουν ξεχασμένα προσωρινά αρχεία του Akatikito.")
         total_kb = round(sum(p.stat().st_size for p in found if p.is_file()) / 1024, 1)
         return _item(
             "temp_partials",
             "Μισά αρχεία .part / .tmp",
             "warn",
-            f"Βρέθηκαν {len(found)} μισά/προσωρινά αρχεία ({total_kb} KB) από διακοπέντα uploads/εγγραφές.",
+            f"Βρέθηκαν {len(found)} ξεχασμένα προσωρινά αρχεία του Akatikito (>1 ώρας, {total_kb} KB).",
             fixable=True,
             fix_label="Διαγραφή",
-            fix_preview=f"Θα διαγραφούν {len(found)} προσωρινά .part/.tmp αρχεία ({total_kb} KB).",
+            fix_preview=f"Θα διαγραφούν {len(found)} προσωρινά αρχεία του Akatikito (>1 ώρας, {total_kb} KB). Δεν αγγίζει αρχεία χρήστη.",
             meta={"count": len(found), "total_kb": total_kb},
         )
 
     def _find_old_backups(self, days: int = 30) -> tuple[list[Path], int, int]:
+        """Find >30-day edit backups in .agent_backups, strictly EXCLUDING organizer/ (Safe Trash + Undo) and index.jsonl."""
         bdir = self.project_root / ".agent_backups"
         if not bdir.is_dir():
             return [], 0, 0
@@ -348,6 +440,15 @@ class Doctor:
         total_bytes = 0
         for p in bdir.rglob("*"):
             if not p.is_file():
+                continue
+            try:
+                rel_parts = p.relative_to(bdir).parts
+            except ValueError:
+                continue
+            # CRITICAL: NEVER touch Safe Trash / Organizer Undo journals or index.jsonl!
+            if rel_parts and rel_parts[0].lower() == "organizer":
+                continue
+            if p.name == "index.jsonl" and len(rel_parts) == 1:
                 continue
             try:
                 st = p.stat()
@@ -364,44 +465,52 @@ class Doctor:
         total_mb = round(total_bytes / (1024 * 1024), 2)
         old_mb = round(old_bytes / (1024 * 1024), 2)
         if not old_files and total_mb < 200:
-            return _item("agent_backups", "Μέγεθος .agent_backups", "ok", f"Ο φάκελος .agent_backups είναι καθαρός ({total_mb} MB).")
+            return _item("agent_backups", "Μέγεθος .agent_backups", "ok", f"Ο φάκελος .agent_backups είναι καθαρός ({total_mb} MB, εξαιρείται ο Κάδος).")
         if old_files:
             return _item(
                 "agent_backups",
                 "Μέγεθος .agent_backups",
                 "warn",
-                f"Το .agent_backups έχει {total_mb} MB συνολικά, εκ των οποίων {len(old_files)} αρχεία ({old_mb} MB) είναι πάνω από 30 ημερών.",
+                f"Το .agent_backups έχει {total_mb} MB, εκ των οποίων {len(old_files)} παλιά backups ({old_mb} MB) είναι πάνω από 30 ημερών (ο Κάδος/organizer εξαιρείται).",
                 fixable=True,
                 fix_label="Καθάρισμα >30 ημερών",
-                fix_preview=f"Θα διαγραφούν {len(old_files)} παλιά backup αρχεία άνω των 30 ημερών ({old_mb} MB) από το .agent_backups.",
+                fix_preview=f"Θα διαγραφούν {len(old_files)} παλιά edit-backups άνω των 30 ημερών ({old_mb} MB) και θα ενημερωθεί το index.jsonl. Ο Κάδος (organizer/) δεν αγγίζεται.",
                 meta={"old_count": len(old_files), "old_mb": old_mb, "total_mb": total_mb},
             )
         return _item("agent_backups", "Μέγεθος .agent_backups", "warn", f"Το .agent_backups έχει φτάσει τα {total_mb} MB (όλα κάτω των 30 ημερών).")
 
     def _check_python_packages(self) -> dict[str, Any]:
-        missing = [m for m in _CORE_PACKAGES if importlib.util.find_spec(m) is None]
-        req = self.app_root / "requirements.txt"
+        req_core = self.app_root / "requirements.txt"
+        req_feat = self.app_root / "requirements-features.txt"
+        missing_core = [m for m in _CORE_PACKAGES if importlib.util.find_spec(m) is None]
+        missing_feat = [m for m in _FEATURE_PACKAGES if importlib.util.find_spec(m) is None] if req_feat.is_file() else []
+        missing = missing_core + missing_feat
         if not missing:
-            return _item("python_packages", "Πακέτα Python (.venv)", "ok", "Όλα τα βασικά πακέτα Python είναι εγκατεστημένα.")
+            return _item("python_packages", "Πακέτα Python (.venv)", "ok", "Όλα τα απαιτούμενα πακέτα Python είναι εγκατεστημένα.")
+        cmd_parts = [f"{sys.executable} -m pip install -r {req_core.name}"]
+        if req_feat.is_file():
+            cmd_parts.append(f"-r {req_feat.name}")
         return _item(
             "python_packages",
             "Πακέτα Python (.venv)",
-            "error",
+            "error" if missing_core else "warn",
             f"Λείπουν πακέτα Python: {', '.join(missing)}.",
-            fixable=req.is_file(),
+            fixable=req_core.is_file(),
             fix_label="Εγκατάσταση πακέτων",
-            fix_preview=f"Θα τρέξει: {sys.executable} -m pip install -r {req}",
+            fix_preview="Θα τρέξει: " + " ".join(cmd_parts),
             meta={"missing": missing},
         )
 
     def _shortcut_paths(self) -> list[Path]:
         if os.name != "nt":
             return []
-        home = Path.home()
-        desktop = home / "Desktop" / "Akatikito.lnk"
-        appdata = Path(os.environ.get("APPDATA", str(home / "AppData" / "Roaming")))
-        start_menu = appdata / "Microsoft" / "Windows" / "Start Menu" / "Programs" / "Akatikito.lnk"
-        return [desktop, start_menu]
+        paths: list[Path] = []
+        appdata = os.environ.get("APPDATA")
+        if appdata:
+            paths.append(Path(appdata) / "Microsoft" / "Windows" / "Start Menu" / "Programs" / "Akatikito.lnk")
+        userprofile = os.environ.get("USERPROFILE") or str(Path.home())
+        paths.append(Path(userprofile) / "Desktop" / "Akatikito.lnk")
+        return paths
 
     def _check_windows_shortcuts(self) -> dict[str, Any]:
         if os.name != "nt":
@@ -426,19 +535,19 @@ class Doctor:
             f"Λείπουν συντομεύσεις: {', '.join(labels)}.",
             fixable=True,
             fix_label="Επαναδημιουργία",
-            fix_preview=f"Θα δημιουργήσει τις συντομεύσεις Akatikito.lnk σε: {', '.join(labels)}.",
+            fix_preview=f"Θα καλέσει το scripts/create_shortcuts.py για να δημιουργήσει τις συντομεύσεις pythonw.exe με εικονίδιο σε: {', '.join(labels)}.",
             meta={"missing": [str(p) for p in missing]},
         )
 
     def _check_uncertain_jobs(self) -> dict[str, Any]:
-        qpath = self.data_dir / "scheduled_jobs.json"
+        qpath = self._scheduled_path()
         if not qpath.is_file():
             return _item("uncertain_jobs", "Προγραμματισμένες εργασίες", "ok", "Δεν υπάρχουν κολλημένες προγραμματισμένες εργασίες.")
         try:
             data = json.loads(qpath.read_text(encoding="utf-8"))
             jobs = data.get("jobs", []) if isinstance(data, dict) else []
         except Exception:
-            return _item("uncertain_jobs", "Προγραμματισμένες εργασίες", "warn", "Δεν διαβάστηκε το scheduled_jobs.json.")
+            return _item("uncertain_jobs", "Προγραμματισμένες εργασίες", "warn", "Δεν διαβάστηκε το scheduled.json.")
         stuck = [j for j in jobs if isinstance(j, dict) and j.get("status") == "uncertain"]
         if not stuck:
             return _item("uncertain_jobs", "Προγραμματισμένες εργασίες", "ok", "Καμία προγραμματισμένη εργασία δεν είναι κολλημένη σε uncertain.")
@@ -477,14 +586,21 @@ class Doctor:
                 meta={"checked": False},
             )
         raw = self._read_settings_readonly()
-        provider = str(raw.get("provider", "") or "")
+        provider = str(raw.get("provider", "") or "DeepSeek")
         keys = raw.get("keys") if isinstance(raw.get("keys"), dict) else {}
         key = unmask_secret(keys.get(provider, "")) if keys else ""
-        base_url = str(raw.get("base_url", "") or "").rstrip("/")
+        base_url = str(raw.get("base_url", "") or "").strip()
         if not base_url:
-            return _item("api_key_live", "Έλεγχος API key", "warn", "Δεν έχει οριστεί πάροχος/URL στις Ρυθμίσεις.")
+            prov_info = PROVIDERS.get(provider)
+            if isinstance(prov_info, str):
+                base_url = prov_info
+            elif isinstance(prov_info, dict):
+                base_url = str(prov_info.get("base_url", "") or "")
+        base_url = base_url.rstrip("/")
+        if not base_url:
+            return _item("api_key_live", "Έλεγχος API key", "warn", f"Δεν έχει οριστεί URL για τον πάροχο '{provider}' στις Ρυθμίσεις.")
         if not key and "127.0.0.1" not in base_url and "localhost" not in base_url:
-            return _item("api_key_live", "Έλεγχος API key", "error", "Δεν έχει αποθηκευτεί API key για τον ενεργό πάροχο.")
+            return _item("api_key_live", "Έλεγχος API key", "error", f"Δεν έχει αποθηκευτεί API key για τον πάροχο '{provider}'.")
         try:
             import httpx
             headers = {"Authorization": f"Bearer {key}"} if key else {}
@@ -684,43 +800,68 @@ class Doctor:
                     touched.append(str(p))
                 except OSError:
                     pass
-            summary = f"Διαγράφηκαν {len(touched)} προσωρινά αρχεία .part/.tmp."
+            summary = f"Διαγράφηκαν {len(touched)} προσωρινά αρχεία του Akatikito."
 
         elif cid == "agent_backups":
             old_files, old_bytes, _ = self._find_old_backups(30)
+            deleted_names: set[str] = set()
             for p in old_files:
                 try:
                     p.unlink(missing_ok=True)
                     touched.append(str(p))
+                    deleted_names.add(p.name)
                 except OSError:
                     pass
-            summary = f"Καθαρίστηκαν {len(touched)} παλιά backups >30 ημερών ({round(old_bytes / (1024 * 1024), 2)} MB)."
+            # Prune stale rows from .agent_backups/index.jsonl for deleted files
+            idx_path = self.project_root / ".agent_backups" / "index.jsonl"
+            if deleted_names and idx_path.is_file():
+                try:
+                    _backup_file(idx_path, "bak")
+                    kept_lines = []
+                    for line in idx_path.read_text(encoding="utf-8").splitlines():
+                        if not line.strip():
+                            continue
+                        try:
+                            row = json.loads(line)
+                            bname = Path(str(row.get("backup", ""))).name
+                            if bname and bname in deleted_names:
+                                continue
+                        except Exception:
+                            pass
+                        kept_lines.append(line)
+                    idx_path.write_text("\n".join(kept_lines) + ("\n" if kept_lines else ""), encoding="utf-8")
+                    touched.append(str(idx_path))
+                except OSError:
+                    pass
+            summary = f"Καθαρίστηκαν {len(deleted_names)} παλιά backups >30 ημερών ({round(old_bytes / (1024 * 1024), 2)} MB)."
 
         elif cid == "daily_budget":
             spath = self.data_dir / "settings.json"
             _backup_file(spath, "bak")
-            st = Settings.load(spath)
-            st.daily_budget = 1.0
-            st.save(spath)
-            if self.state is not None and getattr(self.state, "settings", None) is not None:
+            if self.state is not None and getattr(self.state, "settings", None) is not None and self.data_dir == DEFAULT_PATH.parent.resolve():
                 self.state.settings.daily_budget = 1.0
+                self.state.settings.save()
+            else:
+                st = Settings.load(spath)
+                st.daily_budget = 1.0
+                st.save(spath)
             touched.append(str(spath))
             summary = "Ορίστηκε ημερήσιο όριο κόστους 1,00 €."
 
         elif cid == "uncertain_jobs":
-            from .scheduler import ScheduledQueue
+            from .scheduler import ScheduledQueue, queue_for
 
             act = action if action in ("retry", "cancel") else "cancel"
-            qpath = self.data_dir / "scheduled_jobs.json"
+            qpath = self._scheduled_path()
             if not qpath.is_file():
-                return {"ok": False, "error": "Δεν βρέθηκε το scheduled_jobs.json."}
+                return {"ok": False, "error": "Δεν βρέθηκε το scheduled.json."}
             _backup_file(qpath, "bak")
-            queue = ScheduledQueue(qpath)
-            stuck_ids = [j["id"] for j in queue.list() if j.get("status") == "uncertain"]
+            queue = queue_for(self.state) if (self.state is not None and self.data_dir == DEFAULT_PATH.parent.resolve()) else ScheduledQueue(qpath)
+            stuck_ids = [j["id"] for j in queue.view() if j.get("status") == "uncertain"]
             acted = 0
             for jid in stuck_ids:
                 try:
-                    queue.act(jid, act)
+                    queue.action(jid, act)
                     acted += 1
                 except Exception:
                     pass
@@ -749,11 +890,15 @@ class Doctor:
             summary = "Δημιουργήθηκε νέο καθαρό checkpoint repo."
 
         elif cid == "python_packages":
-            req = self.app_root / "requirements.txt"
-            if not req.is_file():
+            req_core = self.app_root / "requirements.txt"
+            req_feat = self.app_root / "requirements-features.txt"
+            if not req_core.is_file():
                 return {"ok": False, "error": "Δεν βρέθηκε το requirements.txt."}
+            cmd = [sys.executable, "-m", "pip", "install", "-r", str(req_core)]
+            if req_feat.is_file():
+                cmd.extend(["-r", str(req_feat)])
             proc = subprocess.run(
-                [sys.executable, "-m", "pip", "install", "-r", str(req)],
+                cmd,
                 capture_output=True,
                 text=True,
                 timeout=300,
@@ -761,40 +906,35 @@ class Doctor:
             )
             if proc.returncode != 0:
                 return {"ok": False, "error": (proc.stderr or proc.stdout or "pip install failed")[:400]}
-            summary = "Εγκαταστάθηκαν τα απαιτούμενα πακέτα Python από το requirements.txt."
+            summary = "Εγκαταστάθηκαν τα απαιτούμενα πακέτα Python (requirements + features)."
 
         elif cid == "windows_shortcuts":
             if os.name != "nt":
                 return {"ok": False, "error": "Μόνο για Windows."}
-            target = self.app_root / "Akatikito.vbs"
-            if not target.is_file():
-                target = self.app_root / "app.py"
-            created = []
-            for lnk in self._shortcut_paths():
-                if lnk.is_file():
-                    continue
-                lnk.parent.mkdir(parents=True, exist_ok=True)
-                ps = (
-                    "$ws = New-Object -ComObject WScript.Shell; "
-                    f"$s = $ws.CreateShortcut('{str(lnk).replace(chr(39), chr(39)*2)}'); "
-                    f"$s.TargetPath = '{str(target).replace(chr(39), chr(39)*2)}'; "
-                    f"$s.WorkingDirectory = '{str(self.app_root).replace(chr(39), chr(39)*2)}'; "
-                    "$s.Save()"
-                )
-                subprocess.run(
-                    ["powershell", "-NoProfile", "-Command", ps],
-                    capture_output=True,
-                    check=True,
-                    timeout=15,
-                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-                )
-                created.append(str(lnk))
-                touched.append(str(lnk))
-            summary = f"Δημιουργήθηκαν {len(created)} συντομεύσεις Windows."
+            script = self.app_root / "scripts" / "create_shortcuts.py"
+            if not script.is_file():
+                return {"ok": False, "error": "Δεν βρέθηκε το scripts/create_shortcuts.py."}
+            proc = subprocess.run(
+                [sys.executable, str(script)],
+                capture_output=True,
+                text=True,
+                timeout=30,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
+            if proc.returncode != 0:
+                return {"ok": False, "error": (proc.stderr or proc.stdout or "create_shortcuts failed")[:400]}
+            for p in self._shortcut_paths():
+                try:
+                    if p.is_file():
+                        touched.append(str(p))
+                except OSError:
+                    pass
+            summary = "Επαναδημιουργήθηκαν οι συντομεύσεις Windows (pythonw.exe + εικονίδιο)."
 
         else:
             return {"ok": False, "error": f"Μη υποστηριζόμενη επισκευή: {cid}"}
 
+        audit_logged = True
         try:
             AuditLog(self.project_root).record(
                 "doctor_fix",
@@ -805,9 +945,10 @@ class Doctor:
                 actor="human",
             )
         except Exception:
-            pass
+            audit_logged = False
+            summary += " (προσοχή: η επισκευή έγινε, αλλά δεν καταγράφηκε στο audit log)"
 
-        return {"ok": True, "check_id": cid, "summary": summary, "paths": touched}
+        return {"ok": True, "check_id": cid, "summary": summary, "paths": touched, "audit_logged": audit_logged}
 
 
 def _cli(argv: list[str] | None = None) -> int:

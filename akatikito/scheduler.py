@@ -203,7 +203,7 @@ class ScheduledQueue:
             job = next((j for j in data["jobs"] if j["id"] == job_id), None)
             if not job:
                 raise ValueError("Δεν βρέθηκε η εργασία.")
-            if action_name == "cancel" and job["status"] == "queued":
+            if action_name == "cancel" and job["status"] in ("queued", "uncertain"):
                 job["status"] = "cancelled"
             elif action_name == "retry" and job["status"] in ("uncertain", "failed"):
                 if len(data["jobs"]) >= 1000:
