@@ -1,0 +1,4 @@
+#!/bin/sh
+# Akatikito: run the quality gate before every commit (see check.cmd).
+# Emergency bypass: git commit --no-verify
+exec cmd.exe //c ".\check.cmd"

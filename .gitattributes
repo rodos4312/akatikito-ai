@@ -1,0 +1,3 @@
+# Batch files need CRLF; shell hooks need LF.
+*.cmd text eol=crlf
+.githooks/* text eol=lf

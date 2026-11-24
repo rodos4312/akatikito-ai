@@ -26,14 +26,17 @@ jobs:
           python -m pip install --upgrade pip
           if (Test-Path requirements.txt) { pip install -r requirements.txt }
           pip install -r requirements-features.txt
-          pip install pytest
+          pip install pytest ruff
+
+      - name: Ruff (undefined names, syntax)
+        run: ruff check --select F821,F811,E9,F63,F7 --isolated akatikito scripts tests app.py
 
       - name: Install template parser dependencies
         run: npm.cmd install --prefix akatikito/template_parsers --no-audit --no-fund
 
       - name: Validate UI JavaScript & Node UI tests
         run: |
-          python -c "import pathlib,re,subprocess; s=re.findall(r'<script>(.*?)</script>', pathlib.Path('akatikito/ui.html').read_text(encoding='utf-8'), re.S)[-1]; assert subprocess.run(['node','--check'], input=s, text=True).returncode==0"
+          Get-ChildItem akatikito\ui\*.js, akatikito\onboarding.js | ForEach-Object { node --check $_.FullName; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE } }
           Get-ChildItem tests\*.cjs | ForEach-Object { node $_.FullName; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE } }
 
       - name: Run Python test suites
