@@ -358,10 +358,13 @@ def _guard_output_write(ws, target: Path, overwrite: bool) -> None:
     guard = getattr(ws, "write_guard", None)
     if callable(guard):
         guard(target, "", "")
-    if target.exists() and not overwrite:
-        raise FileExistsError(
-            f"Το αρχείο '{ws.relative(target)}' υπάρχει ήδη. Διάλεξε νέο όνομα ή όρισε overwrite=true."
-        )
+    if target.exists():
+        if not overwrite:
+            raise FileExistsError(
+                f"Το αρχείο '{ws.relative(target)}' υπάρχει ήδη. Διάλεξε νέο όνομα ή όρισε overwrite=true."
+            )
+        if target.is_file() and hasattr(ws, "backup"):
+            ws.backup(target)
 
 
 def tool_pdf_toolkit(

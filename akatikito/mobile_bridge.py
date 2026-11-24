@@ -76,6 +76,8 @@ def save_upload_stream(root: Path, rel_path: str, stream, content_length: int) -
                 remaining -= len(chunk)
         if written != content_length:
             raise ValueError(f"Ατελής μεταφορά αρχείου ({written}/{content_length} bytes). Το αρχείο προορισμού δεν αλλοιώθηκε.")
+        if target.is_file():
+            ws.backup(target)
         tmp.replace(target)
     except BaseException:
         try:

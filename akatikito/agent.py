@@ -83,6 +83,7 @@ class Akatikito:
         self._default_model_name = self.config.model
         self._default_base_url = self.config.base_url
         self._default_api_key = self.config.api_key
+        self._session_route_tier: str = ""
         self.events = Events()
         self.messages: list[dict] = []
         self.tokens = {
@@ -136,6 +137,7 @@ class Akatikito:
     def reset(self) -> None:
         with self._sub_lock:
             self._turn_id += 1
+        self._session_route_tier = ""
         self.messages = []
         self.cache_id = uuid.uuid4().hex
         self.context.reset_transport()
@@ -988,13 +990,21 @@ class Akatikito:
                 "σύγκριν", "συγκριν", "τιμολόγ", "τιμολογ", "excel", "security", "audit", "κώδικ", "κωδικ",
                 "φτιάξε", "φτιαξε", "υλοποίη", "υλοποιη", "διόρθωσ", "διορθωσ", "script", "python",
             )
-            is_complex = (
-                self.mode in ("code", "debug", "architect")
-                or is_direct_skill
-                or len(effective) > 320
-                or any(k in low_eff for k in complex_hints)
-            )
-            tier = "smart" if is_complex else "fast"
+            # Session-sticky tier selection: choose once at the start of a fresh session
+            # so prompt caches are never busted mid-conversation.
+            sticky_tier = getattr(self, "_session_route_tier", "")
+            if sticky_tier in ("fast", "smart") and not fresh:
+                tier = sticky_tier
+                is_complex = tier == "smart"
+            else:
+                is_complex = (
+                    self.mode in ("code", "debug", "architect")
+                    or is_direct_skill
+                    or len(effective) > 320
+                    or any(k in low_eff for k in complex_hints)
+                )
+                tier = "smart" if is_complex else "fast"
+                self._session_route_tier = tier
             routed_m = (smart_m or base_m) if is_complex else (fast_m or base_m)
             routed_url = str(getattr(self.config, f"{tier}_base_url", "") or "").strip()
             routed_key = str(getattr(self.config, f"{tier}_api_key", "") or "").strip()

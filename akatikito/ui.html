@@ -3569,7 +3569,7 @@ function renderMobileBridge(r) {
     info.appendChild(img);
   }
   const meta = document.createElement('div');
-  const via = r.via_tailscale ? i18nText('mobile_via_ts', '✅ Tailscale (4G/5G & Wi-Fi)') : i18nText('mobile_via_lan', '📶 Τοπικό Wi-Fi');
+  const via = r.via_tailscale ? i18nText('mobile_via_ts', '🔒 Tailscale (κρυπτογραφημένο 4G/5G & Wi-Fi)') : i18nText('mobile_via_lan', '⚠️ Τοπικό Wi-Fi (μη κρυπτογραφημένο HTTP LAN — μόνο για έμπιστο οικιακό δίκτυο· προτείνεται Tailscale)');
   const scanHint = i18nText('mobile_scan_hint', 'Συνδεδεμένες συσκευές: {n} · Σκάναρε το QR από το Akatikito Mobile!').replace('{n}', String(r.paired_devices || 0));
   const urls = [r.url, (r.lan_url && r.lan_url !== r.url) ? `LAN: ${r.lan_url}` : ''].filter(Boolean).join(' · ');
   meta.textContent = `${via}\n${urls}\n${scanHint}`;
