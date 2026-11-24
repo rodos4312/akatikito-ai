@@ -93,6 +93,7 @@ class Settings:
     ui_theme: str = 'dark'
     ui_font_size: int = 14
     recent_projects: list[str] = field(default_factory=list)
+    global_hotkey: str = "Alt+Space"
     onboarding_complete: bool = False
     warning: str = field(default="", compare=False)
 
@@ -163,6 +164,7 @@ class Settings:
         settings.smart_model = str(data.get('smart_model') or '').strip()
         settings.cautious_edits = data.get('cautious_edits') is True
         settings.checkpoints = data.get('checkpoints',True) is True
+        settings.global_hotkey = str(data.get('global_hotkey', 'Alt+Space') or '').strip()
         settings.allowed_commands = [str(x) for x in data.get('allowed_commands',[]) if isinstance(x,str)] if isinstance(data.get('allowed_commands'),list) else []
         origins = data.get('key_origins') or {}
         if isinstance(origins,dict): settings.key_origins = {str(k):str(v) for k,v in origins.items() if v}
@@ -178,6 +180,7 @@ class Settings:
             'onboarding_complete':self.onboarding_complete,
             'voice_model':self.voice_model,'voice_language':self.voice_language,'ui_language':self.ui_language,
             'ui_theme':self.ui_theme,'ui_font_size':int(self.ui_font_size),'recent_projects':list(self.recent_projects[:10]),
+            'global_hotkey':self.global_hotkey,
             "version": 1,
             "provider": self.provider,
             "base_url": self.base_url,

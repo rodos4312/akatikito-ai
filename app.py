@@ -60,6 +60,7 @@ def main() -> int:
     state = None
     server = None
     server_thread = None
+    hotkey = None
     try:
         state = AppState()
         url, server = start_server(state)
@@ -71,8 +72,9 @@ def main() -> int:
 
         try:
             import webview  # pywebview
+            from akatikito.hotkey import GlobalHotkey, focus_window
 
-            webview.create_window(
+            win = webview.create_window(
                 APP_NAME,
                 url,
                 width=1280,
@@ -81,6 +83,10 @@ def main() -> int:
                 background_color="#0f1117",
                 text_select=True,
             )
+            hk_spec = getattr(state.settings, "global_hotkey", "Alt+Space")
+            if hk_spec:
+                hotkey = GlobalHotkey(hk_spec, lambda: focus_window(win, APP_NAME))
+                hotkey.start()
             webview.start()
         except Exception as exc:  # noqa: BLE001 — fallback to system browser if pywebview unavailable
             if not windowless:
@@ -110,6 +116,11 @@ def main() -> int:
             print(tb, file=sys.stderr)
         return 1
     finally:
+        if hotkey is not None:
+            try:
+                hotkey.stop()
+            except Exception:
+                pass
         if state is not None:
             try:
                 state.close()
