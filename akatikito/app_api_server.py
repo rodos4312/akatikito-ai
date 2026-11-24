@@ -83,7 +83,14 @@ def make_handler(state: AppState) -> type:
 
         def do_GET(self) -> None:
             path = self.path.split("?")[0]
-            if not self._authorized(api=path not in ('/','/onboarding.js')):return
+            _ui_assets = {
+                '/ui/style.css': ('style.css', 'text/css; charset=utf-8'),
+                '/ui/chat.js': ('chat.js', 'text/javascript; charset=utf-8'),
+                '/ui/files.js': ('files.js', 'text/javascript; charset=utf-8'),
+                '/ui/learning.js': ('learning.js', 'text/javascript; charset=utf-8'),
+                '/ui/settings.js': ('settings.js', 'text/javascript; charset=utf-8'),
+            }
+            if not self._authorized(api=path not in ('/', '/onboarding.js', *_ui_assets)):return
             if path == "/":
                 body = UI_FILE.read_bytes()
                 self.send_response(200)
@@ -91,6 +98,15 @@ def make_handler(state: AppState) -> type:
                 self.send_header("Content-Length", str(len(body)))
                 self.end_headers()
                 self.wfile.write(body)
+            elif path in _ui_assets:
+                fname, ctype = _ui_assets[path]
+                body = (UI_DIR / fname).read_bytes()
+                self.send_response(200)
+                self.send_header('Content-Type', ctype)
+                self.send_header('Content-Length', str(len(body)))
+                self.send_header('Cache-Control', 'no-store')
+                self.send_header('X-Content-Type-Options', 'nosniff')
+                self.end_headers();self.wfile.write(body)
             elif path == '/onboarding.js':
                 body=UI_FILE.with_name('onboarding.js').read_bytes()
                 self.send_response(200)

@@ -21,7 +21,7 @@ let state={busy:true,connected:true,model:'synthetic',mode:'code',tokens:{},even
 const context={document,window:{},console,confirm:()=>true,setTimeout:()=>1,clearTimeout(){},setInterval:()=>1,Event:class{},Option:class{},
   fetch:async(url)=>({json:async()=>url==='/api/sessions'?{sessions}:url==='/api/session/delete'?{ok:true}:state})};
 vm.createContext(context);
-let script=fs.readFileSync(path.join(__dirname,'../akatikito/ui.html'),'utf8').split('<script>')[1].split('</script>')[0];
+let script=['chat.js','files.js','learning.js','settings.js'].map(f=>fs.readFileSync(path.join(__dirname,'../akatikito/ui',f),'utf8')).join('\n');
 script=script.slice(0,script.lastIndexOf('init().catch'));
 vm.runInContext(script,context);
 const run=source=>vm.runInContext(source,context);

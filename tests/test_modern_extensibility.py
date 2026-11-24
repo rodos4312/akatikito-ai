@@ -934,7 +934,8 @@ def test_converter_respects_write_guard_backup_and_export_chat(tmp_path, monkeyp
     assert exp_cancel == {"cancelled": True}
 
     # 5. Verify real UI JS flow (applyMcpPreset -> parseMcpArgs -> saveMcpServer) handles paths with spaces & backslashes
-    ui_js = (Path(__file__).resolve().parents[1] / "akatikito" / "ui.html").read_text(encoding="utf-8")
+    ui_dir = Path(__file__).resolve().parents[1] / "akatikito" / "ui"
+    ui_js = "\n".join((ui_dir / f).read_text(encoding="utf-8") for f in ("chat.js", "files.js", "learning.js", "settings.js"))
     fn_start = ui_js.index("function onMcpTransport()")
     fn_end = ui_js.index("async function removeMcpServer(", fn_start)
     fn_code = ui_js[fn_start:fn_end]
@@ -1398,8 +1399,8 @@ def test_audit_fixes_security_math_youtube_skills_agenda_ui_and_annotations(tmp_
     assert "Ctrl.Index" in read_file(ws, "Ctrl.cs", outline=True)
 
     # 8. UI JS checks in Node: trailing-EOF markdown table, safe DOM button (no inline onclick), agenda signature dedup
-    ui_html = (Path(__file__).resolve().parents[1] / "akatikito" / "ui.html").read_text(encoding="utf-8")
-    js_body = ui_html.split("<script>", 1)[1].split("</script>", 1)[0]
+    ui_dir = Path(__file__).resolve().parents[1] / "akatikito" / "ui"
+    js_body = "\n".join((ui_dir / f).read_text(encoding="utf-8") for f in ("chat.js", "files.js", "learning.js", "settings.js"))
     js_body = js_body[: js_body.rindex("init().catch")]
     node_check = (
         "const assert = require('node:assert/strict');\n"
@@ -1600,8 +1601,8 @@ def test_mcp_upgrades_secrets_json_import_stderr_autoconnect_and_ui(tmp_path):
     assert "demo" in hub3.auto_warnings
 
     # 5. UI JS check: applyMcpPreset('notion'), editMcpServer, parseKeyValLines, saveMcpServer payload
-    ui_html = (Path(__file__).resolve().parents[1] / "akatikito" / "ui.html").read_text(encoding="utf-8")
-    js_body = ui_html.split("<script>", 1)[1].split("</script>", 1)[0]
+    ui_dir = Path(__file__).resolve().parents[1] / "akatikito" / "ui"
+    js_body = "\n".join((ui_dir / f).read_text(encoding="utf-8") for f in ("chat.js", "files.js", "learning.js", "settings.js"))
     js_body = js_body[: js_body.rindex("init().catch")]
     node_mcp = (
         "const assert = require('node:assert/strict');\n"
