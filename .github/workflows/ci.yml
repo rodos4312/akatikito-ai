@@ -32,7 +32,8 @@ jobs:
         run: ruff check --select F821,F811,E9,F63,F7 --isolated akatikito scripts tests app.py
 
       - name: Install template parser dependencies
-        run: npm.cmd install --prefix akatikito/template_parsers --no-audit --no-fund
+        working-directory: akatikito/template_parsers
+        run: npm.cmd ci --no-audit --no-fund
 
       - name: Validate UI JavaScript & Node UI tests
         run: |
