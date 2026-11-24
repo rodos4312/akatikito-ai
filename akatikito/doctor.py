@@ -363,17 +363,30 @@ class Doctor:
     def _check_orphan_locks(self) -> dict[str, Any]:
         orphans = self._find_orphan_locks()
         if not orphans:
-            return _item("orphan_locks", "Ορφανά αρχεία .lock", "ok", "Δεν βρέθηκαν ορφανά αρχεία .lock από παλιό crash.")
-        names = [p.name for p in orphans[:10]]
+            return _item("orphan_locks", "Ορφανά αρχεία .lock", "ok", "Δεν βρέθηκαν παλιά αρχεία κλειδώματος.")
+        ldir = self._resolve_lock_dir()
+        ldir_res = ldir.resolve() if ldir else None
+        pid_orphans = [p for p in orphans if ldir_res is None or p.parent.resolve() != ldir_res]
+        if pid_orphans:
+            return _item(
+                "orphan_locks",
+                "Ορφανά αρχεία .lock",
+                "warn",
+                f"Βρέθηκαν {len(orphans)} παλιά αρχεία κλειδώματος χωρίς ενεργή διεργασία.",
+                fixable=True,
+                fix_label="Καθάρισμα",
+                fix_preview=f"Θα διαγραφούν {len(orphans)} παλιά αρχεία κλειδώματος που δεν κρατιούνται από καμία διεργασία.",
+                meta={"count": len(orphans)},
+            )
         return _item(
             "orphan_locks",
-            "Ορφανά αρχεία .lock",
-            "warn",
-            f"Βρέθηκαν {len(orphans)} ορφανά αρχεία .lock χωρίς ενεργή διεργασία ({', '.join(names)}).",
+            "Αρχεία κλειδώματος (.lock)",
+            "ok",
+            f"Υπάρχουν {len(orphans)} παλιά αρχεία κλειδώματος (φυσιολογικό — καθάρισμα προαιρετικό).",
             fixable=True,
-            fix_label="Διαγραφή",
-            fix_preview=f"Θα διαγραφούν {len(orphans)} ορφανά .lock αρχεία που δεν κρατιούνται από καμία διεργασία.",
-            meta={"paths": [str(p) for p in orphans]},
+            fix_label="Προαιρετικό καθάρισμα",
+            fix_preview=f"Θα καθαριστούν {len(orphans)} παλιά ανενεργά αρχεία κλειδώματος από τον φάκελο temp.",
+            meta={"count": len(orphans)},
         )
 
     def _find_temp_partials(self) -> list[Path]:
