@@ -64,13 +64,20 @@ def run_checks(root: Path, scripts: list[str] | None = None) -> tuple[bool, str]
             ast.parse(p.read_text(encoding="utf-8-sig"), filename=str(p))
         logs.append("OK Python syntax")
         html = (root / "akatikito/ui.html").read_text(encoding="utf-8")
-        script = html.split("<script>", 1)[1].split("</script>", 1)[0]
-        js = work / "ui.js"
-        js.write_text(script, encoding="utf-8")
         node = shutil.which("node")
         if not node:
             return finish(False, "Δεν βρέθηκε node για έλεγχο του UI.")
-        commands = [("UI JavaScript syntax", [node, "--check", str(js)])]
+        commands = []
+        # Inline <script> blocks (older single-file UI) and every split UI file.
+        for index, part in enumerate(html.split("<script>")[1:]):
+            js = work / f"ui-inline-{index}.js"
+            js.write_text(part.split("</script>", 1)[0], encoding="utf-8")
+            commands.append((f"UI JavaScript syntax (inline {index})", [node, "--check", str(js)]))
+        ui_scripts = sorted((root / "akatikito/ui").glob("*.js"))
+        for js in ui_scripts:
+            commands.append((f"UI JavaScript syntax ({js.name})", [node, "--check", str(js)]))
+        if not commands:
+            return finish(False, "Δεν βρέθηκε JavaScript του UI για έλεγχο.")
         selected = scripts if scripts is not None else [str(p.relative_to(root)).replace("\\", "/") for p in sorted((root / "tests").glob("test_*.py"))] + ["tests/smoke.py"]
         if not selected:
             return finish(False, "Δεν υπάρχουν δοκιμές: η αναβάθμιση απορρίπτεται.")

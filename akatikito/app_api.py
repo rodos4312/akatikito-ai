@@ -28,7 +28,6 @@ from .app_api_ops import OpsStateMixin
 from .app_api_files import FilesStateMixin
 
 APP_ROOT = Path(__file__).resolve().parents[1]
-UI_FILE = APP_ROOT / "akatikito" / "ui.html"
 
 
 def requests_self_upgrade(text: str, current_project: str = "") -> bool:
@@ -681,7 +680,7 @@ class AppState(OpsStateMixin, FilesStateMixin):
             agent.set_mode("code")
             agent.runtime_instructions = (
                 "\nΑΥΤΟΑΝΑΒΑΘΜΙΣΗ ΕΝΕΡΓΗ: δουλεύεις σε υποψήφιο της τρέχουσας εγκατεστημένης εφαρμογής. "
-                "ΜΠΟΡΕΙΣ να βελτιώσεις τον εαυτό σου: το agent.py, το app_api.py, το ui.html, τα εργαλεία και τα υπόλοιπα αρχεία της εφαρμογής. "
+                "ΜΠΟΡΕΙΣ να βελτιώσεις τον εαυτό σου: το agent.py, το app_api*.py, το ui.html με τα akatikito/ui/*.js και ui/style.css, τα εργαλεία και τα υπόλοιπα αρχεία της εφαρμογής. "
                 "Προστατεύονται ΜΟΝΟ τα υπάρχοντα tests και τα self_update.py / verification.py που εγκρίνουν τις αλλαγές. "
                 "Αυτός ο περιορισμός ΔΕΝ απαγορεύει την αυτοαναβάθμιση του υπόλοιπου κώδικα. Πρόσθεσε νέα tests για τις αλλαγές σου. "
                 "Η εντολή verify τρέχει τον εξωτερικό ελεγκτή με τις εξαρτήσεις της εγκατεστημένης εφαρμογής. "

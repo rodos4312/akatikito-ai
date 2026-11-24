@@ -141,8 +141,8 @@ def test_i18n_six_languages_parity_api_agent_and_ui_keys(tmp_path):
         assert set(TRANSLATIONS[lang].keys()) == base_keys, f"Missing keys in {lang}"
         assert all(v.strip() for v in TRANSLATIONS[lang].values()), f"Empty value in {lang}"
 
-    # 2. Every data-i18n / data-i18n-placeholder attribute in ui.html exists in the catalog
-    html = (ROOT / "akatikito" / "ui.html").read_text(encoding="utf-8")
+    # 2. Every data-i18n / data-i18n-placeholder attribute in the UI (html + ui/*.js) exists in the catalog
+    html = "\n".join(p.read_text(encoding="utf-8") for p in [ROOT / "akatikito" / "ui.html", *sorted((ROOT / "akatikito" / "ui").glob("*.js"))])
     used_keys = set(re.findall(r'data-i18n(?:-placeholder)?="([a-z0-9_]+)"', html))
     assert used_keys and used_keys <= base_keys, f"Unknown i18n keys in ui.html: {used_keys - base_keys}"
 
