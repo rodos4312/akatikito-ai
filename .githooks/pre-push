@@ -1,0 +1,4 @@
+#!/bin/sh
+# Akatikito: full checks (including pytest) before every push.
+# Emergency bypass: git push --no-verify
+exec cmd.exe //c ".\check.cmd"

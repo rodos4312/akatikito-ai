@@ -26,7 +26,7 @@ jobs:
           python -m pip install --upgrade pip
           if (Test-Path requirements.txt) { pip install -r requirements.txt }
           pip install -r requirements-features.txt
-          pip install pytest ruff
+          pip install -r requirements-dev.txt
 
       - name: Ruff (undefined names, syntax)
         run: ruff check --select F821,F811,E9,F63,F7 --isolated akatikito scripts tests app.py
@@ -40,7 +40,7 @@ jobs:
           Get-ChildItem tests\*.cjs | ForEach-Object { node $_.FullName; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE } }
 
       - name: Run Python test suites
-        run: pytest tests/test_best_of_both_worlds.py tests/test_pro_release.py tests/test_modern_extensibility.py tests/test_roadmap_extensions.py tests/test_app_api.py tests/test_gateway_ui.py tests/test_gateway_channels.py tests/test_engine_improvements.py tests/test_engine_regressions.py tests/test_dependency_map.py tests/test_general_workflows.py tests/test_learning.py tests/test_files_ui.py tests/test_agenda.py tests/test_mcp_http.py -k "not real_chromium" -q
+        run: pytest -k "not real_chromium" -q -p no:cacheprovider
 
       - name: Run 10-scenario offline eval harness
         run: python scripts/run_evals.py

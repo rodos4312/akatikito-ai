@@ -1,6 +1,8 @@
 @echo off
-rem Akatikito quality gate: ruff (undefined names / syntax), pytest, node UI tests.
-rem Runs from the pre-commit hook (.githooks/pre-commit) and by hand. Exit 1 = do not commit.
+rem Akatikito quality gate.
+rem   check.cmd          full: ruff, UI JavaScript syntax, node UI tests, pytest  (pre-push, by hand)
+rem   check.cmd --fast   quick: everything except pytest, a few seconds           (pre-commit)
+rem Exit 1 = do not commit / push.
 setlocal
 cd /d "%~dp0"
 
@@ -12,7 +14,7 @@ echo [1/4] ruff
 if not errorlevel 1 (
   "%PY%" -m ruff check --select F821,F811,E9,F63,F7 --isolated akatikito scripts tests app.py || goto :fail
 ) else (
-  where ruff >nul 2>&1 || (echo ruff not found: install it with  "%PY%" -m pip install ruff & goto :fail)
+  where ruff >nul 2>&1 || (echo ruff not found: run  "%PY%" -m pip install -r requirements-dev.txt & goto :fail)
   ruff check --select F821,F811,E9,F63,F7 --isolated akatikito scripts tests app.py || goto :fail
 )
 
@@ -26,14 +28,20 @@ for %%f in (tests\*.cjs) do (
   node "%%f" >nul || (echo FAILED: %%f & goto :fail)
 )
 
+if /i "%~1"=="--fast" (
+  echo [4/4] pytest skipped in --fast mode; it runs before push.
+  goto :ok
+)
+
 echo [4/4] pytest
 "%PY%" -m pytest -q -x -p no:cacheprovider || goto :fail
 
+:ok
 echo.
 echo OK: all checks passed.
 exit /b 0
 
 :fail
 echo.
-echo CHECKS FAILED: fix the errors above before committing.
+echo CHECKS FAILED: fix the errors above first.
 exit /b 1

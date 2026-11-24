@@ -38,10 +38,12 @@
 Το πιο σημαντικό βήμα: σε προστατεύει χωρίς εξωτερικό έλεγχο.
 
 1. [x] `check.cmd` στο PC: ruff (F821/F811/E9/F63/F7) → `node --check` στα `ui/*.js` → node UI tests → pytest.
-2. [x] **pre-commit hook** στο `.githooks/pre-commit` (κόκκινο = δεν γίνεται commit).
+2. [x] **Hooks** στο `.githooks/`: το `pre-commit` τρέχει το `check.cmd --fast` (ruff + JS + node tests, λίγα δευτερόλεπτα)
+   και το `pre-push` ολόκληρο το `check.cmd` με pytest (κόκκινο = δεν γίνεται commit/push).
+   Εργαλεία ελέγχου: `pip install -r requirements-dev.txt`.
    Σε νέο clone ενεργοποιείται με `git config core.hooksPath .githooks`. Παράκαμψη μόνο σε ανάγκη: `git commit --no-verify`.
 3. [ ] Στο κινητό: `flutter analyze` + `flutter test` στο hook.
-4. [x] CI του PC στο `.github/workflows/ci.yml` (με ruff και έλεγχο των `ui/*.js`) · [ ] CI του κινητού.
+4. [x] CI του PC στο `.github/workflows/ci.yml` (ruff, `ui/*.js`, **όλη** η σουίτα pytest εκτός από το Chromium) · [ ] CI του κινητού.
 
 Επαληθεύτηκε: commit με όνομα που δεν έχει οριστεί απορρίφθηκε από τον hook.
 
