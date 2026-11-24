@@ -31,6 +31,11 @@ jobs:
       - name: Ruff (undefined names, syntax)
         run: ruff check --select F821,F811,E9,F63,F7 --isolated akatikito scripts tests app.py
 
+      - name: Security audit Python dependencies (pip-audit)
+        run: |
+          pip install pip-audit
+          pip-audit -r requirements.txt -r requirements-features.txt --progress-spinner off
+
       - name: Install template parser dependencies
         working-directory: akatikito/template_parsers
         run: npm.cmd ci --no-audit --no-fund
