@@ -260,6 +260,17 @@ class MemoryStore:
         with self._lock:
             self._db.execute(f"UPDATE memories SET {column} = {column} + 1 WHERE id = ?", (int(memory_id),))
 
+    def archive_legacy(self, source: str, records: list) -> None:
+        """Keep an old store's history (e.g. profile.json revisions) verbatim, once per record."""
+        with self._lock:
+            key = f"legacy:{source}"
+            row = self._db.execute("SELECT value FROM meta WHERE key = ?", (key,)).fetchone()
+            kept = json.loads(row[0]) if row else []
+            seen = {json.dumps(r, sort_keys=True, ensure_ascii=False) for r in kept}
+            kept += [r for r in records if json.dumps(r, sort_keys=True, ensure_ascii=False) not in seen]
+            self._db.execute("INSERT OR REPLACE INTO meta(key, value) VALUES (?, ?)",
+                             (key, json.dumps(kept, ensure_ascii=False)))
+
     def add_proposal(self, payload: dict) -> int:
         with self._lock:
             cur = self._db.execute("INSERT INTO proposals(payload_json, created_at) VALUES (?, ?)",
