@@ -4,19 +4,28 @@
 <meta charset="utf-8">
 <title>Akatikito</title>
 <link rel="stylesheet" href="/ui/style.css">
+<link rel="stylesheet" href="/ui/studio.css">
 </head>
 <body>
 
 <nav id="sidebar">
-  <div id="logo">🛠️ Akatikito <span class="sub" id="ver"></span></div>
+  <div id="logo-row">
+    <div id="logo">
+      <span id="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3z"/><path d="M12 12l8-4.5M12 12v9M12 12L4 7.5"/></svg></span>
+      <span id="logo-text">Akatikito</span>
+      <span class="sub" id="ver"></span>
+    </div>
+    <button class="btn" id="sidebar-toggle" type="button" onclick="toggleSidebar()" aria-expanded="true" aria-label="Σύμπτυξη πλαϊνού μενού" title="Σύμπτυξη πλαϊνού μενού (Ctrl+\)">⇤</button>
+  </div>
   <div class="tabs" role="tablist" aria-label="Κύριο Μενού Κατηγοριών">
-    <button id="tab-sess" class="active" data-i18n="tab_sess" onclick="showTab('sess')">💬 Συνομιλίες</button>
-    <button id="tab-agenda" data-i18n="tab_agenda" onclick="showTab('agenda')">⏰ Ατζέντα & Jobs</button>
-    <button id="tab-providers" data-i18n="tab_providers" onclick="showTab('providers')">🤖 Πάροχοι / Μοντέλα</button>
-    <button id="tab-plugins" data-i18n="tab_plugins" onclick="showTab('plugins')">🔌 Πρόσθετα</button>
-    <button id="tab-skills" data-i18n="tab_skills" onclick="showTab('skills')">📘 Skills</button>
-    <button id="tab-memory" data-i18n="tab_memory" onclick="showTab('memory')">🧠 Μνήμη</button>
-    <button id="tab-set" data-i18n="tab_set" onclick="showTab('set')">⚙️ Ρυθμίσεις</button>
+    <button id="tab-sess" class="active" data-i18n="tab_sess" onclick="showTab('sess')">Συνομιλίες</button>
+    <button id="tab-agenda" data-i18n="tab_agenda" onclick="showTab('agenda')">Ατζέντα & Jobs</button>
+    <button id="tab-providers" data-i18n="tab_providers" onclick="showTab('providers')">Πάροχοι / Μοντέλα</button>
+    <button id="tab-plugins" data-i18n="tab_plugins" onclick="showTab('plugins')">Πρόσθετα</button>
+    <button id="tab-skills" data-i18n="tab_skills" onclick="showTab('skills')">Skills</button>
+    <button id="tab-memory" data-i18n="tab_memory" onclick="showTab('memory')">Μνήμη</button>
+    <button id="tab-mobile" data-i18n="tab_mobile" onclick="showTab('mobile')">Κινητό</button>
+    <button id="tab-set" data-i18n="tab_set" onclick="showTab('set')">Ρυθμίσεις</button>
   </div>
 
   <!-- ΚΑΡΤΕΛΑ ΣΥΝΟΜΙΛΙΩΝ ΣΤΟ ΠΛΑΪΝΟ ΜΕΝΟΥ -->
@@ -129,8 +138,11 @@
     <span class="badge" id="busy-badge">💤 αδρανής</span>
     <button class="btn" id="cmd-open-btn" data-i18n="cmd_palette_btn" style="width:auto;padding:4px 8px;font-size:12px" onclick="openCommandPalette()" title="Ctrl+K">⌘ Εντολές</button>
     <button class="btn" id="theme-toggle" style="width:auto;padding:4px 8px;font-size:12px" onclick="toggleTheme()" title="Light / Dark">☀️</button>
-    <button class="btn" style="width:auto;padding:4px 6px;font-size:11px" onclick="adjustFontSize(-1)" title="Μικρότερα γράμματα">A-</button>
-    <button class="btn" style="width:auto;padding:4px 6px;font-size:11px" onclick="adjustFontSize(1)" title="Μεγαλύτερα γράμματα">A+</button>
+    <div class="font-ctl" role="group" aria-label="Μέγεθος γραμματοσειράς">
+      <button class="btn" onclick="adjustFontSize(-1)" title="Μικρότερα γράμματα">A-</button>
+      <span id="font-size-val">14px</span>
+      <button class="btn" onclick="adjustFontSize(1)" title="Μεγαλύτερα γράμματα">A+</button>
+    </div>
     <select id="ui-lang" onchange="changeUiLanguage(this.value)" aria-label="Interface Language" title="Γλώσσα διεπαφής / Interface Language" style="width:auto;background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:4px 7px;font-size:12px;cursor:pointer">
       <option value="el">🌐 ΕΛ</option>
       <option value="en">🌐 EN</option>
@@ -416,123 +428,191 @@
       </div>
     </div>
 
-    <!-- 6. ΓΕΝΙΚΕΣ ΡΥΘΜΙΣΕΙΣ -->
-    <div id="view-set" style="display:none;flex-direction:column;gap:14px">
-      <h2 data-i18n="hdr_settings">⚙️ Γενικές Ρυθμίσεις</h2>
-      <div class="menu-card">
-        <h4 data-i18n="lbl_ui_lang">🌐 Γλώσσα διεπαφής (UI Language)</h4>
-        <div class="field">
-          <select id="settings-ui-lang" onchange="changeUiLanguage(this.value)">
-            <option value="el">Ελληνικά (Greek)</option>
-            <option value="en">English</option>
-            <option value="ru">Русский (Russian)</option>
-            <option value="de">Deutsch (German)</option>
-            <option value="es">Español (Spanish)</option>
-            <option value="fr">Français (French)</option>
-          </select>
-        </div>
+    <!-- 5b. ΣΥΝΔΕΣΗ ΚΙΝΗΤΟΥ (AKATIKITO MOBILE) -->
+    <div id="view-mobile" style="display:none;flex-direction:column;gap:14px">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+        <h2 data-i18n="hdr_mobile">📱 Σύνδεση Κινητού (Akatikito Mobile)</h2>
+        <span id="mobile-status-pill" class="mobile-status-pill">● Ανενεργή</span>
       </div>
       <div class="menu-card" id="mobile-bridge-box">
-        <h4 data-i18n="hdr_mobile">📱 Σύνδεση Κινητού (Akatikito Mobile)</h4>
-        <div class="hint" data-i18n="mobile_desc">Σύνδεσε την εφαρμογή Android του Ακατίκητου με τον υπολογιστή σου μέσω QR (αυτόματα με Tailscale 4G/5G ή τοπικό Wi-Fi).</div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px">
-          <button class="btn primary" id="mobile-bridge-btn" data-i18n="mobile_btn_start" style="width:auto" onclick="toggleMobileBridge()">📱 Ενεργοποίηση Σύνδεσης Κινητού (QR / Tailscale)</button>
+        <div class="mobile-hero">
+          <div style="display:flex;flex-direction:column;gap:10px;min-width:0">
+            <h4>Ασφαλής σύζευξη Android με QR</h4>
+            <p class="hint" data-i18n="mobile_desc">Σύνδεσε την εφαρμογή Android του Ακατίκητου με τον υπολογιστή σου μέσω QR (αυτόματα με Tailscale 4G/5G ή τοπικό Wi-Fi). Τα API keys παραμένουν αποκλειστικά στο PC.</p>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px">
+              <button class="btn primary" id="mobile-bridge-btn" data-i18n="mobile_btn_start" style="width:auto" onclick="toggleMobileBridge()">📱 Ενεργοποίηση Σύνδεσης Κινητού (QR / Tailscale)</button>
+              <button class="btn" style="width:auto" onclick="refreshMobileBridge()">🔄 Ανανέωση</button>
+            </div>
+            <div class="hint" style="border-top:1px solid var(--border);padding-top:8px">
+              Προτεινόμενο για εκτός σπιτιού (4G/5G): <strong>Tailscale</strong> (κρυπτογραφημένο WireGuard). Το απλό τοπικό Wi-Fi προορίζεται μόνο για έμπιστο οικιακό δίκτυο.
+            </div>
+          </div>
+          <div id="mobile-bridge-info" class="hint" style="white-space:pre-wrap;word-break:break-all"></div>
         </div>
-        <div id="mobile-bridge-info" class="hint" style="white-space:pre-wrap;word-break:break-all;margin-top:6px"></div>
       </div>
+    </div>
 
-      <div class="menu-card" id="smart-routing-box">
-        <h4>⚡🧠 Smart Model Routing (Auto)</h4>
-        <div class="hint">Όρισε διαφορετικό Πάροχο + Μοντέλο για απλές εργασίες (π.χ. GLM / Gemini Flash) και για δύσκολες / reasoning εργασίες (π.χ. DeepSeek Pro / Claude). Χρησιμοποιεί τα αποθηκευμένα API keys σου!</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:6px">
-          <div class="field">
-            <label>⚡ Πάροχος Απλών Εργασιών</label>
-            <select id="fast-provider" onchange="saveModelRouting()">
-              <option value="">(Ίδιος με ενεργό)</option>
-              <option value="DeepSeek">DeepSeek</option>
-              <option value="Google Gemini">Google Gemini</option>
-              <option value="Anthropic (Claude)">Anthropic (Claude)</option>
-              <option value="OpenAI">OpenAI</option>
-              <option value="Z.ai (GLM)">Z.ai (GLM)</option>
-              <option value="OpenRouter">OpenRouter</option>
-              <option value="NanoGPT (συνδρομή)">NanoGPT (συνδρομή)</option>
-              <option value="NanoGPT (credits)">NanoGPT (credits)</option>
-              <option value="Ollama (τοπικό)">Ollama (τοπικό)</option>
-            </select>
-          </div>
-          <div class="field">
-            <label>⚡ Μοντέλο Απλών Εργασιών</label>
-            <input id="fast-model" placeholder="π.χ. glm-4.5-air / gemini-2.5-flash / deepseek-chat" onchange="saveModelRouting()">
-          </div>
+    <!-- 6. ΓΕΝΙΚΕΣ ΡΥΘΜΙΣΕΙΣ (Master-Detail) -->
+    <div id="view-set" style="display:none;flex-direction:column;gap:14px">
+      <h2 data-i18n="hdr_settings">⚙️ Ρυθμίσεις</h2>
+      <div class="md-split">
+        <div class="md-list" id="settings-md-list" role="tablist" aria-label="Κατηγορίες Ρυθμίσεων">
+          <div class="md-list-sec">Κατηγορίες</div>
+          <button class="md-item active" id="set-nav-general" role="tab" aria-selected="true" onclick="selectSettingsPane('general')"><span>🌐 Εμφάνιση & Γλώσσα</span></button>
+          <button class="md-item" id="set-nav-routing" role="tab" aria-selected="false" onclick="selectSettingsPane('routing')"><span>⚡ Routing & Fallback</span></button>
+          <button class="md-item" id="set-nav-security" role="tab" aria-selected="false" onclick="selectSettingsPane('security')"><span>🛡️ Ασφάλεια & Advanced</span></button>
+          <button class="md-item" id="set-nav-voice" role="tab" aria-selected="false" onclick="selectSettingsPane('voice')"><span>🎙️ Τοπική Φωνή</span></button>
+          <button class="md-item" id="set-nav-budget" role="tab" aria-selected="false" onclick="selectSettingsPane('budget')"><span>💳 Κόστος & Κλειδιά</span></button>
         </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:4px">
-          <div class="field">
-            <label>🧠 Πάροχος Δύσκολων / Reasoning</label>
-            <select id="smart-provider" onchange="saveModelRouting()">
-              <option value="">(Ίδιος με ενεργό)</option>
-              <option value="DeepSeek">DeepSeek</option>
-              <option value="Google Gemini">Google Gemini</option>
-              <option value="Anthropic (Claude)">Anthropic (Claude)</option>
-              <option value="OpenAI">OpenAI</option>
-              <option value="Z.ai (GLM)">Z.ai (GLM)</option>
-              <option value="OpenRouter">OpenRouter</option>
-              <option value="NanoGPT (συνδρομή)">NanoGPT (συνδρομή)</option>
-              <option value="NanoGPT (credits)">NanoGPT (credits)</option>
-              <option value="Ollama (τοπικό)">Ollama (τοπικό)</option>
-            </select>
+        <div class="md-detail">
+          <div class="menu-card" id="set-pane-general">
+            <h4 data-i18n="lbl_ui_lang">🌐 Εμφάνιση & Γλώσσα διεπαφής</h4>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+              <div class="field">
+                <label>Γλώσσα (UI Language)</label>
+                <select id="settings-ui-lang" onchange="changeUiLanguage(this.value)">
+                  <option value="el">Ελληνικά (Greek)</option>
+                  <option value="en">English</option>
+                  <option value="ru">Русский (Russian)</option>
+                  <option value="de">Deutsch (German)</option>
+                  <option value="es">Español (Spanish)</option>
+                  <option value="fr">Français (French)</option>
+                </select>
+              </div>
+              <div class="field">
+                <label>Θέμα εμφάνισης</label>
+                <select id="settings-ui-theme" onchange="applyTheme(this.value);api('/api/preferences',{ui_theme:this.value}).catch(()=>{})">
+                  <option value="dark">🌙 Σκοτεινό (Dark)</option>
+                  <option value="light">☀️ Φωτεινό (Light)</option>
+                </select>
+              </div>
+            </div>
+            <div class="field">
+              <label>Μέγεθος γραμματοσειράς: <strong id="settings-font-val">14px</strong> (12–20px)</label>
+              <input id="settings-font-size" type="range" min="12" max="20" step="1" value="14" oninput="applyFontSize(this.value)" onchange="api('/api/preferences',{ui_font_size:Number(this.value)}).catch(()=>{})">
+            </div>
+            <div class="field">
+              <label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input id="settings-sidebar-collapsed" type="checkbox" style="width:auto" onchange="toggleSidebar(this.checked)"> <span>Σύμπτυξη πλαϊνού μενού σε λωρίδα εικονιδίων (Ctrl+\)</span></label>
+            </div>
           </div>
-          <div class="field">
-            <label>🧠 Μοντέλο Δύσκολων / Reasoning</label>
-            <input id="smart-model" placeholder="π.χ. deepseek-reasoner / gemini-2.5-pro / claude-sonnet-4" onchange="saveModelRouting()">
-          </div>
-        </div>
-      </div>
 
-      <div class="menu-card">
-        <h4 data-i18n="hdr_security">🛡️ Ασφάλεια & Εγκρίσεις</h4>
-        <div class="field"><label><input id="autonomous" type="checkbox" style="width:auto" onchange="savePreferences()"> <span data-i18n="set_chk_auto">Αυτόνομη εκτέλεση συνηθισμένων εντολών</span></label><span class="hint" data-i18n="set_chk_auto_hint">Οι επικίνδυνες εντολές χρειάζονται πάντα έγκριση.</span></div>
-        <div class="field"><label><input id="cautious-edits" type="checkbox" style="width:auto" onchange="savePreferences()"> <span data-i18n="set_chk_cautious">Προεπισκόπηση και έγκριση κάθε αλλαγής αρχείου</span></label></div>
-        <div class="field"><label><input id="supports-vision" type="checkbox" style="width:auto" onchange="savePreferences()"> <span data-i18n="set_chk_vision">Το επιλεγμένο μοντέλο υποστηρίζει εικόνες (vision)</span></label></div>
-        <div class="field"><label><input id="advanced-view" type="checkbox" style="width:auto" onchange="savePreferences()"> <span data-i18n="set_chk_adv">Προχωρημένη προβολή (εργαλεία και logs)</span></label></div>
-        <details class="set-group" id="advanced-dev-group" style="margin-top:6px">
-          <summary>🛠️ Advanced (για προγραμματιστές)</summary>
-          <div class="set-body">
-            <span class="hint">Κλειστό από προεπιλογή (UI + API + εργαλεία μοντέλου). Ενεργοποιείται μόνο από εσένα.</span>
-            <div id="advanced-features-list" style="display:flex;flex-direction:column;gap:6px"></div>
+          <div class="menu-card" id="set-pane-routing" style="display:none">
+            <div id="smart-routing-box" style="display:flex;flex-direction:column;gap:10px">
+              <h4>⚡🧠 Smart Model Routing & Εφεδρικός Πάροχος</h4>
+              <div class="hint">Όρισε διαφορετικό Πάροχο + Μοντέλο για απλές εργασίες, για δύσκολες / reasoning εργασίες, και προαιρετικό εφεδρικό πάροχο (Fallback) σε περίπτωση 402/429/5xx. Χρησιμοποιεί μόνο τα αποθηκευμένα API keys σου (ποτέ διαρροή κλειδιού σε άλλο host).</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+                <div class="field">
+                  <label>⚡ Πάροχος Απλών Εργασιών</label>
+                  <select id="fast-provider" onchange="saveModelRouting()">
+                    <option value="">(Ίδιος με ενεργό)</option>
+                    <option value="DeepSeek">DeepSeek</option>
+                    <option value="Google Gemini">Google Gemini</option>
+                    <option value="Anthropic (Claude)">Anthropic (Claude)</option>
+                    <option value="OpenAI">OpenAI</option>
+                    <option value="Z.ai (GLM)">Z.ai (GLM)</option>
+                    <option value="OpenRouter">OpenRouter</option>
+                    <option value="NanoGPT (συνδρομή)">NanoGPT (συνδρομή)</option>
+                    <option value="NanoGPT (credits)">NanoGPT (credits)</option>
+                    <option value="Ollama (τοπικό)">Ollama (τοπικό)</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label>⚡ Μοντέλο Απλών Εργασιών</label>
+                  <input id="fast-model" placeholder="π.χ. glm-4.5-air / gemini-2.5-flash / deepseek-chat" onchange="saveModelRouting()">
+                </div>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+                <div class="field">
+                  <label>🧠 Πάροχος Δύσκολων / Reasoning</label>
+                  <select id="smart-provider" onchange="saveModelRouting()">
+                    <option value="">(Ίδιος με ενεργό)</option>
+                    <option value="DeepSeek">DeepSeek</option>
+                    <option value="Google Gemini">Google Gemini</option>
+                    <option value="Anthropic (Claude)">Anthropic (Claude)</option>
+                    <option value="OpenAI">OpenAI</option>
+                    <option value="Z.ai (GLM)">Z.ai (GLM)</option>
+                    <option value="OpenRouter">OpenRouter</option>
+                    <option value="NanoGPT (συνδρομή)">NanoGPT (συνδρομή)</option>
+                    <option value="NanoGPT (credits)">NanoGPT (credits)</option>
+                    <option value="Ollama (τοπικό)">Ollama (τοπικό)</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label>🧠 Μοντέλο Δύσκολων / Reasoning</label>
+                  <input id="smart-model" placeholder="π.χ. deepseek-reasoner / gemini-2.5-pro / claude-sonnet-4" onchange="saveModelRouting()">
+                </div>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;border-top:1px solid var(--border);padding-top:10px">
+                <div class="field">
+                  <label>🛟 Εφεδρικός Πάροχος (Fallback, προαιρετικό)</label>
+                  <select id="fallback-provider" onchange="saveModelRouting()">
+                    <option value="">(Χωρίς εφεδρικό)</option>
+                    <option value="DeepSeek">DeepSeek</option>
+                    <option value="Google Gemini">Google Gemini</option>
+                    <option value="Anthropic (Claude)">Anthropic (Claude)</option>
+                    <option value="OpenAI">OpenAI</option>
+                    <option value="Z.ai (GLM)">Z.ai (GLM)</option>
+                    <option value="OpenRouter">OpenRouter</option>
+                    <option value="NanoGPT (συνδρομή)">NanoGPT (συνδρομή)</option>
+                    <option value="NanoGPT (credits)">NanoGPT (credits)</option>
+                    <option value="Ollama (τοπικό)">Ollama (τοπικό)</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label>🛟 Εφεδρικό Μοντέλο (Fallback)</label>
+                  <input id="fallback-model" placeholder="π.χ. deepseek-chat / gemini-2.5-flash" onchange="saveModelRouting()">
+                </div>
+              </div>
+            </div>
           </div>
-        </details>
-        <div class="field"><label><input id="checkpoints" type="checkbox" style="width:auto" onchange="savePreferences()"> <span data-i18n="set_chk_ckpt">Checkpoint ανά μήνυμα</span></label></div>
-      </div>
 
-      <div class="menu-card">
-        <h4 data-i18n="hdr_voice">🎙️ Τοπική Φωνή (Whisper)</h4>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-          <div class="field"><label data-i18n="set_voice_model">Μοντέλο φωνής</label><select id="voice-model" onchange="configureVoice()"><option value="base">Base</option><option value="small">Small — μεγαλύτερο</option></select></div>
-          <div class="field"><label data-i18n="set_voice_lang">Γλώσσα</label><select id="voice-language" onchange="configureVoice()"><option value="el">Ελληνικά</option><option value="en">English</option><option value="ru">Русский</option><option value="de">Deutsch</option><option value="es">Español</option><option value="fr">Français</option><option value="auto">Auto</option></select></div>
-        </div>
-        <span id="voice-availability" class="hint"></span>
-        <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <button id="voice-prepare" data-i18n="set_voice_dl" class="btn" style="width:auto" onclick="prepareVoice()">⬇️ Λήψη τοπικού μοντέλου</button>
-          <button id="voice-file" data-i18n="set_voice_file" class="btn" style="width:auto" onclick="chooseVoiceFile()">🎵 Μεταγραφή τοπικού ηχητικού…</button>
-        </div>
-        <span class="hint" data-i18n="voice_hint_60s">Το μικρόφωνο γράφει έως 60 δευτερόλεπτα. Ο ήχος διαγράφεται μετά την αναγνώριση. Το κείμενο δεν στέλνεται αυτόματα.</span>
-      </div>
-
-      <div class="menu-card">
-        <h4 data-i18n="hdr_budget">💳 Κόστος, Όρια & Αποθηκευμένα Κλειδιά</h4>
-        <div id="usage-cost" class="hint"></div>
-        <div class="field"><label data-i18n="set_budget_lbl">Ημερήσιο όριο εκτιμώμενου κόστους ($, 0 χωρίς όριο)</label><input id="daily-budget" type="number" min="0" step="0.1" value="0"><span class="hint" data-i18n="budget_hint">Με ενεργό όριο απαιτούνται οι δικές σου τιμές. Η τελευταία κλήση μπορεί να υπερβεί το υπόλοιπο.</span></div>
-        <div class="field"><label data-i18n="set_prices_lbl">Τιμές ανά 1 εκατ. tokens: είσοδος / cache / έξοδος ($)</label>
-          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
-            <input id="price-input" type="number" min="0" step="0.01" placeholder="Input">
-            <input id="price-cached" type="number" min="0" step="0.01" placeholder="Cache">
-            <input id="price-output" type="number" min="0" step="0.01" placeholder="Output">
+          <div class="menu-card" id="set-pane-security" style="display:none">
+            <h4 data-i18n="hdr_security">🛡️ Ασφάλεια & Εγκρίσεις</h4>
+            <div class="field"><label><input id="autonomous" type="checkbox" style="width:auto" onchange="savePreferences()"> <span data-i18n="set_chk_auto">Αυτόνομη εκτέλεση συνηθισμένων εντολών</span></label><span class="hint" data-i18n="set_chk_auto_hint">Οι επικίνδυνες εντολές χρειάζονται πάντα έγκριση.</span></div>
+            <div class="field"><label><input id="cautious-edits" type="checkbox" style="width:auto" onchange="savePreferences()"> <span data-i18n="set_chk_cautious">Προεπισκόπηση και έγκριση κάθε αλλαγής αρχείου</span></label></div>
+            <div class="field"><label><input id="supports-vision" type="checkbox" style="width:auto" onchange="savePreferences()"> <span data-i18n="set_chk_vision">Το επιλεγμένο μοντέλο υποστηρίζει εικόνες (vision)</span></label></div>
+            <div class="field"><label><input id="advanced-view" type="checkbox" style="width:auto" onchange="savePreferences()"> <span data-i18n="set_chk_adv">Προχωρημένη προβολή (εργαλεία και logs)</span></label></div>
+            <details class="set-group" id="advanced-dev-group" style="margin-top:6px">
+              <summary>🛠️ Advanced (για προγραμματιστές)</summary>
+              <div class="set-body">
+                <span class="hint">Κλειστό από προεπιλογή (UI + API + εργαλεία μοντέλου). Ενεργοποιείται μόνο από εσένα.</span>
+                <div id="advanced-features-list" style="display:flex;flex-direction:column;gap:6px"></div>
+              </div>
+            </details>
+            <div class="field"><label><input id="checkpoints" type="checkbox" style="width:auto" onchange="savePreferences()"> <span data-i18n="set_chk_ckpt">Checkpoint ανά μήνυμα</span></label></div>
           </div>
-          <button class="btn" data-i18n="set_budget_save" style="width:auto;margin-top:6px" onclick="saveBudget()">💾 Αποθήκευση ορίου / τιμών</button>
+
+          <div class="menu-card" id="set-pane-voice" style="display:none">
+            <h4 data-i18n="hdr_voice">🎙️ Τοπική Φωνή (Whisper)</h4>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+              <div class="field"><label data-i18n="set_voice_model">Μοντέλο φωνής</label><select id="voice-model" onchange="configureVoice()"><option value="base">Base</option><option value="small">Small — μεγαλύτερο</option></select></div>
+              <div class="field"><label data-i18n="set_voice_lang">Γλώσσα</label><select id="voice-language" onchange="configureVoice()"><option value="el">Ελληνικά</option><option value="en">English</option><option value="ru">Русский</option><option value="de">Deutsch</option><option value="es">Español</option><option value="fr">Français</option><option value="auto">Auto</option></select></div>
+            </div>
+            <span id="voice-availability" class="hint"></span>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button id="voice-prepare" data-i18n="set_voice_dl" class="btn" style="width:auto" onclick="prepareVoice()">⬇️ Λήψη τοπικού μοντέλου</button>
+              <button id="voice-file" data-i18n="set_voice_file" class="btn" style="width:auto" onclick="chooseVoiceFile()">🎵 Μεταγραφή τοπικού ηχητικού…</button>
+            </div>
+            <span class="hint" data-i18n="voice_hint_60s">Το μικρόφωνο γράφει έως 60 δευτερόλεπτα. Ο ήχος διαγράφεται μετά την αναγνώριση. Το κείμενο δεν στέλνεται αυτόματα.</span>
+          </div>
+
+          <div class="menu-card" id="set-pane-budget" style="display:none">
+            <h4 data-i18n="hdr_budget">💳 Κόστος, Όρια & Αποθηκευμένα Κλειδιά</h4>
+            <div id="usage-cost" class="hint"></div>
+            <div class="field"><label data-i18n="set_budget_lbl">Ημερήσιο όριο εκτιμώμενου κόστους ($, 0 χωρίς όριο)</label><input id="daily-budget" type="number" min="0" step="0.1" value="0"><span class="hint" data-i18n="budget_hint">Με ενεργό όριο απαιτούνται οι δικές σου τιμές. Η τελευταία κλήση μπορεί να υπερβεί το υπόλοιπο.</span></div>
+            <div class="field"><label data-i18n="set_prices_lbl">Τιμές ανά 1 εκατ. tokens: είσοδος / cache / έξοδος ($)</label>
+              <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+                <input id="price-input" type="number" min="0" step="0.01" placeholder="Input">
+                <input id="price-cached" type="number" min="0" step="0.01" placeholder="Cache">
+                <input id="price-output" type="number" min="0" step="0.01" placeholder="Output">
+              </div>
+              <button class="btn" data-i18n="set_budget_save" style="width:auto;margin-top:6px" onclick="saveBudget()">💾 Αποθήκευση ορίου / τιμών</button>
+            </div>
+            <div id="saved-keys"></div>
+          </div>
+          <div id="set-msg"></div>
         </div>
-        <div id="saved-keys"></div>
       </div>
-      <div id="set-msg"></div>
     </div>
   </section>
 
@@ -609,7 +689,7 @@
   <div id="files-error" role="status" aria-live="polite"></div>
   <div id="file-list"></div>
   <section id="file-preview" hidden aria-label="Προεπισκόπηση αρχείου">
-    <div style="display:flex;justify-content:space-between;align-items:center;gap:6px"><strong id="file-title"></strong><div style="display:flex;gap:4px"><button class="btn" id="file-diff-toggle" style="width:auto;padding:3px 7px;font-size:11px" onclick="toggleFileDiff()">🔍 Diff</button><button class="btn" id="file-md-toggle" data-i18n="btn_preview_md" style="display:none;width:auto;padding:3px 7px;font-size:11px" onclick="toggleMarkdownPreview()">📖 Μορφοποιημένο</button></div></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:6px"><div><strong id="file-title"></strong><span id="file-kind-pill" class="file-kind-pill" style="display:none"></span></div><div style="display:flex;gap:4px"><button class="btn" id="file-diff-toggle" style="width:auto;padding:3px 7px;font-size:11px" onclick="toggleFileDiff()">🔍 Diff</button><button class="btn" id="file-md-toggle" data-i18n="btn_preview_md" style="display:none;width:auto;padding:3px 7px;font-size:11px" onclick="toggleMarkdownPreview()">📖 Μορφοποιημένο</button></div></div>
     <div id="file-info" class="hint"></div>
     <div id="file-diff-box" class="diff-box" style="display:none"></div>
     <div id="file-rich" style="display:none;overflow:auto;max-height:42vh;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px"></div>
@@ -638,7 +718,6 @@
 </div>
 <div id="channel-session-overlay" style="display:none" role="dialog" aria-label="Ιστορικό καναλιού"></div>
 <div id="proj-menu" role="menu" aria-label="Πρόσφατα Projects"></div>
-<div id="drop-overlay"><div class="drop-box" data-i18n="drop_hint">📎 Άφησε εδώ PDF, Word, Excel, CSV, κείμενο ή εικόνα για άμεση επισύναψη</div></div>
 <div id="cmd-palette" role="dialog" aria-modal="true" onclick="if(event.target===this)closeCommandPalette()">
   <div class="cmd-box">
     <input id="cmd-input" data-i18n-placeholder="cmd_palette_ph" placeholder="Γράψε εντολή, project, ρουτίνα ή ρύθμιση… (Esc για κλείσιμο)" oninput="renderCommandPalette(this.value)" onkeydown="onCmdKey(event)" style="background:var(--panel2);border:1px solid var(--accent);border-radius:8px;color:var(--text);padding:10px 12px;font-size:14px">
@@ -658,5 +737,6 @@
 <script src="/ui/attachments.js"></script>
 <script src="/ui/learning.js"></script>
 <script src="/ui/settings.js"></script>
+<script src="/ui/studio.js"></script>
 </body>
 </html>

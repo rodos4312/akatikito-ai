@@ -65,6 +65,7 @@ def _load_routing_fields(settings: Settings, data: dict) -> None:
         "fallback_model",
     ):
         setattr(settings, field_name, str(data.get(field_name) or "").strip())
+    settings.sidebar_collapsed = data.get("sidebar_collapsed") is True
 
 
 def short_key(key: str) -> str:
@@ -107,6 +108,7 @@ class Settings:
     ui_language: str = 'el'
     ui_theme: str = 'dark'
     ui_font_size: int = 14
+    sidebar_collapsed: bool = False
     recent_projects: list[str] = field(default_factory=list)
     global_hotkey: str = "Alt+Space"
     onboarding_complete: bool = False
@@ -138,7 +140,7 @@ class Settings:
         settings.voice_language=data.get('voice_language') if data.get('voice_language') in ('el','en','ru','de','es','fr','auto') else 'el'
         settings.ui_language=normalize_lang(data.get('ui_language')) if data.get('ui_language') in SUPPORTED_LANGUAGES else 'el'
         settings.ui_theme=data.get('ui_theme') if data.get('ui_theme') in ('dark','light') else 'dark'
-        try: settings.ui_font_size=max(12,min(18,int(data.get('ui_font_size',14))))
+        try: settings.ui_font_size=max(12,min(20,int(data.get('ui_font_size',14))))
         except (TypeError,ValueError): settings.ui_font_size=14
         rp = data.get('recent_projects')
         if isinstance(rp, list):
@@ -193,7 +195,7 @@ class Settings:
         payload = {
             'onboarding_complete':self.onboarding_complete,
             'voice_model':self.voice_model,'voice_language':self.voice_language,'ui_language':self.ui_language,
-            'ui_theme':self.ui_theme,'ui_font_size':int(self.ui_font_size),'recent_projects':list(self.recent_projects[:10]),
+            'ui_theme':self.ui_theme,'ui_font_size':int(self.ui_font_size),'sidebar_collapsed':bool(self.sidebar_collapsed),'recent_projects':list(self.recent_projects[:10]),
             'global_hotkey':self.global_hotkey,
             "version": 1,
             "provider": self.provider,

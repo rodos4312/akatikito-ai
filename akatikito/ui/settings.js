@@ -363,14 +363,16 @@ async function toggleTheme() {
   try { await api('/api/preferences', {ui_theme: next}); } catch (_) {}
 }
 function applyFontSize(size) {
-  const n = Math.max(12, Math.min(18, parseInt(size || 14, 10) || 14));
+  const n = Math.max(12, Math.min(20, parseInt(size || 14, 10) || 14));
   currentFontSize = n;
-  if (document.documentElement && document.documentElement.style) {
-    document.documentElement.style.setProperty('--ui-font', n + 'px');
-  }
+  if (document.documentElement?.style) document.documentElement.style.setProperty('--ui-font', n + 'px');
+  const v = document.getElementById('font-size-val'), sv = document.getElementById('settings-font-val'), sr = document.getElementById('settings-font-size');
+  if (v) v.textContent = n + 'px';
+  if (sv) sv.textContent = n + 'px';
+  if (sr && document.activeElement !== sr) sr.value = String(n);
 }
 async function adjustFontSize(delta) {
-  const next = Math.max(12, Math.min(18, currentFontSize + delta));
+  const next = Math.max(12, Math.min(20, currentFontSize + delta));
   if (next === currentFontSize) return;
   applyFontSize(next);
   try { await api('/api/preferences', {ui_font_size: next}); } catch (_) {}
@@ -442,6 +444,7 @@ function buildCommandPaletteItems() {
     {label: i18nText('tab_plugins', '🔌 Πρόσθετα'), group: 'Tab', run: () => showTab('plugins')},
     {label: i18nText('tab_skills', '📘 Skills'), group: 'Tab', run: () => showTab('skills')},
     {label: i18nText('tab_memory', '🧠 Μνήμη'), group: 'Tab', run: () => showTab('memory')},
+    {label: i18nText('tab_mobile', '📱 Κινητό'), group: 'Tab', run: () => showTab('mobile')},
     {label: i18nText('tab_set', '⚙️ Ρυθμίσεις'), group: 'Tab', run: () => showTab('set')},
   ];
   for (const p of recentProjects) {
@@ -531,27 +534,26 @@ async function refreshMobileBridge() {
 }
 function renderMobileBridge(r) {
   mobileBridgeActive = !!(r && r.active);
-  const btn = document.getElementById('mobile-bridge-btn');
-  const info = document.getElementById('mobile-bridge-info');
-  if (btn) btn.textContent = mobileBridgeActive
-    ? i18nText('mobile_btn_stop', '⏹ Απενεργοποίηση Σύνδεσης Κινητού')
-    : i18nText('mobile_btn_start', '📱 Ενεργοποίηση Σύνδεσης Κινητού (QR / Tailscale)');
+  const btn = document.getElementById('mobile-bridge-btn'), info = document.getElementById('mobile-bridge-info'), pill = document.getElementById('mobile-status-pill');
+  if (btn) btn.textContent = mobileBridgeActive ? i18nText('mobile_btn_stop', '⏹ Απενεργοποίηση Σύνδεσης Κινητού') : i18nText('mobile_btn_start', '📱 Ενεργοποίηση Σύνδεσης Κινητού (QR / Tailscale)');
+  if (pill) { pill.textContent = mobileBridgeActive ? '● Ενεργή' : '● Ανενεργή'; pill.classList?.toggle('on', mobileBridgeActive); }
   if (!info) return;
   info.replaceChildren();
   if (!mobileBridgeActive) return;
+  const frame = document.createElement('div'); frame.className = 'mobile-qr-frame';
   if (r.qr_data_uri) {
-    const img = document.createElement('img');
-    img.src = r.qr_data_uri;
-    img.alt = 'Mobile Pairing QR Code';
-    img.style.cssText = 'width:190px;height:190px;border-radius:10px;background:#fff;padding:6px;display:block;margin:8px 0';
-    info.appendChild(img);
+    const img = document.createElement('img'); img.src = r.qr_data_uri; img.alt = 'Mobile Pairing QR Code';
+    frame.appendChild(img);
   }
-  const meta = document.createElement('div');
-  const via = r.via_tailscale ? i18nText('mobile_via_ts', '🔒 Tailscale (κρυπτογραφημένο 4G/5G & Wi-Fi)') : i18nText('mobile_via_lan', '⚠️ Τοπικό Wi-Fi (μη κρυπτογραφημένο HTTP LAN — μόνο για έμπιστο οικιακό δίκτυο· προτείνεται Tailscale)');
+  const via = r.via_tailscale ? i18nText('mobile_via_ts', '🔒 Tailscale (4G/5G & Wi-Fi)') : i18nText('mobile_via_lan', '⚠️ Τοπικό Wi-Fi (LAN HTTP · προτείνεται Tailscale)');
   const scanHint = i18nText('mobile_scan_hint', 'Συνδεδεμένες συσκευές: {n} · Σκάναρε το QR από το Akatikito Mobile!').replace('{n}', String(r.paired_devices || 0));
   const urls = [r.url, (r.lan_url && r.lan_url !== r.url) ? `LAN: ${r.lan_url}` : ''].filter(Boolean).join(' · ');
-  meta.textContent = `${via}\n${urls}\n${scanHint}`;
-  info.appendChild(meta);
+  const meta = document.createElement('div'); meta.textContent = `${via}\n${urls}\n${scanHint}`; frame.appendChild(meta);
+  if (r.pairing_uri) {
+    const cp = document.createElement('button'); cp.className = 'btn'; cp.style.width = 'auto'; cp.textContent = '📋 Αντιγραφή συνδέσμου σύζευξης';
+    cp.onclick = () => copyText(r.pairing_uri); frame.appendChild(cp);
+  }
+  info.appendChild(frame);
 }
 async function toggleMobileBridge() {
   const path = mobileBridgeActive ? '/api/mobile-bridge/stop' : '/api/mobile-bridge/start';

@@ -49,6 +49,7 @@ function applyI18nStrings(lang, strings) {
   const busyEl = document.getElementById('busy-badge');
   if (busyEl) busyEl.textContent = busy ? i18nText('badge_busy', '⚡ εργάζεται…') : i18nText('badge_idle', '💤 αδρανής');
   updateOrganizationSelectionLabel();
+  if (typeof StudioUI !== 'undefined') StudioUI.refreshNavTooltips();
 }
 async function loadI18n(lang) {
   try {
@@ -61,14 +62,19 @@ async function saveModelRouting() {
   const fastEl = document.getElementById('fast-model');
   const spEl = document.getElementById('smart-provider');
   const smartEl = document.getElementById('smart-model');
-  const r = await api('/api/preferences', {
+  const fbpEl = document.getElementById('fallback-provider');
+  const fbmEl = document.getElementById('fallback-model');
+  const payload = {
     fast_provider: (fpEl?.value || '').trim(),
     fast_model: (fastEl?.value || '').trim(),
     smart_provider: (spEl?.value || '').trim(),
     smart_model: (smartEl?.value || '').trim(),
-  });
+  };
+  if (fbpEl) payload.fallback_provider = (fbpEl.value || '').trim();
+  if (fbmEl) payload.fallback_model = (fbmEl.value || '').trim();
+  const r = await api('/api/preferences', payload);
   if (r && r.error) { showNotice('err', r.error); return; }
-  showNotice('ok', '✅ Smart Model Routing saved');
+  showNotice('ok', '✅ Smart Model Routing & Fallback αποθηκεύτηκαν');
 }
 async function changeUiLanguage(lang) {
   if (!lang) return;
@@ -449,7 +455,11 @@ function updateBadges(s) {
   if (sEl && document.activeElement !== sEl && typeof s.smart_model === 'string') sEl.value = s.smart_model;
   const learning=s.learning||{};
   const memLabel = i18nText('tab_memory', '🧠 Μνήμη');
-  document.getElementById('tab-memory').textContent=learning.pending ? memLabel + ' · ' + learning.pending : memLabel;
+  if (typeof StudioUI !== 'undefined' && StudioUI.updateMemoryTabLabel) {
+    StudioUI.updateMemoryTabLabel(memLabel, learning.pending);
+  } else {
+    document.getElementById('tab-memory').textContent=learning.pending ? memLabel + ' · ' + learning.pending : memLabel;
+  }
   renderGateway(s.gateway||{});
   document.getElementById('learning-status').textContent=learning.error||(
     learning.pending ? learning.pending+' pending' : i18nText('mem_status_default', 'Οι μνήμες και τα skills είναι τοπικά. Οι νέες προτάσεις χρειάζονται έγκριση.'));
@@ -520,6 +530,7 @@ function updateBadges(s) {
   document.getElementById('cautious-edits').checked=!!s.preferences?.cautious_edits;
   if (s.preferences?.ui_theme && s.preferences.ui_theme !== currentTheme) applyTheme(s.preferences.ui_theme);
   if (s.preferences?.ui_font_size && s.preferences.ui_font_size !== currentFontSize) applyFontSize(s.preferences.ui_font_size);
+  if (typeof StudioUI !== 'undefined' && StudioUI.syncSettingsControls) StudioUI.syncSettingsControls(s);
   if (Array.isArray(s.recent_projects)) recentProjects = s.recent_projects;
   document.getElementById('autonomous').disabled=!!s.busy;
   document.getElementById('cautious-edits').disabled=!!s.busy;

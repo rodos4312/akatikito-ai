@@ -266,6 +266,10 @@ class AppState(OpsStateMixin, FilesStateMixin, SessionsUpgradeStateMixin):
                 self.settings.ui_font_size = fsize
             except (TypeError, ValueError) as exc:
                 return str(exc)
+        if 'sidebar_collapsed' in data:
+            if type(data['sidebar_collapsed']) is not bool:
+                return 'Χρειάζεται boolean για τη σύμπτυξη μενού.'
+            self.settings.sidebar_collapsed = data['sidebar_collapsed']
         self._apply_fallback_prefs(data)
         from . import advanced
         return advanced.apply_preferences(self.settings, self.agent, data)
@@ -437,6 +441,8 @@ class AppState(OpsStateMixin, FilesStateMixin, SessionsUpgradeStateMixin):
             "fast_model": self.settings.fast_model,
             "smart_provider": self.settings.smart_provider,
             "smart_model": self.settings.smart_model,
+            "fallback_provider": self.settings.fallback_provider,
+            "fallback_model": self.settings.fallback_model,
             "busy": self.busy,
             "project": str(agent.ws.root) if agent else self.settings.project,
             "recent_projects": list(self.settings.recent_projects),
@@ -471,7 +477,19 @@ class AppState(OpsStateMixin, FilesStateMixin, SessionsUpgradeStateMixin):
             'agenda':self.agenda_list().get('tasks',[]),
             'approvals':self.approvals.pending()+remote_approvals,
             'learning':self.learning_summary(),
-            'preferences':{'autonomous':self.settings.autonomous,'cautious_edits':self.settings.cautious_edits,'checkpoints':self.settings.checkpoints,'supports_vision':bool(agent and agent.config.supports_vision),'advanced_view':self.settings.advanced_view,'advanced_features':list(self.settings.advanced_features),'daily_budget':self.settings.daily_budget,'ui_language':self.settings.ui_language,'ui_theme':self.settings.ui_theme,'ui_font_size':self.settings.ui_font_size},
+            'preferences': {
+                'autonomous': self.settings.autonomous,
+                'cautious_edits': self.settings.cautious_edits,
+                'checkpoints': self.settings.checkpoints,
+                'supports_vision': bool(agent and agent.config.supports_vision),
+                'advanced_view': self.settings.advanced_view,
+                'advanced_features': list(self.settings.advanced_features),
+                'daily_budget': self.settings.daily_budget,
+                'ui_language': self.settings.ui_language,
+                'ui_theme': self.settings.ui_theme,
+                'ui_font_size': self.settings.ui_font_size,
+                'sidebar_collapsed': self.settings.sidebar_collapsed,
+            },
             'advanced_catalog': __import__('akatikito.advanced', fromlist=['catalog']).catalog(self.settings),
         }
 

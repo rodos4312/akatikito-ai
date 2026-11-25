@@ -16,7 +16,7 @@ async function api(path, body) {
 
 function showTab(name) {
   if (name === 'llm') name = 'providers';
-  const allTabs = ['sess','agenda','providers','plugins','skills','memory','set'];
+  const allTabs = ['sess','agenda','providers','plugins','skills','memory','mobile','set'];
   if (!allTabs.includes(name)) return;
   for (const key of allTabs) {
     const btn = document.getElementById('tab-' + key);
@@ -34,6 +34,7 @@ function showTab(name) {
   if (name === 'agenda') { loadAgenda().catch(() => {}); loadScheduledJobs().catch(() => {}); }
   if (name === 'skills' || name === 'memory') loadLearning().catch(e => showNotice('err', e.message));
   if (name === 'plugins') loadPlugins().catch(e => showNotice('err', e.message));
+  if (name === 'mobile' && typeof refreshMobileBridge === 'function') refreshMobileBridge().catch(() => {});
 }
 
 function grow(el) { el.style.height = "auto"; el.style.height = Math.min(el.scrollHeight, 140) + "px"; }
@@ -117,6 +118,13 @@ function showFile(data, history) {
   fileView = data; fileBack = history;
   document.getElementById('file-preview').hidden = false;
   document.getElementById('file-title').textContent = data.path;
+  const kindPill = document.getElementById('file-kind-pill');
+  if (kindPill) {
+    const ext = String(data.path || '').includes('.') ? String(data.path).split('.').pop().toUpperCase().slice(0, 8) : '';
+    const lbl = data.kind === 'image' ? 'IMG' : data.kind === 'csv' ? 'CSV' : data.kind === 'markdown' ? 'MD' : ext;
+    kindPill.textContent = lbl;
+    kindPill.style.display = lbl ? 'inline-block' : 'none';
+  }
   document.getElementById('file-path').value = data.path;
   const textEl = document.getElementById('file-text');
   const richEl = document.getElementById('file-rich');

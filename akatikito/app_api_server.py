@@ -96,11 +96,13 @@ def make_handler(state: AppState) -> type:
             path = self.path.split("?")[0]
             _ui_assets = {
                 '/ui/style.css': ('style.css', 'text/css; charset=utf-8'),
+                '/ui/studio.css': ('studio.css', 'text/css; charset=utf-8'),
                 '/ui/chat.js': ('chat.js', 'text/javascript; charset=utf-8'),
                 '/ui/files.js': ('files.js', 'text/javascript; charset=utf-8'),
                 '/ui/attachments.js': ('attachments.js', 'text/javascript; charset=utf-8'),
                 '/ui/learning.js': ('learning.js', 'text/javascript; charset=utf-8'),
                 '/ui/settings.js': ('settings.js', 'text/javascript; charset=utf-8'),
+                '/ui/studio.js': ('studio.js', 'text/javascript; charset=utf-8'),
             }
             if not self._authorized(api=path not in ('/', '/onboarding.js', *_ui_assets)):return
             if path == "/":
