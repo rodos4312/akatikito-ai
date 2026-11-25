@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import Any
 
 from .audit_log import AuditLog
+from . import doctor_checks as _ext_checks
 from .mobile_bridge import DEFAULT_MOBILE_PORT, SESSION_TTL_SECONDS
 from .model import PROVIDERS
 from .process_lock import _lock_dir
@@ -220,6 +221,7 @@ class Doctor:
             ("settings.json", self.data_dir / "settings.json", {}),
             ("mcp.json", self.data_dir / "mcp.json", {}),
             ("mobile_bridge.json", self.data_dir / "mobile_bridge.json", {"auto_start": False, "sessions": {}}),
+            ("usage.json", self.data_dir / "usage.json", {"days": {}, "sessions": {}}),
             ("data/agenda.json", self.data_dir / "agenda.json", []),
             (".agent/agenda.json", self.project_root / ".agent" / "agenda.json", []),
         ]
@@ -704,22 +706,14 @@ class Doctor:
     # ------------------------------------------------------------------ public API
 
     def diagnose(self, *, check_api: bool = False) -> dict[str, Any]:
-        """Run all 14 read-only diagnostic checks."""
+        """Run all 17 read-only diagnostic checks."""
         checks = [
-            self._check_json_integrity(),
-            self._check_mobile_sessions(),
-            self._check_mobile_port(),
-            self._check_orphan_locks(),
-            self._check_temp_partials(),
-            self._check_agent_backups(),
-            self._check_python_packages(),
-            self._check_windows_shortcuts(),
-            self._check_uncertain_jobs(),
-            self._check_api_key(run_live=check_api),
-            self._check_daily_budget(),
-            self._check_checkpoint_repo(),
-            self._check_disk_space(),
-            self._check_audit_chain(),
+            self._check_json_integrity(), self._check_mobile_sessions(), self._check_mobile_port(),
+            self._check_orphan_locks(), self._check_temp_partials(), self._check_agent_backups(),
+            self._check_python_packages(), self._check_windows_shortcuts(), self._check_uncertain_jobs(),
+            self._check_api_key(run_live=check_api), self._check_daily_budget(), self._check_checkpoint_repo(),
+            self._check_disk_space(), self._check_audit_chain(),
+            *_ext_checks.run_extended_checks(self, _item),
         ]
         counts = {
             "ok": sum(1 for c in checks if c["status"] == "ok"),
@@ -945,7 +939,10 @@ class Doctor:
             summary = "Επαναδημιουργήθηκαν οι συντομεύσεις Windows (pythonw.exe + εικονίδιο)."
 
         else:
-            return {"ok": False, "error": f"Μη υποστηριζόμενη επισκευή: {cid}"}
+            ext = _ext_checks.apply_extended_fix(self, cid, _backup_file)
+            if ext is None:
+                return {"ok": False, "error": f"Μη υποστηριζόμενη επισκευή: {cid}"}
+            touched, summary = ext
 
         audit_logged = True
         try:

@@ -17,7 +17,7 @@ def _by_id(report: dict) -> dict[str, dict]:
     return {c["id"]: c for c in report["checks"]}
 
 
-def test_diagnose_is_readonly_and_returns_all_14_checks(tmp_path):
+def test_diagnose_is_readonly_and_returns_all_17_checks(tmp_path):
     data_dir = tmp_path / "data"
     proj_dir = tmp_path / "proj"
     data_dir.mkdir()
@@ -31,7 +31,7 @@ def test_diagnose_is_readonly_and_returns_all_14_checks(tmp_path):
 
     doc = Doctor(app_root=tmp_path, data_dir=data_dir, project_root=proj_dir, lock_dir=tmp_path / "locks")
     rep = doc.diagnose(check_api=False)
-    assert len(rep["checks"]) == 14
+    assert len(rep["checks"]) == 17
     by_id = _by_id(rep)
     assert by_id["json_integrity"]["status"] == "error"
     assert by_id["temp_partials"]["status"] == "warn"
@@ -305,5 +305,73 @@ def test_doctor_is_human_only_never_exposed_as_llm_tool_and_cli_runs(tmp_path, c
     rc = _cli(["--project", str(tmp_path), "--json"])
     out = capsys.readouterr().out
     parsed = json.loads(out)
-    assert "checks" in parsed and len(parsed["checks"]) == 14
+    assert "checks" in parsed and len(parsed["checks"]) == 17
     assert rc in (0, 1)
+
+
+def test_doctor_repairs_corrupted_doc_index_and_verifies_healthy_index(tmp_path):
+    data_dir = tmp_path / "data"
+    proj_dir = tmp_path / "proj"
+    data_dir.mkdir()
+    (proj_dir / ".agent").mkdir(parents=True)
+    db = proj_dir / ".agent" / "doc-index.sqlite"
+    db.write_bytes(b"NOT A VALID SQLITE DATABASE!!!")
+
+    doc = Doctor(app_root=tmp_path, data_dir=data_dir, project_root=proj_dir, lock_dir=tmp_path / "locks")
+    chk = _by_id(doc.diagnose())["doc_index"]
+    assert chk["status"] == "error" and chk["fixable"] is True
+
+    res = doc.apply_fix("doc_index")
+    assert res["ok"] is True and res["audit_logged"] is True
+    assert list((proj_dir / ".agent").glob("doc-index.broken.*.sqlite"))
+    assert _by_id(doc.diagnose())["doc_index"]["status"] == "ok"
+
+
+def test_doctor_cleans_only_old_staged_attachments_and_keeps_recent(tmp_path):
+    data_dir = tmp_path / "data"
+    proj_dir = tmp_path / "proj"
+    att_dir = proj_dir / ".agent" / "attachments"
+    data_dir.mkdir()
+    att_dir.mkdir(parents=True)
+
+    old_file = att_dir / "old_shot.png"
+    recent_file = att_dir / "recent_shot.png"
+    old_file.write_bytes(b"x" * 2048)
+    recent_file.write_bytes(b"y" * 1024)
+    old_ts = time.time() - 40 * 86400
+    os.utime(old_file, (old_ts, old_ts))
+
+    doc = Doctor(app_root=tmp_path, data_dir=data_dir, project_root=proj_dir, lock_dir=tmp_path / "locks")
+    chk = _by_id(doc.diagnose())["staged_attachments"]
+    assert chk["status"] == "warn" and chk["fixable"] is True
+    assert chk["meta"]["old_count"] == 1
+
+    res = doc.apply_fix("staged_attachments")
+    assert res["ok"] is True
+    assert not old_file.exists()
+    assert recent_file.exists()
+    assert _by_id(doc.diagnose())["staged_attachments"]["status"] == "ok"
+
+
+def test_doctor_validates_and_repairs_invalid_global_hotkey_and_broken_usage_json(tmp_path):
+    data_dir = tmp_path / "data"
+    proj_dir = tmp_path / "proj"
+    assets_dir = tmp_path / "assets"
+    data_dir.mkdir()
+    proj_dir.mkdir()
+    assets_dir.mkdir()
+    (assets_dir / "akatikito.ico").write_bytes(b"\x00\x00\x01\x00")
+    (data_dir / "settings.json").write_text(json.dumps({"global_hotkey": "BadKey+???+"}), encoding="utf-8")
+    (data_dir / "usage.json").write_text("{corrupt usage", encoding="utf-8")
+
+    doc = Doctor(app_root=tmp_path, data_dir=data_dir, project_root=proj_dir, lock_dir=tmp_path / "locks")
+    rep = _by_id(doc.diagnose())
+    assert rep["desktop_hotkey_tray"]["status"] == "warn" and rep["desktop_hotkey_tray"]["fixable"] is True
+    assert "usage.json" in rep["json_integrity"]["meta"]["broken"]
+
+    assert doc.apply_fix("desktop_hotkey_tray")["ok"] is True
+    assert doc.apply_fix("json_integrity")["ok"] is True
+    saved = json.loads((data_dir / "settings.json").read_text(encoding="utf-8"))
+    assert saved["global_hotkey"] == "Alt+Space"
+    assert json.loads((data_dir / "usage.json").read_text(encoding="utf-8")) == {"days": {}, "sessions": {}}
+    assert _by_id(doc.diagnose())["desktop_hotkey_tray"]["status"] == "ok"
