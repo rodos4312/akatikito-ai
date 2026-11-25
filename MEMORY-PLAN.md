@@ -287,7 +287,7 @@ meta            schema_version, fts5_available, last_tidy_at
 | Μ3 Ανάκληση | ☑ | 25/11/2026 | 72aa225 | memory_recall.py 139 γρ. · recall@8 0,993 |
 | Μ4 Μεταφορά | ☑ | 25/11/2026 | 018b931 | memory_import.py · πραγματικό αντίγραφο: 23 σημειώσεις → 12 μνήμες, 0 χαμένες, πηγές ίδιες |
 | Μ5 Σύνδεση | ☑ | 25/11/2026 | d65b3dd | memory_central.py · 866 tests · ρύθμιση memory_recall |
-| Μ6 Οθόνη | ☑ | 25/11/2026 | (επόμενο) | memory_screen.py + ui/memory.js · 6 γλώσσες · ελέγχθηκε στον browser |
-| Μ7 Μάθηση | ☑ | 25/11/2026 | (επόμενο) | memory_learn.py · μόνο με κουμπί (κόστος) |
-| Μ8 Τακτοποίηση | ☑ | 25/11/2026 | (επόμενο) | memory_tidy.py + memory_sessions.py |
+| Μ6 Οθόνη | ☑ | 25/11/2026 | 9f24b3a | memory_screen.py + ui/memory.js · 6 γλώσσες · ελέγχθηκε στον browser |
+| Μ7 Μάθηση | ☑ | 25/11/2026 | 3aaf927 | memory_learn.py · μόνο με κουμπί (κόστος) |
+| Μ8 Τακτοποίηση | ☑ | 25/11/2026 | 3aaf927 | memory_tidy.py + memory_sessions.py |
 | Μ9 Νόημα (προαιρ.) | ☐ | | | |
