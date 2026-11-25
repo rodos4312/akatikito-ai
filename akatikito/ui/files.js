@@ -96,6 +96,7 @@ function addStep(kind, data) {
   else if (kind === "reasoning") html = `<details><summary>🧠 σκέψη του μοντέλου</summary><div class="out">${esc(data.text)}</div></details>`;
   else if (kind === "thinking") html = `💭 ${esc(data.text)}`;
   else if (kind === "mode") html = `🎭 λειτουργία: <b>${esc(data.label || "")}</b>`;
+  else if (kind === "memories") { if (typeof renderMemoriesStep !== "function") return; renderMemoriesStep(div, data); wrap.appendChild(div); return; }
   else if (kind === "model") html = `🤖 μοντέλο: <b>${esc(data.model || "")}</b>`;
   else if (kind === "tool_call") {
     const friendly = friendlyToolCall(data.name, data.arguments);

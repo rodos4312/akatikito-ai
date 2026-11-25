@@ -422,7 +422,11 @@
     <div id="view-memory" style="display:none;flex-direction:column;gap:14px">
       <h2 data-i18n="hdr_memory">🧠 Δομημένη Μνήμη & Προτιμήσεις</h2>
       <div class="menu-card">
-        <button class="btn" data-i18n="btn_refresh_mem" style="width:auto;align-self:flex-start" onclick="loadLearning()">🔄 Ανανέωση μνήμης</button>
+        <button class="btn" data-i18n="btn_refresh_mem" style="width:auto;align-self:flex-start" onclick="loadLearning();loadMemory()">🔄 Ανανέωση μνήμης</button>
+        <div style="display:flex;gap:6px;flex-wrap:wrap"><input id="mem-query" data-i18n-placeholder="mem_search_ph" placeholder="🔍 Αναζήτηση στη μνήμη (κάθε γλώσσα, και greeklish)" style="flex:1;min-width:220px" onkeydown="if(event.key==='Enter')loadMemory()"><select id="mem-scope" onchange="loadMemory()"><option value="all" data-i18n="mem_scope_all">Όλες</option><option value="global" data-i18n="mem_scope_global">Γενικές</option><option value="project" data-i18n="mem_scope_project">Αυτού του project</option></select><select id="mem-kind" onchange="loadMemory()"><option value="" data-i18n="mem_kind_all">Όλα τα είδη</option><option value="core" data-i18n="mem_kind_core">Προφίλ</option><option value="fact" data-i18n="mem_kind_fact">Γεγονότα</option><option value="belief" data-i18n="mem_kind_belief">Υποθέσεις</option><option value="episode" data-i18n="mem_kind_episode">Επεισόδια</option></select><button class="btn" style="width:auto" data-i18n="mem_btn_search" onclick="loadMemory()">Αναζήτηση</button></div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn" style="width:auto" data-i18n="mem_btn_suggest" onclick="memoryAction('suggest')">🧠 Πρότεινε τι να θυμάμαι από τη συζήτηση</button><button class="btn" style="width:auto" data-i18n="mem_btn_tidy" onclick="memoryAction('tidy')">🧹 Έλεγχος τακτοποίησης</button><button class="btn" style="width:auto" data-i18n="mem_btn_export" onclick="memoryAction('export')">📄 Εξαγωγή σε κείμενο</button></div>
+        <div id="memory-extra" style="display:flex;flex-direction:column;gap:6px"></div>
+        <div id="memory-content" style="display:flex;flex-direction:column;gap:8px"></div>
         <div id="learning-status" class="hint"></div>
         <div id="learning-content" style="display:flex;flex-direction:column;gap:8px"></div>
       </div>
@@ -745,5 +749,6 @@
 <script src="/ui/learning.js"></script>
 <script src="/ui/settings.js"></script>
 <script src="/ui/studio.js"></script>
+<script src="/ui/memory.js"></script>
 </body>
 </html>

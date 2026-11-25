@@ -119,6 +119,7 @@ def make_handler(state: AppState) -> type:
                 '/ui/learning.js': ('learning.js', 'text/javascript; charset=utf-8'),
                 '/ui/settings.js': ('settings.js', 'text/javascript; charset=utf-8'),
                 '/ui/studio.js': ('studio.js', 'text/javascript; charset=utf-8'),
+                '/ui/memory.js': ('memory.js', 'text/javascript; charset=utf-8'),
             }
             if not self._authorized(api=path not in ('/', '/onboarding.js', *_ui_assets)):return
             if path == "/":
@@ -288,6 +289,10 @@ def make_handler(state: AppState) -> type:
                 self._send(state.learning_view(data.get('offset',0)))
             elif path == '/api/learning/action':
                 self._send(state.learning_action(data))
+            elif path == '/api/memory':
+                self._send(state.memory_view(data))
+            elif path == '/api/memory/action':
+                self._send(state.memory_action(data))
             elif path == '/api/checkpoint/diff':
                 self._send(state.checkpoint_action(data.get('id','')))
             elif path == '/api/checkpoint/undo':

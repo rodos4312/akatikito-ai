@@ -33,6 +33,7 @@ function showTab(name) {
   document.getElementById('files-toggle').disabled = name !== 'sess';
   if (name === 'agenda') { loadAgenda().catch(() => {}); loadScheduledJobs().catch(() => {}); }
   if (name === 'skills' || name === 'memory') loadLearning().catch(e => showNotice('err', e.message));
+  if (name === 'memory' && typeof loadMemory === 'function') loadMemory().catch(e => showNotice('err', e.message));
   if (name === 'plugins') loadPlugins().catch(e => showNotice('err', e.message));
   if (name === 'mobile' && typeof refreshMobileBridge === 'function') refreshMobileBridge().catch(() => {});
 }

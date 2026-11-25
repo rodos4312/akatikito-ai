@@ -271,6 +271,34 @@ class MemoryStore:
             self._db.execute("INSERT OR REPLACE INTO meta(key, value) VALUES (?, ?)",
                              (key, json.dumps(kept, ensure_ascii=False)))
 
+    def set_proposal_state(self, proposal_id: int, state: str, *, at: float) -> None:
+        """Mark a suggestion answered; it stays in the table as a record of the decision."""
+        with self._lock:
+            row = self._db.execute("SELECT payload_json FROM proposals WHERE id = ?", (int(proposal_id),)).fetchone()
+            if row is None:
+                raise MemoryRefused("Δεν υπάρχει αυτή η πρόταση.")
+            payload = {**json.loads(row[0]), "state": state, "answered_at": at}
+            self._db.execute("UPDATE proposals SET payload_json = ? WHERE id = ?",
+                             (json.dumps(payload, ensure_ascii=False), int(proposal_id)))
+
+    def active_in(self, scopes: Iterable[str], *, kind: str | None = None, limit: int = 30,
+                  offset: int = 0) -> tuple[list[dict], int]:
+        """One page of active memories of ``scopes`` (newest first) and how many there are in total."""
+        scopes = list(scopes) or [""]
+        where = f"{_ACTIVE} AND scope IN ({','.join('?' * len(scopes))})" + (" AND kind = ?" if kind else "")
+        args = [*scopes, *([kind] if kind else [])]
+        with self._lock:
+            total = int(self._db.execute(f"SELECT COUNT(*) FROM memories WHERE {where}", args).fetchone()[0])
+            rows = self._db.execute(f"SELECT * FROM memories WHERE {where} ORDER BY updated_at DESC, id DESC "
+                                    "LIMIT ? OFFSET ?", [*args, max(1, int(limit)), max(0, int(offset))])
+            return [dict(r) for r in rows], total
+
+    def predecessor(self, memory_id: int) -> int | None:
+        """The version this memory replaced, if any."""
+        with self._lock:
+            row = self._db.execute("SELECT id FROM memories WHERE superseded_by = ?", (int(memory_id),)).fetchone()
+            return row[0] if row else None
+
     def add_proposal(self, payload: dict) -> int:
         with self._lock:
             cur = self._db.execute("INSERT INTO proposals(payload_json, created_at) VALUES (?, ?)",

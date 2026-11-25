@@ -95,7 +95,9 @@ def memory_observations(agent, task: str) -> tuple[str, str]:
             agent._current_task, agent.ws.root, core_chars=getattr(config, "memory_core_chars", 4000),
             memory_chars=getattr(config, "memory_recall_chars", 3000))
         if central is not None:
-            profile, memories, full_profile = central
+            profile, memories, full_profile = central.profile, central.memories, central.full_profile
+            if central.fresh and central.used:
+                agent.events.emit("memories", count=len(central.used), mode=central.mode, items=central.used[:8])
             if full_profile:  # cut to the budget: keep the whole profile exactly retrievable
                 key = agent.context.store(global_memory.snapshot()[1] or full_profile)  # the source of truth
                 profile += f"\n[Πλήρες Δομημένο προφίλ χρήστη: recall_context id={key}. Ανακτάται ακριβώς, χωρίς απώλεια.]"

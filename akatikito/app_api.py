@@ -25,6 +25,7 @@ from .sessions import SessionStore
 from .settings import Settings, short_key
 from .workspace import detect_verify
 from .app_api_ops import OpsStateMixin
+from .app_api_memory import MemoryStateMixin
 from .app_api_files import FilesStateMixin
 from .app_api_sessions import SessionsUpgradeStateMixin
 
@@ -37,7 +38,7 @@ def requests_self_upgrade(text: str, current_project: str = "") -> bool:
     return self_upgrade(text, own_project=own_project)
 
 
-class AppState(OpsStateMixin, FilesStateMixin, SessionsUpgradeStateMixin):
+class AppState(OpsStateMixin, FilesStateMixin, SessionsUpgradeStateMixin, MemoryStateMixin):
     """Ό,τι «θυμάται» η εφαρμογή: agent, ρυθμίσεις, ουρά γεγονότων."""
 
     def __init__(self) -> None:

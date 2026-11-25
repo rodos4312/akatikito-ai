@@ -16,6 +16,7 @@ from __future__ import annotations
 import logging
 import sqlite3
 from contextlib import contextmanager
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from . import memory
@@ -90,25 +91,39 @@ def core_profile(s: MemoryStore, max_chars: int = 4000, question: str = "") -> t
     return "\n".join(lines), full
 
 
-def memory_block(s: MemoryStore, question: str, project_root: Path | str | None, max_chars: int = 3000) -> str:
-    """All project + global memories while they fit; otherwise the ones ``question`` needs."""
+@dataclass
+class Observation:
+    """What the agent is shown for one task, and which memories that was (for the chat's 🧠 line)."""
+
+    profile: str
+    memories: str
+    full_profile: str = ""
+    used: list = field(default_factory=list)
+    mode: str = "all"  # "all": every memory fitted · "recall": only those the task needed
+    fresh: bool = True  # False when the previous step's answer was reused
+
+
+def memory_block(s: MemoryStore, question: str, project_root: Path | str | None,
+                 max_chars: int = 3000) -> tuple[str, list[dict], str]:
+    """``(block, used, mode)``: all project + global memories while they fit, else what ``question`` needs."""
     scope = project_scope(project_root) if project_root is not None else None
     kinds = ("fact", "belief", "episode")
     rows = (_rows(s, scope, kinds, 300) if scope else []) + _rows(s, "global", kinds, 300)
     if len(rows) <= 300:
         lines = [_line(r) for r in rows]
         if len(HEADER) + sum(len(line) + 1 for line in lines) <= max_chars:
-            return "\n".join([HEADER, *lines]) if lines else ""
-    return recall(s, question, project_scope=scope, max_chars=max_chars).text
+            used = [{"id": r["id"], "text": r["text"], "why": []} for r in rows]
+            return ("\n".join([HEADER, *lines]) if lines else ""), used, "all"
+    result = recall(s, question, project_scope=scope, max_chars=max_chars)
+    return result.text, [{"id": i.id, "text": i.row["text"], "why": i.why} for i in result.items], "recall"
 
 
-_MEMO: dict[str, tuple[tuple, tuple[str, str, str]]] = {}
+_MEMO: dict[str, tuple[tuple, Observation]] = {}
 
 
 def observations(question: str, project_root: Path | str | None, *, core_chars: int = 4000,
-                 memory_chars: int = 3000) -> tuple[str, str, str] | None:
-    """``(profile, memories, full_profile)`` for the agent, or ``None`` when the store is unavailable.
-    ``full_profile`` is "" unless the profile had to be cut.
+                 memory_chars: int = 3000) -> Observation | None:
+    """What the agent sees for ``question``, or ``None`` when the store is unavailable.
 
     The agent asks before every model call of a task; the answer is reused until the task or a
     memory file changes, so a memory is counted as used once per task, not once per step."""
@@ -120,14 +135,15 @@ def observations(question: str, project_root: Path | str | None, *, core_chars: 
         return None
 
 
-def _observations(s: MemoryStore, question: str, project_root, core_chars: int, memory_chars: int):
+def _observations(s: MemoryStore, question: str, project_root, core_chars: int, memory_chars: int) -> Observation:
     scope = project_scope(project_root) if project_root is not None else ""
     key = (question, scope, s.meta("sync:global"), s.meta(f"sync:{scope}"), s.count(), core_chars, memory_chars)
     cached = _MEMO.get(str(s.path))
     if cached and cached[0] == key:
-        return cached[1]
-    result = (*core_profile(s, core_chars, question), memory_block(s, question, project_root, memory_chars))
-    result = (result[0], result[2], result[1])
+        return replace(cached[1], fresh=False)
+    profile, full = core_profile(s, core_chars, question)
+    block, used, mode = memory_block(s, question, project_root, memory_chars)
+    result = Observation(profile, block, full, used, mode)
     _MEMO[str(s.path)] = (key, result)
     return result
 
