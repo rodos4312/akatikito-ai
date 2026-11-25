@@ -199,6 +199,27 @@ def search_past_sessions(ws, query: str, limit: int = 5):
     max_hits = max(1, min(15, int(limit or 5)))
     store = SessionStore(ws.root)
     source = getattr(ws, 'session_source', None)
+    results = _indexed_session_search(store, q, max_hits, source)
+    if results is None:
+        results = _scanned_session_search(store, q_clean, q_tokens, max_hits, source)
+    return _clip_with_archive(ws, json.dumps({'query': q, 'sessions': results, 'total': len(results)}, ensure_ascii=False))
+
+
+def _indexed_session_search(store, q, max_hits, source):
+    """Language-aware session index (MEMORY-PLAN M8); ``None`` sends the caller to the full scan."""
+    import sqlite3
+    from .memory_sessions import SessionIndex
+    try:
+        with SessionIndex(store) as index:
+            index.refresh()
+            return index.search(q, limit=max_hits, source=source)
+    except (sqlite3.Error, OSError, ValueError):
+        return None
+
+
+def _scanned_session_search(store, q_clean, q_tokens, max_hits, source):
+    """The original full scan: every session file, entry by entry (fallback for the index)."""
+    from .skills import _meaningful_tokens, _strip_accents
     results = []
     for meta in store.list():
         rec = store.load(meta['id'])
@@ -237,7 +258,7 @@ def search_past_sessions(ws, query: str, limit: int = 5):
             })
             if len(results) >= max_hits:
                 break
-    return _clip_with_archive(ws, json.dumps({'query': q, 'sessions': results, 'total': len(results)}, ensure_ascii=False))
+    return results
 
 
 def _commit_binary_document(ws, target, raw_prev, new_bytes, label, check_guard=True):
