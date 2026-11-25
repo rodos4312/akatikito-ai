@@ -128,22 +128,8 @@ def unprotect_text(encoded: str) -> str:
         return ""
 
 
-_GENERIC_SECRET_PATTERNS = (
-    re.compile(r"\bsk-[A-Za-z0-9_-]{12,}\b"),
-    re.compile(r"\bgh[pousr]_[A-Za-z0-9]{16,}\b"),
-    re.compile(r"\bAIza[0-9A-Za-z_-]{20,}\b"),
-    re.compile(r"\bntn_[A-Za-z0-9]{16,}\b"),
-    re.compile(r"\bsecret_[A-Za-z0-9]{16,}\b"),
-    re.compile(r"(?i)(Bearer\s+)[A-Za-z0-9._~+/-]{12,}"),
-)
-
-
 def redact_secrets(text: str, extra_secrets: tuple[str, ...] = ()) -> str:
     """Scrub known secret tokens and common API-key patterns from diagnostic text."""
-    out = str(text or "")
-    for sec in extra_secrets:
-        if sec and len(sec) >= 4 and sec in out:
-            out = out.replace(sec, "***")
-    for pat in _GENERIC_SECRET_PATTERNS:
-        out = pat.sub(lambda m: (m.group(1) + "***") if m.lastindex else "***", out)
-    return out
+    from .redact import redact_all
+
+    return redact_all(str(text or ""), extra_secrets)

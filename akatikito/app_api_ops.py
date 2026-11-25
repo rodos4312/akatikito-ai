@@ -243,7 +243,9 @@ class OpsStateMixin:
             m_model = m.get('model') or ''
             who = '👤 **Χρήστης**' if m.get('role') == 'user' else (f'🤖 **Akatikito** ({m_model})' if m_model else '🤖 **Akatikito**')
             lines.append(f"### {who}\n\n{m.get('text') or ''}\n")
-        markdown = '\n'.join(lines)
+        from .redact import collect_user_secrets, redact_all
+
+        markdown = redact_all('\n'.join(lines), collect_user_secrets(self.settings))
         filename = f"akatikito-chat-{time.strftime('%Y%m%d-%H%M%S')}.md"
         target = None
         used_dialog = False

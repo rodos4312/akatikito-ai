@@ -30,15 +30,30 @@ class SessionStore:
         return self.dir / f"{session_id}.json"
 
     def _write(self, rec: dict) -> None:
+        from .redact import collect_user_secrets, redact_obj
+
         self.dir.mkdir(parents=True, exist_ok=True)
+        known = collect_user_secrets()
+        safe = dict(rec)
+        msgs_changed = False
+        for field in ("title", "transcript", "repair", "messages"):
+            if field in safe:
+                cleaned, changed = redact_obj(safe[field], known)
+                safe[field] = cleaned
+                if field == "messages" and changed:
+                    msgs_changed = True
+        if msgs_changed and "request_cache" in safe:
+            # Redacted messages no longer match the old transport prefix digest.
+            safe["request_cache"] = {}
+        payload = json.dumps(safe, ensure_ascii=False, indent=2) + "\n"
         target = self._path(str(rec["id"]))
         temp = target.with_suffix(".tmp")
-        temp.write_text(json.dumps(rec, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        temp.write_text(payload, encoding="utf-8")
         try:
             temp.replace(target)
         except OSError:
             # Σπάνια περίπτωση: αν το replace αποτύχει, προσπάθησε άμεση εγγραφή.
-            target.write_text(json.dumps(rec, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            target.write_text(payload, encoding="utf-8")
 
     # ---------- ενέργειες ----------
 
