@@ -664,7 +664,7 @@ function syncStream(state) {
   if (state.status !== "active") streamEvent("stream_end", {stream_id:state.id, status:state.status});
 }
 
-function addMsg(role, text, model = "", provider = "") {
+function addMsg(role, text, model = "", provider = "", usage = null) {
   const div = document.createElement("div");
   div.className = "msg " + role;
   div.dataset.key = role + "|" + String(text || "").trim();  // ταυτότητα για να μη διπλασιάζεται
@@ -687,6 +687,17 @@ function addMsg(role, text, model = "", provider = "") {
     spk.style.cssText = "width:auto;padding:2px 8px;font-size:11px;margin:6px 0 0 6px;opacity:.75";
     spk.onclick = () => speakAnswer(text, spk);
     div.appendChild(spk);
+    if (usage && ((usage.prompt_tokens || 0) + (usage.completion_tokens || 0) > 0)) {
+      const tot = (usage.prompt_tokens || 0) + (usage.completion_tokens || 0);
+      const parts = [(tot >= 1000 ? (tot / 1000).toFixed(1) + 'k' : String(tot)) + ' tok'];
+      if (usage.cache_hit_pct > 0) parts.push(usage.cache_hit_pct + '% cache');
+      if (typeof usage.cost_eur === 'number') parts.push(usage.cost_eur.toFixed(4).replace('.', ',') + ' €');
+      const badge = document.createElement('span');
+      badge.className = 'hint';
+      badge.style.cssText = 'margin-left:8px;font-size:11px;opacity:.8';
+      badge.textContent = '⚡ ' + parts.join(' · ');
+      div.appendChild(badge);
+    }
   }
   chat.appendChild(div);
   chat.scrollTop = chat.scrollHeight;

@@ -494,10 +494,10 @@ class AppState(OpsStateMixin, FilesStateMixin):
         def run() -> None:
             try:
                 from .process_lock import project_lock
-                with project_lock(self.agent.ws.root):
-                    answer = self.agent.chat(text,attachments=attachment_blocks) if attachment_blocks else self.agent.chat(text)
-                self.transcript.append({"role": "assistant", "text": answer or "(χωρίς απάντηση)",
-                                        "model": model_name, "provider": provider, 'checkpoint':self.agent.last_checkpoint})
+                from .usage_ledger import summarize_turn_delta
+                tok_before = dict(self.agent.tokens)
+                with project_lock(self.agent.ws.root): answer = self.agent.chat(text,attachments=attachment_blocks) if attachment_blocks else self.agent.chat(text)
+                self.transcript.append({"role": "assistant", "text": answer or "(χωρίς απάντηση)", "model": model_name, "provider": provider, 'checkpoint':self.agent.last_checkpoint, 'usage': summarize_turn_delta(tok_before, self.agent.tokens, (self.settings.model_prices or {}).get(model_name))})
                 self.push("answer", text=answer)
                 self._save_session()
             except Exception as exc:  # noqa: BLE001

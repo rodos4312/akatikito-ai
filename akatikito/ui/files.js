@@ -237,7 +237,7 @@ function renderTranscript(list) {
   // Η θέση κρατά και επαναλαμβανόμενα ίδια μηνύματα στην ίδια συνομιλία.
   const shown = chat.querySelectorAll(".msg").length;
   for (const m of list.slice(shown)) {
-    const div=addMsg(m.role,m.text,m.model||'',m.provider||'');
+    const div=addMsg(m.role,m.text,m.model||'',m.provider||'',m.usage||null);
     if(m.checkpoint) {
       const button=document.createElement('button');button.className='btn';button.style.cssText='width:auto;padding:2px 8px;font-size:11px;margin:6px 0 0 6px';button.textContent='Αλλαγές / Αναίρεση';button.onclick=()=>viewCheckpoint(m.checkpoint);div.appendChild(button);
       const quickUndo=document.createElement('button');quickUndo.className='btn';quickUndo.style.cssText='width:auto;padding:2px 8px;font-size:11px;margin:6px 0 0 6px;border-color:var(--red)';quickUndo.textContent='↩ Άμεση Αναίρεση';quickUndo.onclick=()=>quickUndoCheckpoint(m.checkpoint);div.appendChild(quickUndo);

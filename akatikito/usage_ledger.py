@@ -37,3 +37,15 @@ class UsageLedger:
                 row['calls']+=1;row['cost']+=cost or 0;row['unknown']+=int(cost is None)
             self.path.parent.mkdir(parents=True,exist_ok=True);temp=self.path.with_suffix('.tmp');temp.write_text(json.dumps(data,ensure_ascii=False,indent=2),encoding='utf-8');os.replace(temp,self.path)
         return cost
+
+
+def summarize_turn_delta(before: dict, after: dict, prices: dict | None = None) -> dict:
+    """Compute per-answer token delta, cache-hit percentage, and optional EUR cost."""
+    prompt = max(0, int(after.get('prompt_tokens', 0) or 0) - int(before.get('prompt_tokens', 0) or 0))
+    comp = max(0, int(after.get('completion_tokens', 0) or 0) - int(before.get('completion_tokens', 0) or 0))
+    hit = min(prompt, max(0, int(after.get('cache_hit_tokens', 0) or 0) - int(before.get('cache_hit_tokens', 0) or 0)))
+    pct = round(100 * hit / prompt) if prompt > 0 and hit > 0 else 0
+    cost = None
+    if prices and all(k in prices and isinstance(prices[k], (int, float)) and math.isfinite(prices[k]) and prices[k] >= 0 for k in ('input', 'cached', 'output')):
+        cost = round(((prompt - hit) * prices['input'] + hit * prices['cached'] + comp * prices['output']) / 1_000_000, 5)
+    return {'prompt_tokens': prompt, 'completion_tokens': comp, 'cache_hit_tokens': hit, 'cache_hit_pct': pct, 'cost_eur': cost}
