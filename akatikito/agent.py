@@ -82,7 +82,7 @@ class Akatikito:
         self._default_model_name = self.config.model
         self._default_base_url = self.config.base_url
         self._default_api_key = self.config.api_key
-        self._session_route_tier: str = ""
+        self._session_route_tier: str = ""; self._ask_unlocked_tools: set[str] = set()
         self.events = Events()
         self.messages: list[dict] = []
         self.tokens = {
@@ -136,7 +136,7 @@ class Akatikito:
     def reset(self) -> None:
         with self._sub_lock:
             self._turn_id += 1
-        self._session_route_tier = ""
+        self._session_route_tier = ""; self._ask_unlocked_tools = set()
         self.messages = []
         self.cache_id = uuid.uuid4().hex
         self.context.reset_transport()
@@ -209,7 +209,7 @@ class Akatikito:
 
     def _fixed_prompt_parts(self, about_user: str, include_task: bool = True) -> list[str]:
         """Μη-περικοπτόμενα τμήματα (rules, προτιμήσεις, mode, runtime)."""
-        parts = [SYSTEM_PROMPT, f"\nProject: {self.ws.root}"]
+        parts = [modes.ASK_SYSTEM_PROMPT if self.mode == "ask" else SYSTEM_PROMPT, f"\nProject: {self.ws.root}"]
         from .i18n import agent_language_instruction
         lang_hint = agent_language_instruction(getattr(self.config, "ui_language", "el"))
         if lang_hint:
@@ -246,12 +246,12 @@ class Akatikito:
                        'failed_hypotheses':self.repair.history[-3:]}, ensure_ascii=False, sort_keys=True)
                        if self.repair.pending else '')}
         from .features import Skills
-        updates['λίστα εργασιών'] = json.dumps(self.task.todos,ensure_ascii=False)
-        updates['διαθέσιμες συνταγές'] = Skills(self.ws.root).prompt(
-            task=self._current_task,
-            healing_hints=getattr(self, '_skill_healing_hints', None),
+        is_ask = self.mode == "ask"
+        updates['λίστα εργασιών'] = json.dumps(self.task.todos, ensure_ascii=False) if self.task.todos else ""
+        updates['διαθέσιμες συνταγές'] = "" if (is_ask and not getattr(self, '_used_skills_in_turn', None)) else Skills(self.ws.root).prompt(
+            task=self._current_task, healing_hints=getattr(self, '_skill_healing_hints', None),
         )
-        updates['επαναλαμβανόμενες διαδικασίες'] = json.dumps(Skills(self.ws.root).hints(),ensure_ascii=False)
+        updates['επαναλαμβανόμενες διαδικασίες'] = "" if is_ask else json.dumps(Skills(self.ws.root).hints(), ensure_ascii=False)
         updates['χάρτης κώδικα'] = (self.repo_map.render(
             budget=self.config.repo_map_max_chars, time_limit=self.config.repo_map_time_limit)
             if self.config.repo_map and self.mode in ('code', 'debug', 'architect') else '')
@@ -743,8 +743,8 @@ class Akatikito:
             request = self.context.prepare(self.messages, self.repair, self.activity,
                                            continuous=continuous)
             self.activity.update_visible(request)
-            # Temporary repetition limits are enforced at execution, never by rewriting schemas.
-            tools = [t for t in TOOL_SPECS + (self.mcp.specs() if getattr(self,'mcp',None) else []) if t["function"]["name"] in allowed]
+            advertised = modes.select_ask_tools(self._current_task, allowed, self._ask_unlocked_tools) if self.mode == "ask" else allowed
+            tools = [t for t in TOOL_SPECS + (self.mcp.specs() if getattr(self,'mcp',None) else []) if t["function"]["name"] in advertised]
             self.events.emit("context", **self.context.metrics)
             self.events.emit("checkpoint")
             prev_ri = self.runtime_instructions

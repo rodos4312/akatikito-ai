@@ -29,7 +29,7 @@ def test_attachments_are_explicit_and_vision_checked(tmp_path):
     class Model:
         keeps_active_history=True
         def chat(self,messages,tools=None,**kwargs):captured.append(messages);return {'content':'Είδα την εικόνα'},{'prompt_tokens':1}
-    agent=Akatikito(str(tmp_path),Config(verify_command=' ',stream_responses=False),Model());agent.chat('Εξήγησε',attachments=blocks)
+    agent=Akatikito(str(tmp_path),Config(verify_command=' ',stream_responses=False),Model());agent.ws.append_memory('Εσωτερική σημείωση');agent.chat('Εξήγησε',attachments=blocks)
     user=next(m for m in captured[0] if m['role']=='user')
     assert isinstance(user['content'],list) and any(x.get('type')=='image_url' for x in user['content'])
     assert any(x.get('type')=='text' and 'ΕΞΩΤΕΡΙΚΗ' in x.get('text','') for x in user['content'])
