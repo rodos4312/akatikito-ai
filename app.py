@@ -61,6 +61,7 @@ def main() -> int:
     server = None
     server_thread = None
     hotkey = None
+    tray = None
     try:
         state = AppState()
         url, server = start_server(state)
@@ -73,6 +74,7 @@ def main() -> int:
         try:
             import webview  # pywebview
             from akatikito.hotkey import GlobalHotkey, focus_window
+            from akatikito.tray import SystemTray
 
             win = webview.create_window(
                 APP_NAME,
@@ -83,10 +85,33 @@ def main() -> int:
                 background_color="#0f1117",
                 text_select=True,
             )
+
+            def _open_doctor():
+                focus_window(win, APP_NAME)
+                try:
+                    if hasattr(win, "evaluate_js"):
+                        win.evaluate_js("if(typeof runDoctor==='function'){runDoctor(false);}")
+                except Exception:
+                    pass
+
+            def _quit_app():
+                try:
+                    if hasattr(win, "destroy"):
+                        win.destroy()
+                except Exception:
+                    pass
+
             hk_spec = getattr(state.settings, "global_hotkey", "Alt+Space")
             if hk_spec:
                 hotkey = GlobalHotkey(hk_spec, lambda: focus_window(win, APP_NAME))
                 hotkey.start()
+            tray = SystemTray(
+                tooltip=f"{APP_NAME} ({hk_spec or 'Tray'})",
+                on_open=lambda: focus_window(win, APP_NAME),
+                on_doctor=_open_doctor,
+                on_quit=_quit_app,
+            )
+            tray.start()
             webview.start()
         except Exception as exc:  # noqa: BLE001 — fallback to system browser if pywebview unavailable
             if not windowless:
@@ -116,6 +141,11 @@ def main() -> int:
             print(tb, file=sys.stderr)
         return 1
     finally:
+        if tray is not None:
+            try:
+                tray.stop()
+            except Exception:
+                pass
         if hotkey is not None:
             try:
                 hotkey.stop()
