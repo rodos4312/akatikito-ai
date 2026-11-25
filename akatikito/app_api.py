@@ -266,8 +266,24 @@ class AppState(OpsStateMixin, FilesStateMixin, SessionsUpgradeStateMixin):
                 self.settings.ui_font_size = fsize
             except (TypeError, ValueError) as exc:
                 return str(exc)
+        self._apply_fallback_prefs(data)
         from . import advanced
         return advanced.apply_preferences(self.settings, self.agent, data)
+
+    def _apply_fallback_prefs(self, data: dict) -> None:
+        if 'fallback_provider' in data:
+            val = str(data.get('fallback_provider') or '').strip()
+            self.settings.fallback_provider = val
+            if self.agent is not None:
+                self.agent.config.fallback_provider = val
+                fbu, fbk = self._resolve_routing_creds(val)
+                self.agent.config.fallback_base_url = fbu
+                self.agent.config.fallback_api_key = fbk
+        if 'fallback_model' in data:
+            val = str(data.get('fallback_model') or '').strip()
+            self.settings.fallback_model = val
+            if self.agent is not None:
+                self.agent.config.fallback_model = val
 
     def upload_attachment(self,data):
         if self.busy or not self.agent:return {'error':'Συνδέσου και περίμενε να τελειώσει η εργασία.'}
@@ -325,6 +341,7 @@ class AppState(OpsStateMixin, FilesStateMixin, SessionsUpgradeStateMixin):
                 return {"error": "Διάλεξε μοντέλο για αυτόν τον πάροχο ή φόρτωσε τη λίστα μοντέλων."}
             fu, fk = self._resolve_routing_creds(self.settings.fast_provider)
             su, sk = self._resolve_routing_creds(self.settings.smart_provider)
+            fbu, fbk = self._resolve_routing_creds(self.settings.fallback_provider)
             config = Config(
                 model=picked_model,
                 fast_provider=self.settings.fast_provider,
@@ -335,6 +352,10 @@ class AppState(OpsStateMixin, FilesStateMixin, SessionsUpgradeStateMixin):
                 smart_model=self.settings.smart_model,
                 smart_base_url=su,
                 smart_api_key=sk,
+                fallback_provider=self.settings.fallback_provider,
+                fallback_model=self.settings.fallback_model,
+                fallback_base_url=fbu,
+                fallback_api_key=fbk,
                 base_url=resolved_url,
                 api_key=key,
                 max_steps=max(1,min(150,steps)),

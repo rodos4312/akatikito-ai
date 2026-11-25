@@ -18,6 +18,10 @@ class Config:
     smart_model: str = ""  # Προαιρετικό ισχυρό μοντέλο για δύσκολες/reasoning εργασίες
     smart_base_url: str = ""
     smart_api_key: str = ""
+    fallback_provider: str = ""
+    fallback_model: str = ""  # Ρητά ορισμένος εναλλακτικός πάροχος/μοντέλο μόνο σε βλάβη (PRO-PLAN B3)
+    fallback_base_url: str = ""
+    fallback_api_key: str = ""
     base_url: str = os.getenv("AKATIKITO_BASE_URL", "https://api.deepseek.com/v1")
     api_key: str = os.getenv("AKATIKITO_API_KEY", "")
     temperature: float = 0.0

@@ -172,32 +172,77 @@ class OpenAIModel:
 
         return kwargs
 
+    def _get_fallback_client(self, verdict):
+        if not verdict.fallback:
+            return None
+        from .model_retry import build_fallback_config
+
+        fb_cfg = build_fallback_config(self.config)
+        if fb_cfg is None:
+            return None
+        identity = (fb_cfg.base_url, fb_cfg.model, fb_cfg.api_key)
+        fb_client = getattr(self, "_fallback_model", None)
+        cached_id = getattr(self, "_fallback_identity", None)
+        if fb_client is None or (cached_id is not None and cached_id != identity):
+            fb_client = OpenAIModel(fb_cfg)
+            self._fallback_model = fb_client
+            self._fallback_identity = identity
+        on_fb = getattr(self, "on_fallback", None)
+        if callable(on_fb):
+            try:
+                on_fb(fb_cfg.model, verdict.message)
+            except Exception:
+                pass
+        return fb_client
+
+    def _try_fallback_chat(self, messages, tools, cache_key, verdict):
+        fb_client = self._get_fallback_client(verdict)
+        if fb_client is None:
+            return None
+        return fb_client.chat(messages, tools=tools, cache_key=cache_key)
+
+    def _try_fallback_stream(self, messages, tools, cache_key, on_delta, should_stop, verdict):
+        fb_client = self._get_fallback_client(verdict)
+        if fb_client is None:
+            return None
+        return fb_client.chat_stream(messages, tools=tools, cache_key=cache_key, on_delta=on_delta, should_stop=should_stop)
+
     def chat(
         self, messages: list[dict], tools: list[dict] | None = None, cache_key: str | None = None
     ) -> tuple[dict, dict]:
-        kwargs = self._kwargs(messages, tools, cache_key)
+        from .model_retry import Verdict, classify, extract_retry_after, extract_status
 
+        kwargs = self._kwargs(messages, tools, cache_key)
         last_exc: Exception | None = None
-        delay = self.config.model_retry_delay
-        for attempt in range(1, self.config.model_retry_attempts + 1):
+        last_verdict = Verdict(False, False)
+        max_attempts = max(1, int(self.config.model_retry_attempts))
+        for attempt in range(1, max_attempts + 1):
             try:
                 response = self._client.chat.completions.create(**kwargs)
-                last_exc = None  # Η επιτυχία ακυρώνει το προηγούμενο προσωρινό σφάλμα.
+                last_exc = None
                 break
             except Exception as exc:  # noqa: BLE001
                 last_exc = exc
-                if attempt >= self.config.model_retry_attempts or not self._is_retryable(exc):
+                last_verdict = classify(
+                    extract_status(exc),
+                    exc,
+                    attempt,
+                    max_attempts=max_attempts,
+                    base_delay=self.config.model_retry_delay,
+                    backoff=self.config.model_retry_backoff,
+                    retry_after=extract_retry_after(exc),
+                )
+                if not last_verdict.retry:
                     break
-                time.sleep(delay)
-                delay = min(delay * self.config.model_retry_backoff, 30.0)
-        else:
-            # Αν δεν έγινε break ποτέ (δεν περιμένουμε να φτάσουμε εδώ, αλλά για ασφάλεια).
-            exc = last_exc or RuntimeError("άγνωστο σφάλμα μοντέλου")
-            raise ModelError(self._format_error(exc)) from exc
+                if last_verdict.wait > 0:
+                    time.sleep(last_verdict.wait)
 
         if last_exc is not None:
-            exc = last_exc
-            raise ModelError(self._format_error(exc)) from exc
+            fb_result = self._try_fallback_chat(messages, tools, cache_key, last_verdict)
+            if fb_result is not None:
+                return fb_result
+            prefix = f"{last_verdict.message} " if last_verdict.message else ""
+            raise ModelError(prefix + self._format_error(last_exc)) from last_exc
         choice = response.choices[0].message
         reasoning = self._reasoning_of(choice)
         calls = []
@@ -221,13 +266,42 @@ class OpenAIModel:
             except Exception:
                 pass  # The reader reports cancellation; never retry a partially read stream.
 
+    def _handle_stream_failure(self, exc, received, attempt, attempts, messages, tools, cache_key, on_delta, should_stop):
+        from .model_retry import classify, extract_retry_after, extract_status
+
+        if received:
+            detail = describe_error(exc)
+            cause = exc.__cause__
+            if cause is not None:
+                detail += f" ({type(cause).__name__}: {cause})"
+            raise ModelError("Η ροή διακόπηκε πριν ολοκληρωθεί: " + detail) from exc
+        if isinstance(exc, StreamAssemblyError):
+            raise ModelError(self._format_error(exc)) from exc
+        verdict = classify(
+            extract_status(exc),
+            exc,
+            attempt + 1,
+            max_attempts=attempts,
+            base_delay=self.config.model_retry_delay,
+            backoff=self.config.model_retry_backoff,
+            retry_after=extract_retry_after(exc),
+        )
+        if verdict.retry:
+            if verdict.wait > 0:
+                time.sleep(verdict.wait)
+            return None
+        fb_result = self._try_fallback_stream(messages, tools, cache_key, on_delta, should_stop, verdict)
+        if fb_result is not None:
+            return fb_result
+        prefix = f"{verdict.message} " if verdict.message else ""
+        raise ModelError(prefix + self._format_error(exc)) from exc
+
     def chat_stream(self, messages, tools=None, cache_key=None, on_delta=None, should_stop=None):
         """One streamed completion. Retry only before any response chunk was received."""
         should_stop = should_stop or (lambda: False)
         kwargs = self._kwargs(messages, tools, cache_key)
         kwargs.update(stream=True, stream_options={"include_usage": True},
                       timeout=max(1.0, float(self.config.model_stream_timeout)))
-        delay = self.config.model_retry_delay
         attempts = max(1, self.config.model_retry_attempts)
         for attempt in range(attempts):
             stream = None
@@ -273,16 +347,11 @@ class OpenAIModel:
                     if "stream" in detail and kwargs.get("stream"):
                         kwargs.pop("stream"); kwargs.pop("stream_options", None)
                         continue
-                if received or isinstance(exc, StreamAssemblyError) or attempt + 1 >= attempts or not self._is_retryable(exc):
-                    if received:
-                        detail = describe_error(exc)
-                        cause = exc.__cause__
-                        if cause is not None:
-                            detail += f" ({type(cause).__name__}: {cause})"
-                        raise ModelError("Η ροή διακόπηκε πριν ολοκληρωθεί: " + detail) from exc
-                    raise ModelError(self._format_error(exc)) from exc
-                time.sleep(delay)
-                delay = min(delay * self.config.model_retry_backoff, 30.0)
+                fb_res = self._handle_stream_failure(
+                    exc, received, attempt, attempts, messages, tools, cache_key, on_delta, should_stop
+                )
+                if fb_res is not None:
+                    return fb_res
             finally:
                 self._active_stream = None
                 if stream is not None and callable(getattr(stream, "close", None)):

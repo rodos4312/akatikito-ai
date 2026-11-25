@@ -55,6 +55,18 @@ def unmask_secret(text: str) -> str:
         return ""
 
 
+def _load_routing_fields(settings: Settings, data: dict) -> None:
+    for field_name in (
+        "fast_provider",
+        "fast_model",
+        "smart_provider",
+        "smart_model",
+        "fallback_provider",
+        "fallback_model",
+    ):
+        setattr(settings, field_name, str(data.get(field_name) or "").strip())
+
+
 def short_key(key: str) -> str:
     """Δείχνει μόνο την αρχή και το τέλος του κλειδιού (για επιβεβαίωση)."""
     if not key:
@@ -73,6 +85,8 @@ class Settings:
     fast_model: str = ""
     smart_provider: str = ""
     smart_model: str = ""
+    fallback_provider: str = ""
+    fallback_model: str = ""
     max_steps: int = 50
     verify_command: str = ""
     project: str = ""
@@ -161,10 +175,7 @@ class Settings:
         except (TypeError,ValueError): settings.daily_budget=0
         settings.model_prices=data.get('model_prices',{}) if isinstance(data.get('model_prices'),dict) else {}
         settings.autonomous = data.get('autonomous') is True
-        settings.fast_provider = str(data.get('fast_provider') or '').strip()
-        settings.fast_model = str(data.get('fast_model') or '').strip()
-        settings.smart_provider = str(data.get('smart_provider') or '').strip()
-        settings.smart_model = str(data.get('smart_model') or '').strip()
+        _load_routing_fields(settings, data)
         settings.cautious_edits = data.get('cautious_edits') is True
         settings.checkpoints = data.get('checkpoints',True) is True
         settings.global_hotkey = str(data.get('global_hotkey', 'Alt+Space') or '').strip()
@@ -192,6 +203,8 @@ class Settings:
             "fast_model": self.fast_model,
             "smart_provider": self.smart_provider,
             "smart_model": self.smart_model,
+            "fallback_provider": self.fallback_provider,
+            "fallback_model": self.fallback_model,
             "max_steps": int(self.max_steps),
             "verify_command": self.verify_command,
             "project": self.project,
