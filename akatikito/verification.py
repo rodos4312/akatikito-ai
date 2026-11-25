@@ -20,6 +20,31 @@ def interpreter_for_checks() -> Path:
     raise RuntimeError("Δεν βρέθηκε Python ελέγχων. Άνοιξε το AkatikitoApp.cmd από τον φάκελο της εφαρμογής.")
 
 
+def _size_violations(root: Path, limit: int = 800) -> list[str]:
+    skip = {"__pycache__", ".pytest_cache", "node_modules", "template_parsers", ".venv", "venv"}
+    suffixes = (".py", ".pyw", ".js", ".cjs", ".mjs", ".html", ".css", ".cmd", ".ps1", ".sh")
+    excluded = {"akatikito/i18n.py"}
+    bad: list[str] = []
+    targets = [p for p in sorted(root.iterdir()) if p.is_file() and p.suffix.lower() in suffixes]
+    for folder in (root / "akatikito", root / "scripts"):
+        if folder.is_dir():
+            targets.extend(
+                p for p in sorted(folder.rglob("*"))
+                if p.is_file() and p.suffix.lower() in suffixes and not (set(p.relative_to(root).parts) & skip)
+            )
+    for p in targets:
+        rel = p.relative_to(root).as_posix()
+        if rel in excluded:
+            continue
+        try:
+            n = len(p.read_text(encoding="utf-8-sig", errors="replace").splitlines())
+        except OSError:
+            continue
+        if n > limit:
+            bad.append(f"{rel} ({n} γραμμές)")
+    return bad
+
+
 def run_checks(root: Path, scripts: list[str] | None = None) -> tuple[bool, str]:
     root = Path(root).resolve()
     from .process_lock import writable_dir
@@ -37,7 +62,8 @@ def run_checks(root: Path, scripts: list[str] | None = None) -> tuple[bool, str]
         env.pop(name, None)
     env.update(TEMP=str(work), TMP=str(work), TMPDIR=str(work), PYTHONDONTWRITEBYTECODE="1",
                PYTHONIOENCODING="utf-8", AKATIKITO_SETTINGS_FILE=str(work / "settings.json"),
-               AKATIKITO_MEMORY_DIR=str(work / "memory"), AKATIKITO_TESTING="1")
+               AKATIKITO_MEMORY_DIR=str(work / "memory"), AKATIKITO_AGENDA_FILE=str(work / "agenda.json"),
+               AKATIKITO_TESTING="1")
     logs = []
     def finish(ok: bool, message: str = ""):
         if message:
@@ -60,6 +86,9 @@ def run_checks(root: Path, scripts: list[str] | None = None) -> tuple[bool, str]
         logs.append("Environment: " + preflight.stdout.strip() + preflight.stderr)
         if preflight.returncode:
             return finish(False, "Λείπουν εξαρτήσεις από την Python ελέγχων. Ο έλεγχος απέτυχε, δεν παραλείφθηκε. Άνοιξε το AkatikitoApp.cmd από τον κύριο φάκελο.")
+        oversized = _size_violations(root)
+        if oversized:
+            return finish(False, "Όριο μεγέθους κώδικα (<=800 γραμμές): " + ", ".join(oversized[:10]))
         for p in [root / "app.py", *sorted((root / "akatikito").rglob("*.py")), *sorted((root / "tests").glob("*.py"))]:
             ast.parse(p.read_text(encoding="utf-8-sig"), filename=str(p))
         logs.append("OK Python syntax")

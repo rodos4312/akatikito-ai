@@ -51,3 +51,20 @@ def test_sync_core_check_detects_drift_and_passes_when_synced(tmp_path):
     res2 = check_sync(src, dst)
     assert res2["in_sync"] is True
     assert main(["--src", str(src), "--dst", str(dst), "--check"]) == 0
+
+
+def test_repo_has_zero_grandfathered_files_over_800_lines_and_verification_enforces_limit(tmp_path):
+    from pathlib import Path
+    from akatikito.verification import _size_violations
+    from scripts.size_check import BASELINE_PATH, check_sizes
+
+    assert json.loads(BASELINE_PATH.read_text(encoding="utf-8")) == {}
+    ok, errs = check_sizes()
+    assert ok and not errs
+
+    (tmp_path / "akatikito").mkdir()
+    (tmp_path / "akatikito" / "too_big.py").write_text("\n".join(f"x={i}" for i in range(810)) + "\n", encoding="utf-8")
+    (tmp_path / "akatikito" / "style.css").write_text("\n".join(f".c{i}{{}}" for i in range(805)) + "\n", encoding="utf-8")
+    bad = _size_violations(Path(tmp_path))
+    assert any("too_big.py" in item for item in bad)
+    assert any("style.css" in item for item in bad)

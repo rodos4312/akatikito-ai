@@ -20,14 +20,15 @@ EXCLUDED_REL = {
     "akatikito/i18n.py",
 }
 SKIP_DIRS = {"__pycache__", ".pytest_cache", "node_modules", "template_parsers", ".venv", "venv"}
+SOURCE_SUFFIXES = (".py", ".pyw", ".js", ".cjs", ".mjs", ".html", ".css", ".cmd", ".ps1", ".sh")
 
 
 def collect_source_files(root: Path = ROOT) -> dict[str, int]:
     counts: dict[str, int] = {}
     candidates: list[Path] = []
-    app_py = root / "app.py"
-    if app_py.is_file():
-        candidates.append(app_py)
+    for p in sorted(root.iterdir()):
+        if p.is_file() and p.suffix.lower() in SOURCE_SUFFIXES:
+            candidates.append(p)
     for base in (root / "akatikito", root / "scripts"):
         if not base.is_dir():
             continue
@@ -37,7 +38,7 @@ def collect_source_files(root: Path = ROOT) -> dict[str, int]:
             rel_parts = p.relative_to(root).parts
             if any(part in SKIP_DIRS for part in rel_parts):
                 continue
-            if p.suffix.lower() not in (".py", ".js", ".html"):
+            if p.suffix.lower() not in SOURCE_SUFFIXES:
                 continue
             candidates.append(p)
     for p in candidates:
