@@ -24,6 +24,22 @@ def _version() -> str:
     return __version__
 
 
+def _dispatch_post_table(state: AppState, path: str, data: dict) -> tuple[dict, int]:
+    routes = {
+        "/api/steer": lambda d: state.steer(d.get("text", "")),
+        "/api/session/pin": lambda d: state.pin_session(d.get("id", ""), d.get("pinned") is True, d.get("project", "")),
+        "/api/sessions/search": lambda d: state.search_sessions(d.get("query", ""), d.get("limit", 20)),
+        "/api/usage/insights": lambda d: state.usage_insights(d.get("month", "")),
+        "/api/copy": lambda d: state.copy_text(d.get("text", "")),
+        "/api/paste": lambda d: state.paste_text(d),
+        "/api/chat/export": lambda d: state.export_chat(d),
+    }
+    handler = routes.get(path)
+    if handler is None:
+        return {"error": "άγνωστη διαδρομή"}, 404
+    return handler(data), 200
+
+
 def make_handler(state: AppState) -> type:
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *args) -> None:  # σιωπηλό logging
@@ -308,14 +324,9 @@ def make_handler(state: AppState) -> type:
                 self._send(state.apply_upgrade())
             elif path == "/api/upgrade/cancel":
                 self._send(state.cancel_upgrade())
-            elif path == "/api/copy":
-                self._send(state.copy_text(data.get("text", "")))
-            elif path == "/api/paste":
-                self._send(state.paste_text(data))
-            elif path == "/api/chat/export":
-                self._send(state.export_chat(data))
             else:
-                self._send({"error": "άγνωστη διαδρομή"}, 404)
+                payload, code = _dispatch_post_table(state, path, data)
+                self._send(payload, code)
 
     return Handler
 

@@ -18,6 +18,7 @@
 
   let sidebarCollapsed = false;
   let activeSettingsPane = 'general';
+  let searchTimer = null;
 
   function byId(id) {
     return document.getElementById(id);
@@ -160,6 +161,36 @@
         if (typeof nav.setAttribute === 'function') nav.setAttribute('aria-selected', String(key === target));
       }
     }
+    if (target === 'budget') loadUsageInsights().catch(() => {});
+  }
+
+  async function loadUsageInsights() {
+    const box = byId('usage-insights-box');
+    if (!box || typeof root.api !== 'function') return;
+    const r = await root.api('/api/usage/insights', {});
+    if (r.error) { box.textContent = r.error; return; }
+    const fmtTok = (n) => n >= 1000 ? (n / 1000).toFixed(1) + 'k' : String(n || 0);
+    const totalLine = r.has_prices
+      ? `Μήνας ${r.month} · Σύνολο: $${Number(r.total_cost || 0).toFixed(4)} (${r.calls} κλήσεις)`
+      : `Μήνας ${r.month} · ${fmtTok((r.prompt_tokens || 0) + (r.completion_tokens || 0))} tokens (${r.calls} κλήσεις · χωρίς ορισμένες τιμές)`;
+    const lines = [totalLine];
+    if (r.sparkline) lines.push(`Ανά μέρα:    ${r.sparkline}`);
+    if (r.cache_hit_pct > 0 || r.cache_saved > 0) {
+      const saveTxt = r.cache_saved > 0 ? ` (εξοικονόμηση ~$${Number(r.cache_saved).toFixed(4)})` : '';
+      lines.push(`Cache hit:   ${r.cache_hit_pct}%${saveTxt}`);
+    }
+    if (r.projected_month_cost) lines.push(`Πρόβλεψη:    ~$${Number(r.projected_month_cost).toFixed(2)} / μήνα`);
+    if ((r.by_model || []).length) {
+      lines.push('Ανά μοντέλο: ' + r.by_model.slice(0, 4).map((m) =>
+        `${m.name} ${m.cost > 0 ? '$' + m.cost.toFixed(4) : fmtTok(m.tokens) + ' tok'}`
+      ).join(' · '));
+    }
+    if ((r.by_project || []).length) {
+      lines.push('Ανά project: ' + r.by_project.slice(0, 4).map((p) =>
+        `${p.name} ${p.cost > 0 ? '$' + p.cost.toFixed(4) : fmtTok(p.tokens) + ' tok'}`
+      ).join(' · '));
+    }
+    box.textContent = lines.join('\n');
   }
 
   function syncSettingsControls(s) {
@@ -181,6 +212,61 @@
     if (fontRange && document.activeElement !== fontRange) fontRange.value = String(sz);
     if (fontVal) fontVal.textContent = sz + 'px';
     if (fontLbl) fontLbl.textContent = sz + 'px';
+  }
+
+  function searchSessionsFullText(query) {
+    clearTimeout(searchTimer);
+    const sessionsBox = byId('sessions');
+    if (!sessionsBox || !sessionsBox.parentElement) return;
+    let hitsBox = byId('sessions-search-hits');
+    const q = String(query || '').trim();
+    if (q.length < 2) {
+      if (hitsBox) { hitsBox.replaceChildren(); hitsBox.style.display = 'none'; }
+      return;
+    }
+    if (!hitsBox) {
+      hitsBox = document.createElement('div');
+      hitsBox.id = 'sessions-search-hits';
+      hitsBox.style.cssText = 'display:none;flex-direction:column;gap:4px;border-top:1px solid var(--border);padding-top:6px;margin-top:4px';
+      sessionsBox.parentElement.appendChild(hitsBox);
+    }
+    searchTimer = setTimeout(async () => {
+      if (typeof root.api !== 'function') return;
+      try {
+        const r = await root.api('/api/sessions/search', { query: q, limit: 10 });
+        hitsBox.replaceChildren();
+        const rows = (r && r.results) || [];
+        if (!rows.length) { hitsBox.style.display = 'none'; return; }
+        const hdr = document.createElement('div');
+        hdr.className = 'hint';
+        hdr.textContent = `Μέσα σε κείμενα (${rows.length}):`;
+        hitsBox.appendChild(hdr);
+        for (const item of rows) {
+          const btn = document.createElement('button');
+          btn.className = 'btn';
+          btn.style.cssText = 'text-align:left;padding:6px 8px;font-size:11.5px;display:flex;flex-direction:column;gap:2px';
+          const title = document.createElement('strong');
+          title.textContent = (item.pinned ? '📌 ' : '') + (item.title || item.id);
+          const snip = document.createElement('span');
+          snip.className = 'hint';
+          snip.textContent = item.snippet || '';
+          btn.append(title, snip);
+          btn.onclick = async () => {
+            const st = await root.api('/api/session/open', { id: item.id, project: item.project });
+            if (st.error) { root.showNotice?.('err', st.error); return; }
+            if (typeof root.clearStream === 'function') root.clearStream();
+            if (typeof root.clearFileView === 'function') root.clearFileView();
+            const chatEl = byId('chat');
+            if (chatEl) chatEl.innerHTML = '';
+            root.renderTranscript?.(st.transcript || []);
+            root.updateBadges?.(st);
+            root.loadSessions?.();
+          };
+          hitsBox.appendChild(btn);
+        }
+        hitsBox.style.display = 'flex';
+      } catch (_) {}
+    }, 220);
   }
 
   function bindGlobalShortcuts() {
@@ -209,7 +295,9 @@
     applySidebarCollapsed,
     toggleSidebar,
     selectSettingsPane,
+    loadUsageInsights,
     syncSettingsControls,
+    searchSessionsFullText,
     isSidebarCollapsed: () => sidebarCollapsed,
     activeSettingsPane: () => activeSettingsPane,
   };

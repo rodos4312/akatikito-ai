@@ -19,6 +19,7 @@ from .model import OpenAIModel, ModelStopped
 from .streaming import DeltaBatcher
 from .execution import arguments as call_arguments, read_resource
 from .repair import RepairState, is_test_command, verification_blocker
+from .tool_spill import spill_large_output
 from .task_state import TaskState
 from .intent import implementation_requested, read_only, normal
 from .tools import TOOL_SPECS, dispatch, validate_arguments
@@ -75,6 +76,7 @@ class Akatikito:
         self._active_child=None
         self._active_children: list = []
         self._sub_lock = threading.Lock()
+        self._pending_steer: list[str] = []
         self._command_lock = threading.Lock()
         self._shared_command_lock: threading.Lock | None = None
         self._task_writes: set[str] = set()
@@ -105,9 +107,29 @@ class Akatikito:
         if callable(cancel):
             cancel()
 
+    def steer(self, text: str) -> bool:
+        """Queue a mid-flight owner instruction for the next step boundary."""
+        clean = str(text or "").strip()
+        if not clean:
+            return False
+        with self._sub_lock:
+            self._pending_steer.append(clean)
+        self.events.emit("steer_queued", text=clean)
+        return True
+
+    def _drain_steer(self) -> None:
+        with self._sub_lock:
+            if not self._pending_steer:
+                return
+            joined = "\n".join(self._pending_steer)
+            self._pending_steer.clear()
+        self.messages.append({"role": "user", "content": "[Οδηγία του χρήστη κατά την εκτέλεση]\n" + joined, "_origin": "owner"})
+        self.events.emit("steer_applied", text=joined)
+
     def reset(self) -> None:
         with self._sub_lock:
             self._turn_id += 1
+            self._pending_steer.clear()
         self._session_route_tier = ""; self._ask_unlocked_tools = set()
         self.messages = []
         self.cache_id = uuid.uuid4().hex
@@ -610,6 +632,7 @@ class Akatikito:
 
             # Never reuse old permissions for the sake of a cache hit.
             self.messages[0] = {"role":"system", "content":self.policy_prompt()}
+            self._drain_steer()
             self._observe_request_state()
             request = self.context.prepare(self.messages, self.repair, self.activity,
                                            continuous=continuous)
@@ -685,6 +708,7 @@ class Akatikito:
                 except (ValueError,TypeError):args = {}
                 from .execution import mutation_paths
                 paths=mutation_paths(call["name"],args,result)
+                result = spill_large_output(self.ws.root, call["name"], result)
                 self.events.emit("tool_result", name=call["name"], path=paths[0] if len(paths)==1 else (args.get('path') or args.get('output_path') or ''),
                                  paths=list(paths),recovery_required=getattr(result,'recovery_required',False),
                                  diff=getattr(result,'diff',''),

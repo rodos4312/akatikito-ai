@@ -193,13 +193,15 @@ async function poll() {
       setStatus(`${esc(livePhase || "σκέφτομαι…")} ${esc(s.model || "")} · tokens: ${(t.prompt_tokens||0)} in / ${(t.completion_tokens||0)} out`);
       document.getElementById("stopbtn").style.display = "";
       document.getElementById("stopside").style.display = "";
-      document.getElementById("sendbtn").disabled = true;
+      const sb = document.getElementById("sendbtn");
+      if (sb) { sb.disabled = false; sb.textContent = "🧭 Οδηγία"; sb.title = "Στείλε οδηγία εν κινήσει χωρίς να σταματήσεις την εργασία"; }
     } else {
       livePhase = "";
       setStatus(null);
       document.getElementById("stopbtn").style.display = "none";
       document.getElementById("stopside").style.display = "none";
-      document.getElementById("sendbtn").disabled = false;
+      const sb = document.getElementById("sendbtn");
+      if (sb) { sb.disabled = false; sb.textContent = i18nText('btn_send', 'Αποστολή ➤'); sb.title = ""; }
       if (liveStream && liveStream.status === "complete") clearStream();
       const last = (s.transcript || []).filter(m => m.role === "assistant").pop();
       if (last) renderTranscript(s.transcript || []);  // idempotent: προσθέτει μόνο τα νέα

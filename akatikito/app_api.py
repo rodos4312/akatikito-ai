@@ -126,7 +126,10 @@ class AppState(OpsStateMixin, FilesStateMixin, SessionsUpgradeStateMixin):
         agent.ws.external_guard=lambda kind,details:self.approvals.request(agent.ws.root,kind,details,stopped=lambda:agent._stop)
         price_key=lambda:self.settings.provider+'|'+agent.config.base_url+'|'+agent.config.model
         agent.before_model=lambda:self.usage_ledger.check(self.settings.daily_budget,agent.cache_id,self.settings.model_prices.get(price_key()))
-        agent.usage_hook=lambda usage:self.usage_ledger.record(agent.cache_id,usage,self.settings.model_prices.get(price_key()))
+        agent.usage_hook=lambda usage:self.usage_ledger.record(
+            agent.cache_id, usage, self.settings.model_prices.get(price_key()),
+            model=agent.config.model, project=agent.ws.root.name,
+        )
         agent.config.supports_vision = endpoint_identity(agent.config.base_url)+'|'+agent.config.model in self.settings.vision_models
         agent.ws.command_guard = lambda command,risk:self.approvals.request(
             agent.ws.root,'command',{'command':command},risk,
@@ -422,6 +425,12 @@ class AppState(OpsStateMixin, FilesStateMixin, SessionsUpgradeStateMixin):
             if missing:view['session']={**view['session'],'unknown':view['session'].get('unknown',0)+1,'legacy_prompt_tokens':missing}
         return view
 
+    def usage_insights(self, month: str = "") -> dict:
+        try:
+            return self.usage_ledger.monthly_insights(month or None)
+        except (OSError, ValueError) as exc:
+            return {"error": str(exc)}
+
     def status(self) -> dict:
         agent = self.agent
         streaming = self.streaming
@@ -579,6 +588,17 @@ class AppState(OpsStateMixin, FilesStateMixin, SessionsUpgradeStateMixin):
         threading.Thread(target=run, daemon=True).start()
         if routed:
             return {"ok": True, "conversation_changed": True, "last_seq": boundary_seq}
+        return {"ok": True}
+
+    def steer(self, text: str) -> dict:
+        clean = str(text or "").strip()
+        if not clean:
+            return {"error": "Κενή οδηγία."}
+        if self.agent is None or not self.busy:
+            return {"error": "Δεν εκτελείται εργασία αυτή τη στιγμή."}
+        self.agent.steer(clean)
+        self.transcript.append({"role": "user", "text": "🧭 " + clean})
+        self.push("steer", text=clean)
         return {"ok": True}
 
     def stop(self) -> dict:

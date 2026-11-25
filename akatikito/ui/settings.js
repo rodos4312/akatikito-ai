@@ -41,7 +41,7 @@ async function loadSessions() {
     const row = document.createElement("div");
     row.className = "sess" + (s.id === currentSession && s.project === currentProject ? " active" : "");
     const open = document.createElement("button");
-    open.className = "btn"; open.textContent = (source==='desktop'?'':'['+source+'] ')+s.title + " · " + (s.project_name || "");
+    open.className = "btn"; open.textContent = (s.pinned ? "📌 " : "") + (source==='desktop'?'':'['+source+'] ')+s.title + " · " + (s.project_name || "");
     open.title = s.project || "";
     open.onclick = async () => {
       if(source!=='desktop'){await viewChannelSession(s);return;}
@@ -54,6 +54,13 @@ async function loadSessions() {
       updateBadges(st);
       await loadSessions();
     };
+    const pin = document.createElement("button");
+    pin.className = "btn"; pin.style.cssText = "width:32px;min-width:32px;padding:6px 0";
+    pin.textContent = s.pinned ? "📌" : "📍"; pin.title = s.pinned ? "Ξεκαρφίτσωμα" : "Καρφίτσωμα στην κορυφή";
+    pin.onclick = async () => {
+      const st = await api("/api/session/pin", {id: s.id, project: s.project, pinned: !s.pinned});
+      if (st.error) showNotice("err", st.error); else await loadSessions();
+    };
     const del = document.createElement("button");
     del.className = "btn del"; del.textContent = "🗑";
     if(source!=='desktop'){del.disabled=true;del.title='Νέα συνομιλία με /new στο κανάλι';}
@@ -64,7 +71,7 @@ async function loadSessions() {
       if (s.id === currentSession && s.project === currentProject) { clearStream(); chat.replaceChildren(); }
       await loadSessions();
     };
-    row.appendChild(open); row.appendChild(del);
+    row.append(open, pin, del);
     box.appendChild(row);
   }
 }
@@ -694,6 +701,7 @@ function filterSessionsList(query) {
     const txt = (row.textContent || '').toLowerCase();
     row.style.display = (!q || txt.includes(q)) ? '' : 'none';
   }
+  if (typeof StudioUI !== 'undefined' && StudioUI.searchSessionsFullText) StudioUI.searchSessionsFullText(query);
 }
 function filterSkillsCards(query) {
   const box = document.getElementById('skills-content');

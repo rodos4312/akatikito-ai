@@ -717,8 +717,21 @@ async function send() {
   const el = document.getElementById("prompt");
   const text = el.value.trim();
   if(voiceCapture||voiceUploading||voiceSnapshot.job?.status==='transcribing'){showNotice('err','Ολοκλήρωσε ή ακύρωσε πρώτα την υπαγόρευση.');return;}
-  if (!text || busy || sending) return;
+  if (!text || sending) return;
   if (!connected) { showNotice("err", "Συνδέσου πρώτα στις Ρυθμίσεις."); return; }
+  if (busy) {
+    sending = true;
+    try {
+      const r = await api("/api/steer", {text});
+      if (r.error) throw new Error(r.error);
+      el.value = ""; grow(el);
+      addMsg("user", "🧭 " + text);
+      showNotice("ok", "🧭 Η οδηγία στάλθηκε — θα ληφθεί υπόψη στο επόμενο βήμα.");
+    } catch (err) {
+      showNotice("err", err.message || String(err));
+    } finally { sending = false; }
+    return;
+  }
   sending = true;
   let pending = addMsg("user", text);
   el.value = ""; grow(el);

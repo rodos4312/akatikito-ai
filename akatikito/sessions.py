@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import time
+import unicodedata
 import uuid
 from pathlib import Path
 
@@ -147,14 +148,42 @@ class SessionStore:
                 {
                     "id": data.get("id"),
                     "title": data.get("title") or DEFAULT_TITLE,
+                    "pinned": bool(data.get("pinned", False)),
                     "created_at": float(data.get("created_at") or 0),
                     "updated_at": float(data.get("updated_at") or 0),
                     "messages": len(data.get("messages") or []),
                     "source": data.get("source") or {"platform":"desktop"},
                 }
             )
-        rows.sort(key=lambda r: r["updated_at"], reverse=True)
+        rows.sort(key=lambda r: (r["pinned"], r["updated_at"]), reverse=True)
         return rows
+
+    def set_pinned(self, session_id: str, pinned: bool) -> dict | None:
+        rec = self.load(session_id)
+        if rec is None:
+            return None
+        rec["pinned"] = bool(pinned)
+        self._write(rec)
+        return rec
+
+    def search(self, query: str, limit: int = 20) -> list[dict]:
+        """Full-text diacritic-insensitive search across session titles and user/assistant transcripts."""
+        tokens = [t for t in _fold_text(query).split() if t]
+        if not tokens or not self.dir.is_dir():
+            return []
+        hits: list[dict] = []
+        for p in sorted(self.dir.glob("*.json")):
+            try:
+                data = json.loads(p.read_text(encoding="utf-8"))
+            except Exception:  # noqa: BLE001
+                continue
+            if not isinstance(data, dict) or not data.get("id"):
+                continue
+            match = _match_session_record(data, tokens)
+            if match is not None:
+                hits.append(match)
+        hits.sort(key=lambda r: (r["pinned"], r["score"], r["updated_at"]), reverse=True)
+        return hits[: max(1, min(100, int(limit or 20)))]
 
     def delete(self, session_id: str) -> bool:
         p = self._path(session_id)
@@ -173,3 +202,50 @@ class SessionStore:
                 if text:
                     return text[:TITLE_MAX]
         return ""
+
+
+def _fold_text(text: str) -> str:
+    decomposed = unicodedata.normalize("NFD", str(text or ""))
+    return "".join(ch for ch in decomposed if unicodedata.category(ch) != "Mn").casefold()
+
+
+def _snippet_around(raw: str, needle: str, radius: int = 55) -> str:
+    folded = _fold_text(raw)
+    idx = folded.find(needle)
+    if idx < 0:
+        return raw[: radius * 2].strip()
+    start = max(0, idx - radius)
+    end = min(len(raw), idx + len(needle) + radius)
+    prefix = "…" if start > 0 else ""
+    suffix = "…" if end < len(raw) else ""
+    return prefix + " ".join(raw[start:end].split()) + suffix
+
+
+def _match_session_record(data: dict, tokens: list[str]) -> dict | None:
+    title = str(data.get("title") or DEFAULT_TITLE)
+    parts = [title]
+    for item in data.get("transcript") or []:
+        if isinstance(item, dict) and item.get("role") in ("user", "assistant"):
+            txt = str(item.get("text") or "").strip()
+            if txt:
+                parts.append(txt)
+    folded_all = _fold_text("\n".join(parts))
+    if not all(tok in folded_all for tok in tokens):
+        return None
+    score = sum(folded_all.count(tok) for tok in tokens)
+    if all(tok in _fold_text(title) for tok in tokens):
+        score += 5
+    snippet = ""
+    for part in parts[1:]:
+        if any(tok in _fold_text(part) for tok in tokens):
+            snippet = _snippet_around(part, tokens[0])
+            break
+    return {
+        "id": data.get("id"),
+        "title": title,
+        "pinned": bool(data.get("pinned", False)),
+        "updated_at": float(data.get("updated_at") or 0),
+        "source": data.get("source") or {"platform": "desktop"},
+        "snippet": snippet or title,
+        "score": score,
+    }

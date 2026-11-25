@@ -52,7 +52,31 @@ class SessionsUpgradeStateMixin:
                 continue
             for row in SessionStore(root).list():
                 rows.append({**row, "project": str(root), "project_name": root.name})
-        return sorted(rows, key=lambda r: r["updated_at"], reverse=True)
+        return sorted(rows, key=lambda r: (bool(r.get("pinned")), r["updated_at"]), reverse=True)
+
+    def pin_session(self, session_id: str, pinned: bool, project: str = "") -> dict:
+        if not session_id or not str(session_id).isalnum():
+            return {"error": "Μη έγκυρη συνεδρία."}
+        root = Path(project).resolve() if project else (self.store.root if self.store else Path(self.settings.project or _app_root()).resolve())
+        if root not in self._session_roots():
+            return {"error": "Άγνωστο project."}
+        rec = SessionStore(root).set_pinned(session_id, bool(pinned))
+        if rec is None:
+            return {"error": "Η συνομιλία δεν βρέθηκε."}
+        return {"ok": True, "pinned": bool(rec.get("pinned")), "sessions": self.sessions()}
+
+    def search_sessions(self, query: str, limit: int = 20) -> dict:
+        q = str(query or "").strip()
+        if not q:
+            return {"query": "", "results": []}
+        found: list[dict] = []
+        for root in self._session_roots():
+            if self.self_update and root == self.self_update.stage:
+                continue
+            for hit in SessionStore(root).search(q, limit=limit):
+                found.append({**hit, "project": str(root), "project_name": root.name})
+        found.sort(key=lambda r: (bool(r.get("pinned")), r.get("score", 0), r.get("updated_at", 0)), reverse=True)
+        return {"query": q, "results": found[: max(1, min(100, int(limit or 20)))]}
 
     def open_session(self, session_id: str, project: str = "") -> dict:
         if self.busy or self.self_update:
