@@ -270,7 +270,7 @@ def run_command(ws: Workspace, command: str, timeout: int = 120) -> str:
         from .job_sandbox import managed_job
 
         with managed_job() as job:
-            proc = subprocess.Popen(
+            proc = subprocess.Popen(  # noqa: S602 — command_policy & owner approval enforced before Popen
                 command,
                 shell=True,
                 cwd=str(ws.root),

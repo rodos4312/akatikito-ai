@@ -68,3 +68,33 @@ def test_repo_has_zero_grandfathered_files_over_800_lines_and_verification_enfor
     bad = _size_violations(Path(tmp_path))
     assert any("too_big.py" in item for item in bad)
     assert any("style.css" in item for item in bad)
+
+
+def test_health_check_ratchet_blocks_high_complexity_and_new_long_lines(tmp_path):
+    from scripts.health_check import check_health, write_baseline
+
+    (tmp_path / "akatikito").mkdir()
+    mod = tmp_path / "akatikito" / "sample.py"
+    # Existing function with CC = 22 (1 + 21 ifs)
+    branches = "\n".join(f"    if x == {i}: return {i}" for i in range(21))
+    mod.write_text(f"def legacy(x):\n{branches}\n    return -1\n", encoding="utf-8")
+    base = tmp_path / "health_baseline.json"
+    write_baseline(tmp_path, base, complexity_limit=20)
+    ok, errs = check_health(tmp_path, base, complexity_limit=20)
+    assert ok and not errs
+
+    # Adding a brand-new function with CC > 20 -> rejected
+    mod.write_text(
+        f"def legacy(x):\n{branches}\n    return -1\n\ndef brand_new(x):\n{branches}\n    return 0\n",
+        encoding="utf-8",
+    )
+    ok2, errs2 = check_health(tmp_path, base, complexity_limit=20)
+    assert not ok2 and any("brand_new" in e for e in errs2)
+
+    # Adding a >200-char line to a clean file -> rejected
+    mod.write_text(
+        f"def legacy(x):\n{branches}\n    return -1\nLONG = '" + ("a" * 210) + "'\n",
+        encoding="utf-8",
+    )
+    ok3, errs3 = check_health(tmp_path, base, complexity_limit=20)
+    assert not ok3 and any("200" in e for e in errs3)

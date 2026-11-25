@@ -9,34 +9,37 @@ cd /d "%~dp0"
 set "PY=.venv\Scripts\python.exe"
 if not exist "%PY%" set "PY=python"
 
-echo [1/4] ruff
+echo [1/6] ruff (ruff.toml)
 "%PY%" -m ruff --version >nul 2>&1
 if not errorlevel 1 (
-  "%PY%" -m ruff check --select F821,F811,E9,F63,F7 --isolated akatikito scripts tests app.py || goto :fail
+  "%PY%" -m ruff check --config ruff.toml akatikito scripts tests app.py || goto :fail
 ) else (
   where ruff >nul 2>&1 || (echo ruff not found: run  "%PY%" -m pip install -r requirements-dev.txt & goto :fail)
-  ruff check --select F821,F811,E9,F63,F7 --isolated akatikito scripts tests app.py || goto :fail
+  ruff check --config ruff.toml akatikito scripts tests app.py || goto :fail
 )
 
-echo [2/5] file size ratchet
+echo [2/6] file size ratchet
 "%PY%" scripts\size_check.py || goto :fail
 
-echo [3/5] UI JavaScript syntax
+echo [3/6] complexity and long-line ratchet
+"%PY%" scripts\health_check.py || goto :fail
+
+echo [4/6] UI JavaScript syntax
 for %%f in (akatikito\ui\*.js akatikito\onboarding.js) do (
   node --check "%%f" || goto :fail
 )
 
-echo [4/5] node UI tests
+echo [5/6] node UI tests
 for %%f in (tests\*.cjs) do (
   node "%%f" >nul || (echo FAILED: %%f & goto :fail)
 )
 
 if /i "%~1"=="--fast" (
-  echo [5/5] pytest skipped in --fast mode; it runs before push.
+  echo [6/6] pytest skipped in --fast mode; it runs before push.
   goto :ok
 )
 
-echo [5/5] pytest
+echo [6/6] pytest
 "%PY%" -m pytest -q -x -p no:cacheprovider || goto :fail
 
 :ok

@@ -1,0 +1,11 @@
+# Single source of truth for check.cmd, git hooks, and GitHub Actions CI.
+line-length = 120
+target-version = "py311"
+extend-exclude = ["akatikito/template_parsers/node_modules", ".venv", "dist", "build", "data"]
+
+[lint]
+# Block undefined names, duplicate defs, syntax errors, mutable defaults, eval, and unreviewed shell=True.
+select = ["F821", "F811", "E9", "F63", "F7", "B006", "B008", "S307", "S602"]
+
+[lint.per-file-ignores]
+"tests/*" = ["F811", "S"]
