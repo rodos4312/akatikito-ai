@@ -28,7 +28,7 @@ from .tray import resolve_tray_icon
 
 _ATTACH_OLD_DAYS = 30
 _ATTACH_WARN_BYTES = 100 * 1024 * 1024  # 100 MiB
-_CORE_PACKAGES = ("httpx", "openai")
+_CORE_PACKAGES = ("httpx", "openai", "snowballstemmer")
 _FEATURE_PACKAGES = ("docx", "openpyxl", "pypdf", "PIL")
 
 
@@ -394,6 +394,94 @@ def check_desktop_hotkey_tray(doc, make_item) -> dict[str, Any]:
     return make_item("desktop_hotkey_tray", "Συντόμευση πληκτρολογίου & System Tray", "ok", f"Συντόμευση «{hk_desc}» έγκυρη" + (" · εικονίδιο Tray έτοιμο." if ico else "."), meta={"global_hotkey": raw, "icon_found": bool(ico)})
 
 
+def _memory_db_path(doc) -> Path:
+    return doc.data_dir / "memory" / "memory.db"
+
+
+def check_memory_db(doc, make_item) -> dict[str, Any]:
+    db = _memory_db_path(doc)
+    if not db.is_file():
+        return make_item(
+            "memory_db",
+            "Κεντρική βάση μνήμης (SQLite)",
+            "ok",
+            "Δεν υπάρχει ακόμα data/memory/memory.db (δημιουργείται αυτόματα στην πρώτη χρήση μνήμης).",
+        )
+    try:
+        uri = f"{db.as_uri()}?mode=ro"
+        conn = sqlite3.connect(uri, uri=True, timeout=2.0)
+        try:
+            row = conn.execute("PRAGMA quick_check").fetchone()
+            ok_integrity = bool(row and str(row[0]).lower() == "ok")
+            tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type IN ('table','virtual table')")}
+            has_schema = {"memories", "history"} <= tables
+            count = int(conn.execute("SELECT COUNT(*) FROM memories WHERE superseded_by IS NULL").fetchone()[0]) if has_schema else 0
+        finally:
+            conn.close()
+        if ok_integrity and has_schema:
+            kb = max(1, round(db.stat().st_size / 1024))
+            return make_item("memory_db", "Κεντρική βάση μνήμης (SQLite)", "ok", f"Η βάση μνήμης είναι υγιής ({count} ενεργές μνήμες, {kb} KB).", meta={"memories": count, "bytes": db.stat().st_size})
+        reason = "ελλιπές σχήμα πινάκων" if ok_integrity else "αλλοίωση βάσης SQLite"
+    except Exception as exc:
+        reason = f"{type(exc).__name__}: {exc}"
+    return make_item(
+        "memory_db",
+        "Κεντρική βάση μνήμης (SQLite)",
+        "error",
+        f"Πρόβλημα στο data/memory/memory.db ({reason}).",
+        fixable=True,
+        fix_label="Επαναφορά μνήμης",
+        fix_preview="Θα κρατήσει αντίγραφο του χαλασμένου memory.db ως .broken και θα αρχικοποιήσει καθαρή βάση (τα MEMORY.md/profile.json δεν αγγίζονται).",
+    )
+
+
+def _fix_doc_index(doc) -> tuple[list[str], str]:
+    from .doc_index import DocIndex
+
+    db = _doc_index_path(doc)
+    touched = []
+    if db.is_file():
+        broken = db.with_name(f"doc-index.broken.{time.strftime('%Y%m%d-%H%M%S')}.sqlite")
+        db.rename(broken)
+        touched.append(str(broken))
+    for suffix in ("-wal", "-shm"):
+        side = Path(str(db) + suffix)
+        if side.is_file():
+            try:
+                side.unlink(missing_ok=True)
+                touched.append(str(side))
+            except OSError:
+                pass
+    conn = DocIndex(doc.project_root)._connect()
+    conn.close()
+    touched.append(str(db))
+    return touched, "Επαναφέρθηκε καθαρό ευρετήριο αναζήτησης εγγράφων (.agent/doc-index.sqlite)."
+
+
+def _fix_memory_db(doc) -> tuple[list[str], str]:
+    from .memory_store import MemoryStore
+
+    db = _memory_db_path(doc)
+    touched = []
+    if db.is_file():
+        broken = db.with_name(f"memory.broken.{time.strftime('%Y%m%d-%H%M%S')}.db")
+        db.rename(broken)
+        touched.append(str(broken))
+    for suffix in ("-wal", "-shm"):
+        side = Path(str(db) + suffix)
+        if side.is_file():
+            try:
+                side.unlink(missing_ok=True)
+                touched.append(str(side))
+            except OSError:
+                pass
+    db.parent.mkdir(parents=True, exist_ok=True)
+    store = MemoryStore(db)
+    store.close()
+    touched.append(str(db))
+    return touched, "Επαναφέρθηκε καθαρή βάση μνήμης (data/memory/memory.db)· οι παλιές σημειώσεις (MEMORY.md/profile.json) συγχρονίζονται αυτόματα."
+
+
 def run_extended_checks(doc, make_item, *, check_api: bool = False) -> list[dict[str, Any]]:
     return [
         check_python_packages(doc, make_item),
@@ -406,6 +494,7 @@ def run_extended_checks(doc, make_item, *, check_api: bool = False) -> list[dict
         check_audit_chain(doc, make_item),
         check_source_syntax(doc, make_item),
         check_doc_index(doc, make_item),
+        check_memory_db(doc, make_item),
         check_staged_attachments(doc, make_item),
         check_desktop_hotkey_tray(doc, make_item),
     ]
@@ -490,26 +579,10 @@ def apply_extended_fix(doc, check_id: str, action: str, backup_fn) -> dict[str, 
         return touched, "Επαναδημιουργήθηκαν οι συντομεύσεις Windows (pythonw.exe + εικονίδιο)."
 
     if check_id == "doc_index":
-        from .doc_index import DocIndex
+        return _fix_doc_index(doc)
 
-        db = _doc_index_path(doc)
-        touched = []
-        if db.is_file():
-            broken = db.with_name(f"doc-index.broken.{time.strftime('%Y%m%d-%H%M%S')}.sqlite")
-            db.rename(broken)
-            touched.append(str(broken))
-        for suffix in ("-wal", "-shm"):
-            side = Path(str(db) + suffix)
-            if side.is_file():
-                try:
-                    side.unlink(missing_ok=True)
-                    touched.append(str(side))
-                except OSError:
-                    pass
-        conn = DocIndex(doc.project_root)._connect()
-        conn.close()
-        touched.append(str(db))
-        return touched, "Επαναφέρθηκε καθαρό ευρετήριο αναζήτησης εγγράφων (.agent/doc-index.sqlite)."
+    if check_id == "memory_db":
+        return _fix_memory_db(doc)
 
     if check_id == "staged_attachments":
         old_files, old_bytes, _, _ = _scan_attachments(doc)

@@ -17,7 +17,7 @@ def _by_id(report: dict) -> dict[str, dict]:
     return {c["id"]: c for c in report["checks"]}
 
 
-def test_diagnose_is_readonly_and_returns_all_18_checks(tmp_path):
+def test_diagnose_is_readonly_and_returns_all_19_checks(tmp_path):
     data_dir = tmp_path / "data"
     proj_dir = tmp_path / "proj"
     data_dir.mkdir()
@@ -31,8 +31,9 @@ def test_diagnose_is_readonly_and_returns_all_18_checks(tmp_path):
 
     doc = Doctor(app_root=tmp_path, data_dir=data_dir, project_root=proj_dir, lock_dir=tmp_path / "locks")
     rep = doc.diagnose(check_api=False)
-    assert len(rep["checks"]) == 18
+    assert len(rep["checks"]) == 19
     by_id = _by_id(rep)
+    assert "memory_db" in by_id
     assert by_id["json_integrity"]["status"] == "error"
     assert by_id["temp_partials"]["status"] == "warn"
     assert by_id["api_key_live"]["meta"].get("checked") is False
@@ -305,7 +306,7 @@ def test_doctor_is_human_only_never_exposed_as_llm_tool_and_cli_runs(tmp_path, c
     rc = _cli(["--project", str(tmp_path), "--json"])
     out = capsys.readouterr().out
     parsed = json.loads(out)
-    assert "checks" in parsed and len(parsed["checks"]) == 18
+    assert "checks" in parsed and len(parsed["checks"]) == 19
     assert rc in (0, 1)
 
 
@@ -433,3 +434,23 @@ def test_doctor_snapshot_configs_saves_only_valid_json_and_logs_audit(tmp_path):
     assert not list(data_dir.glob("usage.bak.*.json"))
     entries = AuditLog(proj_dir).entries(limit=10)
     assert any(e.get("action") == "doctor_snapshot" for e in entries)
+
+
+def test_doctor_checks_and_repairs_corrupted_central_memory_db(tmp_path):
+    data_dir = tmp_path / "data"
+    proj_dir = tmp_path / "proj"
+    mem_dir = data_dir / "memory"
+    mem_dir.mkdir(parents=True)
+    proj_dir.mkdir()
+    db = mem_dir / "memory.db"
+    db.write_bytes(b"corrupted sqlite header bytes")
+
+    doc = Doctor(app_root=tmp_path, data_dir=data_dir, project_root=proj_dir, lock_dir=tmp_path / "locks")
+    chk = _by_id(doc.diagnose())["memory_db"]
+    assert chk["status"] == "error" and chk["fixable"] is True
+
+    res = doc.apply_fix("memory_db")
+    assert res["ok"] is True
+    assert list(mem_dir.glob("memory.broken.*.db"))
+    chk_after = _by_id(doc.diagnose())["memory_db"]
+    assert chk_after["status"] == "ok"

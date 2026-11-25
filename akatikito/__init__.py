@@ -1,7 +1,7 @@
 """Akatikito — αυτόνομος βοηθός προγραμματισμού."""
 
 APP_NAME = "Akatikito"
-__version__ = "2.4.0"
+__version__ = "2.5.0"
 
 from .agent import Akatikito  # noqa: E402
 
