@@ -17,7 +17,7 @@ def _by_id(report: dict) -> dict[str, dict]:
     return {c["id"]: c for c in report["checks"]}
 
 
-def test_diagnose_is_readonly_and_returns_all_17_checks(tmp_path):
+def test_diagnose_is_readonly_and_returns_all_18_checks(tmp_path):
     data_dir = tmp_path / "data"
     proj_dir = tmp_path / "proj"
     data_dir.mkdir()
@@ -31,7 +31,7 @@ def test_diagnose_is_readonly_and_returns_all_17_checks(tmp_path):
 
     doc = Doctor(app_root=tmp_path, data_dir=data_dir, project_root=proj_dir, lock_dir=tmp_path / "locks")
     rep = doc.diagnose(check_api=False)
-    assert len(rep["checks"]) == 17
+    assert len(rep["checks"]) == 18
     by_id = _by_id(rep)
     assert by_id["json_integrity"]["status"] == "error"
     assert by_id["temp_partials"]["status"] == "warn"
@@ -305,7 +305,7 @@ def test_doctor_is_human_only_never_exposed_as_llm_tool_and_cli_runs(tmp_path, c
     rc = _cli(["--project", str(tmp_path), "--json"])
     out = capsys.readouterr().out
     parsed = json.loads(out)
-    assert "checks" in parsed and len(parsed["checks"]) == 17
+    assert "checks" in parsed and len(parsed["checks"]) == 18
     assert rc in (0, 1)
 
 
@@ -375,3 +375,61 @@ def test_doctor_validates_and_repairs_invalid_global_hotkey_and_broken_usage_jso
     assert saved["global_hotkey"] == "Alt+Space"
     assert json.loads((data_dir / "usage.json").read_text(encoding="utf-8")) == {"days": {}, "sessions": {}}
     assert _by_id(doc.diagnose())["desktop_hotkey_tray"]["status"] == "ok"
+
+
+def test_doctor_source_syntax_catches_broken_app_python_readonly(tmp_path):
+    pkg = tmp_path / "akatikito"
+    pkg.mkdir()
+    (tmp_path / "app.py").write_text("x = 1\n", encoding="utf-8")
+    (pkg / "bad_mod.py").write_text("def broken(:\n    pass\n", encoding="utf-8")
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+
+    doc = Doctor(app_root=tmp_path, data_dir=data_dir, project_root=tmp_path, lock_dir=tmp_path / "locks")
+    chk = _by_id(doc.diagnose())["source_syntax"]
+    assert chk["status"] == "error" and chk["fixable"] is False
+    assert "akatikito/bad_mod.py" in chk["meta"]["broken"]
+
+
+def test_doctor_blocks_repairs_and_snapshots_while_busy_or_gateway_alive(tmp_path):
+    from types import SimpleNamespace
+
+    data_dir = tmp_path / "data"
+    proj_dir = tmp_path / "proj"
+    data_dir.mkdir()
+    proj_dir.mkdir()
+    (data_dir / "settings.json").write_text(json.dumps({"daily_budget": 0}), encoding="utf-8")
+
+    # 1. Busy AppState blocks fix & snapshot
+    busy_state = SimpleNamespace(busy=True, self_update=None, mobile_bridge=None)
+    doc_busy = Doctor(app_root=tmp_path, data_dir=data_dir, project_root=proj_dir, state=busy_state, lock_dir=tmp_path / "locks")
+    assert doc_busy.is_busy() is True
+    assert doc_busy.apply_fix("daily_budget")["ok"] is False
+    assert doc_busy.snapshot_configs()["ok"] is False
+
+    # 2. Live gateway PID in data/gateway/control.json blocks fix
+    gw = data_dir / "gateway"
+    gw.mkdir()
+    (gw / "control.json").write_text(json.dumps({"pid": os.getpid()}), encoding="utf-8")
+    doc_gw = Doctor(app_root=tmp_path, data_dir=data_dir, project_root=proj_dir, lock_dir=tmp_path / "locks")
+    assert doc_gw.is_busy() is True
+    assert doc_gw.apply_fix("daily_budget")["ok"] is False
+
+
+def test_doctor_snapshot_configs_saves_only_valid_json_and_logs_audit(tmp_path):
+    data_dir = tmp_path / "data"
+    proj_dir = tmp_path / "proj"
+    data_dir.mkdir()
+    proj_dir.mkdir()
+    (data_dir / "settings.json").write_text(json.dumps({"provider": "DeepSeek", "daily_budget": 2.0}), encoding="utf-8")
+    (data_dir / "usage.json").write_text("{corrupted json", encoding="utf-8")
+
+    doc = Doctor(app_root=tmp_path, data_dir=data_dir, project_root=proj_dir, lock_dir=tmp_path / "locks")
+    res = doc.snapshot_configs()
+    assert res["ok"] is True and res["audit_logged"] is True
+    assert "settings.json" in res["saved"]
+    assert "usage.json" in res["skipped"]
+    assert list(data_dir.glob("settings.bak.*.json"))
+    assert not list(data_dir.glob("usage.bak.*.json"))
+    entries = AuditLog(proj_dir).entries(limit=10)
+    assert any(e.get("action") == "doctor_snapshot" for e in entries)

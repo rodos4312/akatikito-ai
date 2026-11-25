@@ -226,6 +226,8 @@ def make_handler(state: AppState) -> type:
                 self._send(state.doctor_diagnose(data))
             elif path == '/api/doctor/fix':
                 self._send(state.doctor_fix(data))
+            elif path == '/api/doctor/snapshot':
+                self._send(state.doctor_snapshot(data))
             elif path == '/api/diagnostics/export':
                 self._send(state.diagnostics_export(data))
             elif path == '/api/i18n':

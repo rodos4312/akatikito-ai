@@ -521,7 +521,7 @@ async function runDoctor(checkApi) {
   box.replaceChildren();
   const loading = document.createElement('span');
   loading.className = 'hint';
-  loading.textContent = checkApi ? '🩺 Έλεγχος 14 σημείων + δοκιμή API key…' : '🩺 Εκτέλεση διάγνωσης (μόνο ανάγνωση)…';
+  loading.textContent = checkApi ? '🩺 Έλεγχος 18 σημείων + δοκιμή API key…' : '🩺 Εκτέλεση διάγνωσης (μόνο ανάγνωση)…';
   box.appendChild(loading);
   try {
     const r = await api('/api/doctor/diagnose', {check_api: !!checkApi});
@@ -570,6 +570,13 @@ async function applyDoctorFix(checkId, action, preview) {
     if (!r.ok) { showNotice('err', r.error || 'Απέτυχε η επισκευή.'); return; }
     showNotice('ok', '🩺 ' + (r.summary || 'Ολοκληρώθηκε η επισκευή.'));
     await runDoctor(false);
+  } catch (e) { showNotice('err', e.message || String(e)); }
+}
+async function snapshotDoctorConfigs() {
+  try {
+    const r = await api('/api/doctor/snapshot', {});
+    if (!r.ok) { showNotice('err', r.error || 'Απέτυχε το αντίγραφο ρυθμίσεων.'); return; }
+    showNotice('ok', '💾 ' + (r.summary || 'Αποθηκεύτηκε αντίγραφο έγκυρων ρυθμίσεων.'));
   } catch (e) { showNotice('err', e.message || String(e)); }
 }
 async function loadProjectProfile() {

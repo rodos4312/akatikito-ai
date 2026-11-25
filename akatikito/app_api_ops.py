@@ -470,6 +470,13 @@ class OpsStateMixin:
         except Exception as exc:
             return {'ok': False, 'error': str(exc)}
 
+    def doctor_snapshot(self, data=None):
+        from .doctor import Doctor
+        try:
+            return Doctor(state=self).snapshot_configs()
+        except Exception as exc:
+            return {'ok': False, 'error': str(exc)}
+
     def diagnostics_export(self, data=None):
         from .diagnostics import export_diagnostics_zip
         try:

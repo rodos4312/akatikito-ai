@@ -494,226 +494,62 @@ class Doctor:
             )
         return _item("agent_backups", "Μέγεθος .agent_backups", "warn", f"Το .agent_backups έχει φτάσει τα {total_mb} MB (όλα κάτω των 30 ημερών).")
 
-    def _check_python_packages(self) -> dict[str, Any]:
-        req_core = self.app_root / "requirements.txt"
-        req_feat = self.app_root / "requirements-features.txt"
-        missing_core = [m for m in _CORE_PACKAGES if importlib.util.find_spec(m) is None]
-        missing_feat = [m for m in _FEATURE_PACKAGES if importlib.util.find_spec(m) is None] if req_feat.is_file() else []
-        missing = missing_core + missing_feat
-        if not missing:
-            return _item("python_packages", "Πακέτα Python (.venv)", "ok", "Όλα τα απαιτούμενα πακέτα Python είναι εγκατεστημένα.")
-        cmd_parts = [f"{sys.executable} -m pip install -r {req_core.name}"]
-        if req_feat.is_file():
-            cmd_parts.append(f"-r {req_feat.name}")
-        return _item(
-            "python_packages",
-            "Πακέτα Python (.venv)",
-            "error" if missing_core else "warn",
-            f"Λείπουν πακέτα Python: {', '.join(missing)}.",
-            fixable=req_core.is_file(),
-            fix_label="Εγκατάσταση πακέτων",
-            fix_preview="Θα τρέξει: " + " ".join(cmd_parts),
-            meta={"missing": missing},
-        )
-
-    def _shortcut_paths(self) -> list[Path]:
-        if os.name != "nt":
-            return []
-        paths: list[Path] = []
-        appdata = os.environ.get("APPDATA")
-        if appdata:
-            paths.append(Path(appdata) / "Microsoft" / "Windows" / "Start Menu" / "Programs" / "Akatikito.lnk")
-        userprofile = os.environ.get("USERPROFILE") or str(Path.home())
-        paths.append(Path(userprofile) / "Desktop" / "Akatikito.lnk")
-        return paths
-
-    def _check_windows_shortcuts(self) -> dict[str, Any]:
-        if os.name != "nt":
-            return _item("windows_shortcuts", "Συντομεύσεις Desktop / Start Menu", "ok", "Έλεγχος συντομεύσεων Windows (δεν απαιτείται σε αυτό το OS).")
-        missing: list[Path] = []
-        restricted: list[str] = []
-        for p in self._shortcut_paths():
+    def is_busy(self) -> bool:
+        """True if agent, self-update, mobile worker, or detached gateway is actively running."""
+        if self.state is not None:
+            if getattr(self.state, "busy", False) or getattr(self.state, "self_update", None):
+                return True
+            mb = getattr(self.state, "mobile_bridge", None)
+            if mb is not None:
+                workers = getattr(mb, "workers", None) or {}
+                if any(getattr(getattr(w, "app", None), "busy", False) for w in workers.values()):
+                    return True
+        gw_ctrl = self.data_dir / "gateway" / "control.json"
+        if gw_ctrl.is_file():
             try:
-                if not p.is_file():
-                    missing.append(p)
-            except OSError:
-                restricted.append("Desktop" if "Desktop" in str(p) else "Start Menu")
-        if not missing and not restricted:
-            return _item("windows_shortcuts", "Συντομεύσεις Desktop / Start Menu", "ok", "Οι συντομεύσεις σε Desktop και Start Menu υπάρχουν.")
-        if not missing and restricted:
-            return _item("windows_shortcuts", "Συντομεύσεις Desktop / Start Menu", "ok", f"Δεν ήταν δυνατός ο έλεγχος πρόσβασης σε: {', '.join(restricted)}.")
-        labels = ["Desktop" if "Desktop" in str(p) else "Start Menu" for p in missing]
-        return _item(
-            "windows_shortcuts",
-            "Συντομεύσεις Desktop / Start Menu",
-            "warn",
-            f"Λείπουν συντομεύσεις: {', '.join(labels)}.",
-            fixable=True,
-            fix_label="Επαναδημιουργία",
-            fix_preview=f"Θα καλέσει το scripts/create_shortcuts.py για να δημιουργήσει τις συντομεύσεις pythonw.exe με εικονίδιο σε: {', '.join(labels)}.",
-            meta={"missing": [str(p) for p in missing]},
-        )
+                desc = json.loads(gw_ctrl.read_text(encoding="utf-8"))
+                pid = desc.get("pid") if isinstance(desc, dict) else 0
+                if isinstance(pid, int) and pid > 0 and _pid_alive(pid):
+                    return True
+            except Exception:
+                return True
+        return False
 
-    def _check_uncertain_jobs(self) -> dict[str, Any]:
-        qpath = self._scheduled_path()
-        if not qpath.is_file():
-            return _item("uncertain_jobs", "Προγραμματισμένες εργασίες", "ok", "Δεν υπάρχουν κολλημένες προγραμματισμένες εργασίες.")
+    def snapshot_configs(self) -> dict[str, Any]:
+        """Save timestamped .bak snapshots ONLY for valid JSON config files (never decrypting secrets)."""
+        if self.is_busy():
+            return {"ok": False, "error": "Περίμενε να ολοκληρωθούν πρώτα οι ενεργές εργασίες (agent / mobile / gateway)."}
+        saved: list[str] = []
+        skipped: list[str] = []
+        touched: list[str] = []
+        for label, path, _default in self._json_targets():
+            if not path.is_file():
+                continue
+            try:
+                json.loads(path.read_text(encoding="utf-8"))
+            except Exception:
+                skipped.append(label)
+                continue
+            bak = _backup_file(path, "bak")
+            if bak is not None:
+                saved.append(label)
+                touched.append(str(bak))
+        summary = f"Αποθηκεύτηκε αντίγραφο για {len(saved)} έγκυρα αρχεία ρυθμίσεων" + (f" (παραλείφθηκαν {len(skipped)} άκυρα)." if skipped else ".")
+        audit_logged = True
         try:
-            data = json.loads(qpath.read_text(encoding="utf-8"))
-            jobs = data.get("jobs", []) if isinstance(data, dict) else []
+            AuditLog(self.project_root).record("doctor_snapshot", tool="snapshot_configs", status="ok", paths=touched, summary=summary, actor="human")
         except Exception:
-            return _item("uncertain_jobs", "Προγραμματισμένες εργασίες", "warn", "Δεν διαβάστηκε το scheduled.json.")
-        stuck = [j for j in jobs if isinstance(j, dict) and j.get("status") == "uncertain"]
-        if not stuck:
-            return _item("uncertain_jobs", "Προγραμματισμένες εργασίες", "ok", "Καμία προγραμματισμένη εργασία δεν είναι κολλημένη σε uncertain.")
-        return _item(
-            "uncertain_jobs",
-            "Προγραμματισμένες εργασίες",
-            "warn",
-            f"Βρέθηκαν {len(stuck)} εργασίες σε κατάσταση 'uncertain' μετά από διακοπή.",
-            fixable=True,
-            fix_label="Ακύρωση uncertain",
-            fix_preview=f"Μπορείς να ξανατρέξεις ή να ακυρώσεις τις {len(stuck)} κολλημένες εργασίες.",
-            actions=[
-                {"action": "retry", "label": "Ξανατρέξε"},
-                {"action": "cancel", "label": "Ακύρωσε"},
-            ],
-            meta={"ids": [j.get("id", "") for j in stuck]},
-        )
-
-    def _read_settings_readonly(self) -> dict[str, Any]:
-        spath = self.data_dir / "settings.json"
-        if not spath.is_file():
-            return {}
-        try:
-            data = json.loads(spath.read_text(encoding="utf-8"))
-            return data if isinstance(data, dict) else {}
-        except Exception:
-            return {}
-
-    def _check_api_key(self, run_live: bool = False) -> dict[str, Any]:
-        if not run_live:
-            return _item(
-                "api_key_live",
-                "Έλεγχος API key",
-                "ok",
-                "Δεν έγινε κλήση δικτύου (πατήστε «Δοκιμή API key» μόνο αν θέλετε ζωντανό έλεγχο /models).",
-                meta={"checked": False},
-            )
-        raw = self._read_settings_readonly()
-        provider = str(raw.get("provider", "") or "DeepSeek")
-        keys = raw.get("keys") if isinstance(raw.get("keys"), dict) else {}
-        key = unmask_secret(keys.get(provider, "")) if keys else ""
-        base_url = str(raw.get("base_url", "") or "").strip()
-        if not base_url:
-            prov_info = PROVIDERS.get(provider)
-            if isinstance(prov_info, str):
-                base_url = prov_info
-            elif isinstance(prov_info, dict):
-                base_url = str(prov_info.get("base_url", "") or "")
-        base_url = base_url.rstrip("/")
-        if not base_url:
-            return _item("api_key_live", "Έλεγχος API key", "warn", f"Δεν έχει οριστεί URL για τον πάροχο '{provider}' στις Ρυθμίσεις.")
-        if not key and "127.0.0.1" not in base_url and "localhost" not in base_url:
-            return _item("api_key_live", "Έλεγχος API key", "error", f"Δεν έχει αποθηκευτεί API key για τον πάροχο '{provider}'.")
-        try:
-            import httpx
-            headers = {"Authorization": f"Bearer {key}"} if key else {}
-            resp = httpx.get(f"{base_url}/models", headers=headers, timeout=6.0)
-            if resp.status_code in (401, 403):
-                return _item("api_key_live", "Έλεγχος API key", "error", "Το API key έληξε ή είναι λάθος (HTTP 401/403).", meta={"status_code": resp.status_code})
-            if resp.status_code >= 400:
-                return _item("api_key_live", "Έλεγχος API key", "warn", f"Ο πάροχος απάντησε με HTTP {resp.status_code}.", meta={"status_code": resp.status_code})
-            return _item("api_key_live", "Έλεγχος API key", "ok", f"Το API key λειτουργεί κανονικά ({provider}).", meta={"checked": True})
-        except Exception as exc:
-            return _item("api_key_live", "Έλεγχος API key", "warn", f"Αδυναμία σύνδεσης στον πάροχο: {str(exc)[:160]}")
-
-    def _check_daily_budget(self) -> dict[str, Any]:
-        raw = self._read_settings_readonly()
-        try:
-            budget = max(0.0, float(raw.get("daily_budget", 0) or 0))
-        except (TypeError, ValueError):
-            budget = 0.0
-        if budget > 0:
-            return _item("daily_budget", "Ημερήσιο όριο κόστους", "ok", f"Έχει οριστεί ημερήσιο όριο κόστους: {budget:.2f} €.")
-        return _item(
-            "daily_budget",
-            "Ημερήσιο όριο κόστους",
-            "warn",
-            "Δεν έχει οριστεί ημερήσιο όριο κόστους (προτείνεται 1,00 € για ασφάλεια).",
-            fixable=True,
-            fix_label="Ορισμός 1 €",
-            fix_preview="Θα κρατήσει backup του settings.json και θα ορίσει daily_budget = 1.0 €.",
-            meta={"suggested_eur": 1.0},
-        )
-
-    def _check_checkpoint_repo(self) -> dict[str, Any]:
-        repo = self.project_root / ".agent" / "checkpoints" / "objects.git"
-        if not repo.exists():
-            return _item("checkpoint_repo", "Αποθετήριο Checkpoints (Git)", "ok", "Δεν υπάρχει ακόμα checkpoint repo (θα δημιουργηθεί αυτόματα όταν χρειαστεί).")
-        git_bin = shutil.which("git")
-        if not git_bin:
-            return _item("checkpoint_repo", "Αποθετήριο Checkpoints (Git)", "warn", "Δεν βρέθηκε το git στο σύστημα για έλεγχο των checkpoints.")
-        try:
-            res = subprocess.run(
-                [git_bin, f"--git-dir={repo}", "rev-parse", "--is-bare-repository"],
-                capture_output=True,
-                text=True,
-                timeout=10,
-                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-            )
-            if res.returncode == 0 and res.stdout.strip() == "true":
-                return _item("checkpoint_repo", "Αποθετήριο Checkpoints (Git)", "ok", "Το τοπικό checkpoint repo είναι υγιές.")
-        except Exception:
-            pass
-        return _item(
-            "checkpoint_repo",
-            "Αποθετήριο Checkpoints (Git)",
-            "error",
-            "Το τοπικό checkpoint repo (objects.git) φαίνεται κατεστραμμένο.",
-            fixable=True,
-            fix_label="Νέο checkpoint repo",
-            fix_preview="Θα μετακινήσει το χαλασμένο objects.git σε objects.git.broken και θα αρχικοποιήσει νέο καθαρό checkpoint repo.",
-        )
-
-    def _check_disk_space(self) -> dict[str, Any]:
-        try:
-            usage = shutil.disk_usage(self.project_root)
-            free_gb = round(usage.free / (1024**3), 2)
-        except OSError:
-            return _item("disk_space", "Ελεύθερος χώρος δίσκου", "warn", "Αδυναμία ανάγνωσης ελεύθερου χώρου δίσκου.")
-        if free_gb < 2.0:
-            return _item("disk_space", "Ελεύθερος χώρος δίσκου", "warn", f"Χαμηλός ελεύθερος χώρος στον δίσκο: {free_gb} GB (συνιστώνται τουλάχιστον 2 GB).", meta={"free_gb": free_gb})
-        return _item("disk_space", "Ελεύθερος χώρος δίσκου", "ok", f"Ελεύθερος χώρος δίσκου: {free_gb} GB.", meta={"free_gb": free_gb})
-
-    def _check_audit_chain(self) -> dict[str, Any]:
-        audit = AuditLog(self.project_root)
-        if not audit.path.is_file():
-            return _item("audit_chain", "Ακεραιότητα Audit Log", "ok", "Δεν υπάρχει ακόμα αρχείο audit.jsonl για αυτό το project.")
-        res = audit.verify_chain()
-        if res.get("ok"):
-            return _item("audit_chain", "Ακεραιότητα Audit Log", "ok", f"Η κρυπτογραφική αλυσίδα του audit log είναι ακέραιη ({res.get('entries', 0)} εγγραφές).")
-        # NEVER auto-fix: broken audit chain is forensic evidence!
-        return _item(
-            "audit_chain",
-            "Ακεραιότητα Audit Log",
-            "error",
-            f"Έσπασε η αλυσίδα του audit log ({res.get('error', 'αλλοίωση')}). Μόνο προειδοποίηση — δεν γίνεται αυτόματη επισκευή για διατήρηση αποδεικτικών.",
-            fixable=False,
-            meta=res,
-        )
+            audit_logged = False
+        return {"ok": True, "saved": saved, "skipped": skipped, "paths": touched, "summary": summary, "audit_logged": audit_logged}
 
     # ------------------------------------------------------------------ public API
 
     def diagnose(self, *, check_api: bool = False) -> dict[str, Any]:
-        """Run all 17 read-only diagnostic checks."""
+        """Run all 18 read-only diagnostic checks."""
         checks = [
             self._check_json_integrity(), self._check_mobile_sessions(), self._check_mobile_port(),
             self._check_orphan_locks(), self._check_temp_partials(), self._check_agent_backups(),
-            self._check_python_packages(), self._check_windows_shortcuts(), self._check_uncertain_jobs(),
-            self._check_api_key(run_live=check_api), self._check_daily_budget(), self._check_checkpoint_repo(),
-            self._check_disk_space(), self._check_audit_chain(),
-            *_ext_checks.run_extended_checks(self, _item),
+            *_ext_checks.run_extended_checks(self, _item, check_api=check_api),
         ]
         counts = {
             "ok": sum(1 for c in checks if c["status"] == "ok"),
@@ -725,6 +561,7 @@ class Doctor:
             "ok": overall == "ok",
             "overall": overall,
             "badge": BADGES[overall],
+            "busy": self.is_busy(),
             "counts": counts,
             "checks": checks,
             "checked_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
@@ -735,6 +572,8 @@ class Doctor:
         cid = str(check_id or "").strip()
         if cid == "audit_chain":
             return {"ok": False, "error": "Το audit log δεν επισκευάζεται αυτόματα για λόγους ακεραιότητας."}
+        if self.is_busy():
+            return {"ok": False, "error": "Περίμενε να ολοκληρωθούν πρώτα οι ενεργές εργασίες (agent / mobile / gateway) πριν την επισκευή."}
 
         touched: list[str] = []
         summary = ""
@@ -842,106 +681,12 @@ class Doctor:
                     pass
             summary = f"Καθαρίστηκαν {len(deleted_names)} παλιά backups >30 ημερών ({round(old_bytes / (1024 * 1024), 2)} MB)."
 
-        elif cid == "daily_budget":
-            spath = self.data_dir / "settings.json"
-            _backup_file(spath, "bak")
-            if self.state is not None and getattr(self.state, "settings", None) is not None and self.data_dir == DEFAULT_PATH.parent.resolve():
-                self.state.settings.daily_budget = 1.0
-                self.state.settings.save()
-            else:
-                st = Settings.load(spath)
-                st.daily_budget = 1.0
-                st.save(spath)
-            touched.append(str(spath))
-            summary = "Ορίστηκε ημερήσιο όριο κόστους 1,00 €."
-
-        elif cid == "uncertain_jobs":
-            from .scheduler import ScheduledQueue, queue_for
-
-            act = action if action in ("retry", "cancel") else "cancel"
-            qpath = self._scheduled_path()
-            if not qpath.is_file():
-                return {"ok": False, "error": "Δεν βρέθηκε το scheduled.json."}
-            _backup_file(qpath, "bak")
-            queue = queue_for(self.state) if (self.state is not None and self.data_dir == DEFAULT_PATH.parent.resolve()) else ScheduledQueue(qpath)
-            stuck_ids = [j["id"] for j in queue.view() if j.get("status") == "uncertain"]
-            acted = 0
-            for jid in stuck_ids:
-                try:
-                    queue.action(jid, act)
-                    acted += 1
-                except Exception:
-                    pass
-            touched.append(str(qpath))
-            summary = f"Εφαρμόστηκε '{act}' σε {acted} uncertain εργασίες."
-
-        elif cid == "checkpoint_repo":
-            repo = self.project_root / ".agent" / "checkpoints" / "objects.git"
-            git_bin = shutil.which("git")
-            if not git_bin:
-                return {"ok": False, "error": "Δεν βρέθηκε το git στο σύστημα."}
-            if repo.exists():
-                ts = time.strftime("%Y%m%d-%H%M%S")
-                broken = repo.with_name(f"objects.git.broken.{ts}")
-                repo.rename(broken)
-                touched.append(str(broken))
-            repo.parent.mkdir(parents=True, exist_ok=True)
-            subprocess.run(
-                [git_bin, "init", "--bare", str(repo)],
-                capture_output=True,
-                check=True,
-                timeout=30,
-                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-            )
-            touched.append(str(repo))
-            summary = "Δημιουργήθηκε νέο καθαρό checkpoint repo."
-
-        elif cid == "python_packages":
-            req_core = self.app_root / "requirements.txt"
-            req_feat = self.app_root / "requirements-features.txt"
-            if not req_core.is_file():
-                return {"ok": False, "error": "Δεν βρέθηκε το requirements.txt."}
-            cmd = [sys.executable, "-m", "pip", "install", "-r", str(req_core)]
-            if req_feat.is_file():
-                cmd.extend(["-r", str(req_feat)])
-            proc = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=300,
-                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-            )
-            if proc.returncode != 0:
-                return {"ok": False, "error": (proc.stderr or proc.stdout or "pip install failed")[:400]}
-            summary = "Εγκαταστάθηκαν τα απαιτούμενα πακέτα Python (requirements + features)."
-
-        elif cid == "windows_shortcuts":
-            if os.name != "nt":
-                return {"ok": False, "error": "Μόνο για Windows."}
-            script = self.app_root / "scripts" / "create_shortcuts.py"
-            if not script.is_file():
-                return {"ok": False, "error": "Δεν βρέθηκε το scripts/create_shortcuts.py."}
-            proc = subprocess.run(
-                [sys.executable, str(script)],
-                capture_output=True,
-                text=True,
-                timeout=30,
-                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-            )
-            if proc.returncode != 0:
-                return {"ok": False, "error": (proc.stderr or proc.stdout or "create_shortcuts failed")[:400]}
-            for p in self._shortcut_paths():
-                try:
-                    if p.is_file():
-                        touched.append(str(p))
-                except OSError:
-                    pass
-            summary = "Επαναδημιουργήθηκαν οι συντομεύσεις Windows (pythonw.exe + εικονίδιο)."
-
         else:
-            ext = _ext_checks.apply_extended_fix(self, cid, _backup_file)
+            ext = _ext_checks.apply_extended_fix(self, cid, action, _backup_file)
             if ext is None:
                 return {"ok": False, "error": f"Μη υποστηριζόμενη επισκευή: {cid}"}
+            if isinstance(ext, dict):
+                return ext
             touched, summary = ext
 
         audit_logged = True
@@ -967,10 +712,18 @@ def _cli(argv: list[str] | None = None) -> int:
     parser.add_argument("--check-api", action="store_true", help="Ζωντανός έλεγχος API key (/models)")
     parser.add_argument("--fix", default="", help="Εκτέλεση συγκεκριμένης επισκευής (ID ελέγχου)")
     parser.add_argument("--action", default="", help="Ενέργεια για uncertain_jobs (retry | cancel)")
+    parser.add_argument("--snapshot", action="store_true", help="Αποθήκευση αντιγράφου έγκυρων ρυθμίσεων (.bak)")
     parser.add_argument("--json", action="store_true", help="Έξοδος σε JSON")
     args = parser.parse_args(argv)
 
     doc = Doctor(project_root=args.project or None)
+    if args.snapshot:
+        res = doc.snapshot_configs()
+        if args.json:
+            print(json.dumps(res, ensure_ascii=False, indent=2))
+        else:
+            print(("✅ " if res.get("ok") else "❌ ") + str(res.get("summary") or res.get("error")))
+        return 0 if res.get("ok") else 1
     if args.fix:
         res = doc.apply_fix(args.fix, action=args.action)
         if args.json:

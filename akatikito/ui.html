@@ -78,8 +78,9 @@
           <button class="btn" data-i18n="btn_diag_zip" style="flex:1;font-size:11.5px" onclick="exportDiagnosticsBundle()" title="Εξάγει ανωνυμοποιημένο .zip αναφοράς χωρίς API keys ή προσωπικά δεδομένα">📦 Διαγνωστικά .zip</button>
         </div>
         <div style="display:flex;gap:6px">
-          <button class="btn primary" id="btn-doctor-run" style="flex:1;font-size:11.5px" onclick="runDoctor(false)" title="Δωρεάν, ακίνδυνος έλεγχος 14 σημείων με 1-κλικ επισκευή">🩺💉 Γιατρός</button>
+          <button class="btn primary" id="btn-doctor-run" style="flex:1;font-size:11.5px" onclick="runDoctor(false)" title="Δωρεάν, ακίνδυνος έλεγχος 18 σημείων με 1-κλικ επισκευή">🩺💉 Γιατρός</button>
           <button class="btn" id="btn-doctor-api" style="font-size:11.5px" onclick="runDoctor(true)" title="Ζωντανή δοκιμή API key (/models)">🔑 API</button>
+          <button class="btn" id="btn-doctor-snap" style="font-size:11.5px" onclick="snapshotDoctorConfigs()" title="Αποθήκευση αντιγράφου έγκυρων ρυθμίσεων (.bak)">💾</button>
         </div>
         <div id="doctor-box" style="display:none;flex-direction:column;gap:5px;font-size:11.5px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:7px;max-height:260px;overflow-y:auto"></div>
         <div id="gh-update-box" style="display:flex;flex-direction:column;gap:5px;border-top:1px solid var(--border);padding-top:6px">
