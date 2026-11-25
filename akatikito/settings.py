@@ -82,6 +82,7 @@ class Settings:
     autonomous: bool = False
     cautious_edits: bool = False
     advanced_view: bool = False
+    advanced_features: list[str] = field(default_factory=list)
     daily_budget: float = 0.0
     model_prices: dict = field(default_factory=dict)
     vision_models: list[str] = field(default_factory=list)
@@ -154,6 +155,8 @@ class Settings:
             (settings.model or settings.models.get(settings.provider)))) is True
         settings.vision_models = [str(x) for x in data.get('vision_models',[]) if isinstance(x,str)] if isinstance(data.get('vision_models'),list) else []
         settings.advanced_view = data.get('advanced_view') is True
+        from .advanced import sanitize_feature_list
+        settings.advanced_features = sanitize_feature_list(data.get('advanced_features', []))
         try: settings.daily_budget=max(0,float(data.get('daily_budget',0)))
         except (TypeError,ValueError): settings.daily_budget=0
         settings.model_prices=data.get('model_prices',{}) if isinstance(data.get('model_prices'),dict) else {}
@@ -195,7 +198,7 @@ class Settings:
             "models": self.models,
             "key_origins": self.key_origins,
             'autonomous':self.autonomous, 'cautious_edits':self.cautious_edits, 'checkpoints':self.checkpoints,
-            'advanced_view':self.advanced_view,'daily_budget':self.daily_budget,'model_prices':self.model_prices,
+            'advanced_view':self.advanced_view,'advanced_features':list(self.advanced_features),'daily_budget':self.daily_budget,'model_prices':self.model_prices,
             'allowed_commands':self.allowed_commands, 'vision_models':self.vision_models,
             "keys": {k: v for k, v in self.keys.items() if v},
         }

@@ -188,6 +188,9 @@ class Akatikito:
     def allowed_tools(self, mode=None):
         mode=mode or self.mode
         tools=set(modes.allowed_tools(mode)) | set(self.mcp.names(mode) if getattr(self,'mcp',None) else [])
+        blocked = getattr(self, '_blocked_advanced_tools', None)
+        if blocked:
+            tools = tools - blocked
         ceiling=getattr(self,'capability_ceiling',None)
         return tools if ceiling is None else tools & ceiling
 

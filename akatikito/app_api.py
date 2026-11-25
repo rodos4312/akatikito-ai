@@ -234,33 +234,40 @@ class AppState(OpsStateMixin, FilesStateMixin, SessionsUpgradeStateMixin):
             name=endpoint_identity(self.agent.config.base_url)+'|'+self.agent.config.model
             self.settings.vision_models=[x for x in self.settings.vision_models if x!=name]+([name] if data['supports_vision'] else [])
             self.agent.config.supports_vision=data['supports_vision']
-        if 'ui_language' in data:
-            from .i18n import SUPPORTED_LANGUAGES
-            lang = str(data.get('ui_language') or '').strip().lower()
-            if lang not in SUPPORTED_LANGUAGES:
-                return {'error': 'Μη υποστηριζόμενη γλώσσα διεπαφής.'}
-            self.settings.ui_language = lang
-            if self.agent:
-                self.agent.config.ui_language = lang
-        if 'ui_theme' in data:
-            theme = str(data.get('ui_theme') or '').strip().lower()
-            if theme not in ('dark', 'light'):
-                return {'error': 'Μη έγκυρο θέμα εμφάνισης.'}
-            self.settings.ui_theme = theme
-        if 'ui_font_size' in data:
-            try:
-                fsize = int(data.get('ui_font_size'))
-                if not 12 <= fsize <= 18:
-                    raise ValueError('Εκτός ορίων (12–18).')
-                self.settings.ui_font_size = fsize
-            except (TypeError, ValueError) as exc:
-                return {'error': str(exc)}
+        err = self._apply_ui_and_advanced_prefs(data)
+        if err:
+            return {'error': err}
         if self.agent and 'checkpoints' in data:
             from .checkpoints import Checkpoints
             self.agent.config.checkpoints=self.settings.checkpoints
             self.agent.checkpoint_store=Checkpoints(self.agent.ws.root) if self.settings.checkpoints else None
         self.settings.save()
         return self.status()
+
+    def _apply_ui_and_advanced_prefs(self, data: dict) -> str | None:
+        if 'ui_language' in data:
+            from .i18n import SUPPORTED_LANGUAGES
+            lang = str(data.get('ui_language') or '').strip().lower()
+            if lang not in SUPPORTED_LANGUAGES:
+                return 'Μη υποστηριζόμενη γλώσσα διεπαφής.'
+            self.settings.ui_language = lang
+            if self.agent:
+                self.agent.config.ui_language = lang
+        if 'ui_theme' in data:
+            theme = str(data.get('ui_theme') or '').strip().lower()
+            if theme not in ('dark', 'light'):
+                return 'Μη έγκυρο θέμα εμφάνισης.'
+            self.settings.ui_theme = theme
+        if 'ui_font_size' in data:
+            try:
+                fsize = int(data.get('ui_font_size'))
+                if not 12 <= fsize <= 20:
+                    raise ValueError('Εκτός ορίων (12–20).')
+                self.settings.ui_font_size = fsize
+            except (TypeError, ValueError) as exc:
+                return str(exc)
+        from . import advanced
+        return advanced.apply_preferences(self.settings, self.agent, data)
 
     def upload_attachment(self,data):
         if self.busy or not self.agent:return {'error':'Συνδέσου και περίμενε να τελειώσει η εργασία.'}
@@ -358,6 +365,8 @@ class AppState(OpsStateMixin, FilesStateMixin, SessionsUpgradeStateMixin):
                 return {'error':'Δεν αποθηκεύτηκαν οι ρυθμίσεις. Ο οδηγός δεν ολοκληρώθηκε· η προηγούμενη σύνδεση διατηρήθηκε.'}
             self.settings=updated
             self.agent=new_agent
+            from . import advanced
+            self.agent._blocked_advanced_tools = advanced.blocked_tools(updated)
             self.agent.events.subscribe(self.emit_event)
             self._bind_permissions(self.agent)
             self.store = SessionStore(project)
@@ -441,10 +450,29 @@ class AppState(OpsStateMixin, FilesStateMixin, SessionsUpgradeStateMixin):
             'agenda':self.agenda_list().get('tasks',[]),
             'approvals':self.approvals.pending()+remote_approvals,
             'learning':self.learning_summary(),
-            'preferences':{'autonomous':self.settings.autonomous,'cautious_edits':self.settings.cautious_edits,'checkpoints':self.settings.checkpoints,'supports_vision':bool(agent and agent.config.supports_vision),'advanced_view':self.settings.advanced_view,'daily_budget':self.settings.daily_budget,'ui_language':self.settings.ui_language,'ui_theme':self.settings.ui_theme,'ui_font_size':self.settings.ui_font_size},
+            'preferences':{'autonomous':self.settings.autonomous,'cautious_edits':self.settings.cautious_edits,'checkpoints':self.settings.checkpoints,'supports_vision':bool(agent and agent.config.supports_vision),'advanced_view':self.settings.advanced_view,'advanced_features':list(self.settings.advanced_features),'daily_budget':self.settings.daily_budget,'ui_language':self.settings.ui_language,'ui_theme':self.settings.ui_theme,'ui_font_size':self.settings.ui_font_size},
+            'advanced_catalog': __import__('akatikito.advanced', fromlist=['catalog']).catalog(self.settings),
         }
 
     # ---------------------------------------------------------------- chat
+
+    def _maybe_route_self_upgrade(self, resolved: str) -> tuple[dict | None, bool]:
+        if self.self_update is not None or not requests_self_upgrade(resolved, str(self.agent.ws.root)):
+            return None, False
+        from . import advanced
+        if not advanced.enabled(self.settings, "self_update"):
+            return {"error": "Η αυτοαναβάθμιση είναι κλειστή. Ενεργοποίησέ την από Ρυθμίσεις → Advanced."}, False
+        if getattr(self, "_gateway_worker", False):
+            return {"error": "Η ελεγχόμενη αυτοαναβάθμιση γίνεται από το παράθυρο της εφαρμογής."}, False
+        if self.agent._manual_mode and self.agent.mode == "ask":
+            return {"error": "Για αυτοαναβάθμιση επίλεξε Αυτόματο ή Κώδικα από το μενού."}, False
+        requested_mode = self.agent.mode if self.agent._manual_mode else modes.classify(resolved)
+        result = self.start_upgrade()
+        if result.get("error"):
+            return result, False
+        if requested_mode == "architect":
+            self.agent.set_mode("architect")
+        return None, True
 
     def send(self, text: str, attachments=None) -> dict:
         if self.restart_required:
@@ -465,18 +493,10 @@ class AppState(OpsStateMixin, FilesStateMixin, SessionsUpgradeStateMixin):
         resolved, _ = resolve_selection(text, self.agent.messages)
         routed = False
         boundary_seq = self.event_seq
-        if self.self_update is None and requests_self_upgrade(resolved, str(self.agent.ws.root)):
-            if getattr(self,'_gateway_worker',False):
-                return {'error':'Η ελεγχόμενη αυτοαναβάθμιση γίνεται από το παράθυρο της εφαρμογής.'}
-            if self.agent._manual_mode and self.agent.mode == "ask":
-                return {"error": "Για αυτοαναβάθμιση επίλεξε Αυτόματο ή Κώδικα από το μενού."}
-            requested_mode = self.agent.mode if self.agent._manual_mode else modes.classify(resolved)
-            result = self.start_upgrade()
-            if result.get("error"):
-                return result
-            if requested_mode == "architect":
-                self.agent.set_mode("architect")
-            routed = True
+        route_err, routed = self._maybe_route_self_upgrade(resolved)
+        if route_err:
+            return route_err
+        if routed:
             boundary_seq = self.event_seq
         if resolved != text:
             self.agent._pending_owner_goal = resolved

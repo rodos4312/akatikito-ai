@@ -44,7 +44,7 @@ def main():
     project = root/"personal-backup"; project.mkdir()
     before = root/"personal-backup/keep.txt"; before.write_text("personal backup",encoding="utf-8")
     state = app_api.AppState()
-    state.settings = Settings(provider="DeepSeek", model="test-model", project=str(project))
+    state.settings = Settings(provider="DeepSeek", model="test-model", project=str(project), advanced_features=["self_update"])
     state.agent = Akatikito(str(project), Config(api_key="test",model="test-model"), ScriptedModel([{"content":"old"}]))
     state.store = SessionStore(project)
     state.transcript = [{"role":"user","text":"previous conversation"}]

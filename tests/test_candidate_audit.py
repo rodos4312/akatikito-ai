@@ -35,7 +35,7 @@ def state_fixture(tmp_path,monkeypatch,script):
         created.append(config)
         adapter.model.config=config
         return adapter.model
-    state=AppState();state.settings=settings.Settings(provider='DeepSeek',model='synthetic',project=str(root))
+    state=AppState();state.settings=settings.Settings(provider='DeepSeek',model='synthetic',project=str(root),advanced_features=['self_update'])
     state.agent=Akatikito(str(root),Config(api_key='synthetic',model='synthetic',stream_responses=False),ScriptedModel([]))
     state.agent.events.subscribe(state.emit_event);state.store=SessionStore(root)
     monkeypatch.setattr('akatikito.agent.OpenAIModel',factory)

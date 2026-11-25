@@ -87,14 +87,52 @@ async function restoreBackup() {
   showNotice(r.ok ? "ok" : "err", r.ok ? "Επανήλθε: " + r.restored : r.error);
 }
 
+function renderAdvancedFeatures(s) {
+  const box = document.getElementById("advanced-features-list");
+  if (!box || !Array.isArray(s.advanced_catalog)) return;
+  box.replaceChildren();
+  const active = new Set((s.preferences && s.preferences.advanced_features) || []);
+  for (const feat of s.advanced_catalog) {
+    const row = document.createElement("label");
+    row.style.cssText = "display:flex;align-items:flex-start;gap:8px;cursor:pointer;font-size:12px";
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.style.width = "auto";
+    cb.checked = !!feat.enabled;
+    cb.onchange = async () => {
+      if (cb.checked && feat.warning && !window.confirm(feat.warning + "\n\nΝα ενεργοποιηθεί;")) {
+        cb.checked = false;
+        return;
+      }
+      const next = new Set(active);
+      if (cb.checked) next.add(feat.key); else next.delete(feat.key);
+      const r = await api("/api/preferences", {advanced_features: Array.from(next), apply_now: true});
+      if (r.error) { showNotice("err", r.error); cb.checked = !cb.checked; return; }
+      updateBadges(r);
+      showNotice("ok", (cb.checked ? "Ενεργοποιήθηκε: " : "Απενεργοποιήθηκε: ") + feat.label);
+    };
+    const txt = document.createElement("span");
+    txt.innerHTML = "<strong>" + esc(feat.label) + "</strong><br><span class='hint'>" + esc(feat.description || "") + "</span>";
+    row.append(cb, txt);
+    box.appendChild(row);
+  }
+}
+
 function updateUpgrade(s) {
   const u = s.self_update;
-  document.getElementById("upgrade-start").disabled = !!u || !!s.busy || !s.connected;
+  const advList = (s.preferences && s.preferences.advanced_features) || [];
+  const allowUpgrade = advList.includes("self_update") || !!u;
+  const startBtn = document.getElementById("upgrade-start");
+  if (startBtn) {
+    startBtn.style.display = allowUpgrade ? "" : "none";
+    startBtn.disabled = !!u || !!s.busy || !s.connected;
+  }
   document.getElementById("upgrade-panel").style.display = u ? "block" : "none";
   document.getElementById("upgrade-apply").disabled = !u || !u.ready || !!s.busy || !!s.restart_required;
   document.getElementById("upgrade-state").textContent = u
     ? (s.restart_required ? "Εφαρμόστηκε — κλείσε και άνοιξε την εφαρμογή." : "Υποψήφιο · " + u.changed.length + " αρχεία · " + (u.ready ? "οι έλεγχοι πέρασαν" : "χρειάζεται έλεγχος")) : "";
   if (s.restart_required) showNotice("ok", "Η αναβάθμιση εφαρμόστηκε. Κλείσε και άνοιξε την εφαρμογή.");
+  renderAdvancedFeatures(s);
 }
 async function startUpgrade() {
   const s = await api("/api/upgrade/start", {});

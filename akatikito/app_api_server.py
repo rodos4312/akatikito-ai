@@ -65,10 +65,16 @@ def make_handler(state: AppState) -> type:
             self._send(payload,code)
 
         def _authorized(self, api=True, post=False):
-            if request_allowed(self.headers, self.server.server_address[1], self.server.auth_token, api, post):
-                return True
-            self._reject({'error':'Η τοπική πρόσβαση απορρίφθηκε.'},403)
-            return False
+            if not request_allowed(self.headers, self.server.server_address[1], self.server.auth_token, api, post):
+                self._reject({'error':'Η τοπική πρόσβαση απορρίφθηκε.'},403)
+                return False
+            if post:
+                from . import advanced
+                denial = advanced.route_denial(state.settings, self.path.split("?")[0])
+                if denial:
+                    self._reject({'error': denial}, 403)
+                    return False
+            return True
 
         def _body(self):
             try:

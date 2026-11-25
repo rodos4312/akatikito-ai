@@ -144,6 +144,10 @@ class SessionsUpgradeStateMixin:
         return {"ok": True}
 
     def start_upgrade(self) -> dict:
+        from . import advanced
+
+        if not advanced.enabled(self.settings, "self_update"):
+            return {"error": "Η αυτοαναβάθμιση είναι κλειστή. Ενεργοποίησέ την από Ρυθμίσεις → Advanced."}
         if self.busy or self.self_update or self.restart_required:
             return {"error": "Περίμενε να ολοκληρωθεί η εργασία ή κλείσε το προηγούμενο υποψήφιο."}
         if self.agent is None:

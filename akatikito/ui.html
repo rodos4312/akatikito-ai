@@ -494,6 +494,13 @@
         <div class="field"><label><input id="cautious-edits" type="checkbox" style="width:auto" onchange="savePreferences()"> <span data-i18n="set_chk_cautious">Προεπισκόπηση και έγκριση κάθε αλλαγής αρχείου</span></label></div>
         <div class="field"><label><input id="supports-vision" type="checkbox" style="width:auto" onchange="savePreferences()"> <span data-i18n="set_chk_vision">Το επιλεγμένο μοντέλο υποστηρίζει εικόνες (vision)</span></label></div>
         <div class="field"><label><input id="advanced-view" type="checkbox" style="width:auto" onchange="savePreferences()"> <span data-i18n="set_chk_adv">Προχωρημένη προβολή (εργαλεία και logs)</span></label></div>
+        <details class="set-group" id="advanced-dev-group" style="margin-top:6px">
+          <summary>🛠️ Advanced (για προγραμματιστές)</summary>
+          <div class="set-body">
+            <span class="hint">Κλειστό από προεπιλογή (UI + API + εργαλεία μοντέλου). Ενεργοποιείται μόνο από εσένα.</span>
+            <div id="advanced-features-list" style="display:flex;flex-direction:column;gap:6px"></div>
+          </div>
+        </details>
         <div class="field"><label><input id="checkpoints" type="checkbox" style="width:auto" onchange="savePreferences()"> <span data-i18n="set_chk_ckpt">Checkpoint ανά μήνυμα</span></label></div>
       </div>
 
