@@ -24,7 +24,7 @@ vm.createContext(context);
 const html=fs.readFileSync(path.join(__dirname,'../akatikito/ui.html'),'utf8');
 const css=fs.readFileSync(path.join(__dirname,'../akatikito/ui/style.css'),'utf8');
 assert(html.includes('id="files-panel"') && html.includes('id="file-preview"') && css.includes('#files-panel[hidden]'));
-let script=['chat.js','files.js','learning.js','settings.js'].map(f=>fs.readFileSync(path.join(__dirname,'../akatikito/ui',f),'utf8')).join('\n');script=script.slice(0,script.lastIndexOf('init().catch'));
+let script=['chat.js','files.js','attachments.js','learning.js','settings.js'].map(f=>fs.readFileSync(path.join(__dirname,'../akatikito/ui',f),'utf8')).join('\n');script=script.slice(0,script.lastIndexOf('init().catch'));
 vm.runInContext(script,context);const run=code=>vm.runInContext(code,context);
 const sample=(extra={})=>({path:'src/a.py',text:'<script>never execute</script> Καλημέρα',project:'D:/project',session_id:'a',size:120,offset:0,next:20,total_chars:50,line_start:1,line_end:3,version:'v1',encoding:'utf-8',files:[{path:'src/a.py',action:'νέο'}],...extra});
 const watchdog=setTimeout(()=>{console.error('File UI tests did not finish');process.exitCode=1;},10000);

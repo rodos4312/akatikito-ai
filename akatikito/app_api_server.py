@@ -92,6 +92,7 @@ def make_handler(state: AppState) -> type:
                 '/ui/style.css': ('style.css', 'text/css; charset=utf-8'),
                 '/ui/chat.js': ('chat.js', 'text/javascript; charset=utf-8'),
                 '/ui/files.js': ('files.js', 'text/javascript; charset=utf-8'),
+                '/ui/attachments.js': ('attachments.js', 'text/javascript; charset=utf-8'),
                 '/ui/learning.js': ('learning.js', 'text/javascript; charset=utf-8'),
                 '/ui/settings.js': ('settings.js', 'text/javascript; charset=utf-8'),
             }
@@ -300,7 +301,7 @@ def make_handler(state: AppState) -> type:
             elif path == "/api/copy":
                 self._send(state.copy_text(data.get("text", "")))
             elif path == "/api/paste":
-                self._send(state.paste_text())
+                self._send(state.paste_text(data))
             elif path == "/api/chat/export":
                 self._send(state.export_chat(data))
             else:

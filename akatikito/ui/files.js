@@ -268,28 +268,6 @@ async function viewCheckpoint(id) {
   const undo=document.createElement('button');undo.className='btn';undo.style.cssText='width:auto;margin-top:10px';undo.textContent='Αναίρεση αυτών των αλλαγών';undo.onclick=async()=>{if(!confirm('Να επανέλθουν τα αρχεία πριν από αυτό το μήνυμα;'))return;const r=await api('/api/checkpoint/undo',{id});showNotice(r.error?'err':'ok',r.error||'Οι αλλαγές αναιρέθηκαν.');dialog.remove();};
   dialog.append(pre,close,undo);document.body.append(dialog);dialog.showModal();
 }
-let attachments=[];let attachmentContext='';
-function showAttachments(){const panel=document.getElementById('attachment-panel');panel.replaceChildren();for(const row of attachments){const item=document.createElement('button');item.textContent='× '+row.name;item.onclick=()=>{attachments=attachments.filter(x=>x!==row);showAttachments();};panel.appendChild(item);}}
-async function attachFiles(files){
-  if(!connected||busy)return;
-  const project=currentProject,session_id=currentSession,context=project+'|'+session_id;attachmentContext=context;
-  for(const file of files){if(file.size>8*1024*1024){showNotice('err','Όριο αρχείου 8 MiB.');continue;}const data=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result).split(',')[1]);reader.onerror=reject;reader.readAsDataURL(file);});const result=await api('/api/attachments/upload',{name:file.name,base64:data,project,session_id});if(context!==currentProject+'|'+currentSession)return;if(result.error)showNotice('err',result.error);else if(attachments.length<8){attachments.push(result);showAttachments();}}
-}
-function chooseAttachments(){const input=document.createElement('input');input.type='file';input.multiple=true;input.onchange=()=>attachFiles(input.files);input.click();}
-document.addEventListener('dragover',e=>{e.preventDefault();});document.addEventListener('drop',e=>{e.preventDefault();attachFiles(e.dataTransfer.files);});
-
-async function captureScreenAttachment() {
-  if (!connected || busy) { showNotice('err', 'Συνδέσου πρώτα και περίμενε να ολοκληρωθεί η εργασία.'); return; }
-  const project = currentProject, session_id = currentSession;
-  attachmentContext = project + '|' + session_id;
-  const r = await api('/api/attachments/screenshot', {project, session_id});
-  if (r.error) { showNotice('err', r.error); return; }
-  if (attachments.length < 8) {
-    attachments.push(r);
-    showAttachments();
-    showNotice('ok', 'Προστέθηκε στιγμιότυπο οθόνης (' + r.name + ') στα συνημμένα.');
-  }
-}
 
 let activeSpeechBtn = null;
 function speakAnswer(text, btn) {

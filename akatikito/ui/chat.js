@@ -45,8 +45,15 @@ async function pasteInto(el) {
   const start = el.selectionStart ?? el.value.length;
   const end = el.selectionEnd ?? start;
   try {
-    const r = await api("/api/paste", {});
+    const payload = el && el.id === "prompt"
+      ? {allow_image: true, project: typeof currentProject !== "undefined" ? currentProject : "", session_id: typeof currentSession !== "undefined" ? currentSession : ""}
+      : {};
+    const r = await api("/api/paste", payload);
     if (r.error) throw new Error(r.error);
+    if (!r.text && r.attachment && typeof addPastedAttachment === "function") {
+      addPastedAttachment(r.attachment);
+      return;
+    }
     el.focus();
     el.setRangeText(r.text || "", start, end, "end");
     el.dispatchEvent(new Event("input", {bubbles:true}));
@@ -593,6 +600,7 @@ async function pickFolder() {
 // Ίδιος μηχανισμός προχείρου και συντομεύσεων, χωρίς άδειες WebView.
 document.addEventListener("keydown", function(e) {
   if (e.key === "Escape") {
+    if (typeof hideDropOverlay === "function" && hideDropOverlay()) return;
     const pal = document.getElementById("cmd-palette");
     if (pal && pal.style.display === "flex") { closeCommandPalette(); return; }
     const pm = document.getElementById("proj-menu");

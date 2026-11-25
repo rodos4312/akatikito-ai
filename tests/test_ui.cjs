@@ -39,7 +39,7 @@ const context={document,window:{getSelection:()=>({toString:()=> 'επιλεγμ
     throw new Error('Unexpected URL '+url);
   }})};
 vm.createContext(context);
-let script=['chat.js','files.js','learning.js','settings.js'].map(f=>fs.readFileSync(path.join(__dirname,'../akatikito/ui',f),'utf8')).join('\n');
+let script=['chat.js','files.js','attachments.js','learning.js','settings.js'].map(f=>fs.readFileSync(path.join(__dirname,'../akatikito/ui',f),'utf8')).join('\n');
 script=script.slice(0,script.lastIndexOf("init().catch"));
 // No browser globals, network services or external packages are required.
 const setupScript=path.join(__dirname,'../akatikito/onboarding.js');

@@ -313,14 +313,46 @@ class FilesStateMixin:
         except Exception as exc:  # noqa: BLE001
             return {"error": f"{type(exc).__name__}: {exc}"}
 
-    def paste_text(self) -> dict:
-        """Διάβασμα του πρόχειρου μέσω Python."""
+    def paste_text(self, data: dict | None = None) -> dict:
+        """Διάβασμα του πρόχειρου μέσω Python (και εικόνας screenshot για το chat prompt)."""
+        payload = data if isinstance(data, dict) else {}
         try:
             import pyperclip
 
-            return {"text": pyperclip.paste() or ""}
+            text = pyperclip.paste() or ""
         except Exception as exc:  # noqa: BLE001
             return {"text": "", "error": f"{type(exc).__name__}: {exc}"}
+
+        if text or not payload.get("allow_image"):
+            return {"text": text}
+
+        # Clipboard had no text: check if the user copied a screenshot/image (Win+Shift+S, PrintScreen, etc.)
+        if self.busy or not self.agent:
+            return {"text": ""}
+        try:
+            import base64
+            import io
+            from datetime import datetime
+            from PIL import Image, ImageGrab
+
+            clip = ImageGrab.grabclipboard()
+            if isinstance(clip, Image.Image):
+                buf = io.BytesIO()
+                clip.save(buf, format="PNG")
+                b64 = base64.b64encode(buf.getvalue()).decode("ascii")
+                fname = f"clipboard_{datetime.now().strftime('%H%M%S')}.png"
+                meta = self.upload_attachment({
+                    "name": fname,
+                    "base64": b64,
+                    "project": payload.get("project"),
+                    "session_id": payload.get("session_id"),
+                })
+                if isinstance(meta, dict) and "error" in meta:
+                    return {"text": "", "error": meta["error"]}
+                return {"text": "", "attachment": meta}
+        except Exception:  # noqa: BLE001
+            pass
+        return {"text": ""}
 
     def poll(self, since: int) -> dict:
         self.reminder_tick()

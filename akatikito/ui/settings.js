@@ -483,51 +483,6 @@ function updateSlashMenu(textarea) {
   }
   menu.style.display = 'flex';
 }
-// Drag & Drop files + Ctrl+V image paste onto chat
-if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
-  let dragDepth = 0;
-  window.addEventListener('dragenter', (e) => {
-    if (e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files')) {
-      dragDepth++;
-      const ov = document.getElementById('drop-overlay');
-      if (ov) ov.classList.add('show');
-    }
-  });
-  window.addEventListener('dragleave', () => {
-    dragDepth = Math.max(0, dragDepth - 1);
-    if (dragDepth === 0) {
-      const ov = document.getElementById('drop-overlay');
-      if (ov) ov.classList.remove('show');
-    }
-  });
-  window.addEventListener('dragover', (e) => {
-    if (e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files')) e.preventDefault();
-  });
-  window.addEventListener('drop', (e) => {
-    dragDepth = 0;
-    const ov = document.getElementById('drop-overlay');
-    if (ov) ov.classList.remove('show');
-    if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length) {
-      e.preventDefault();
-      attachFiles(e.dataTransfer.files);
-    }
-  });
-  window.addEventListener('paste', (e) => {
-    const items = e.clipboardData && e.clipboardData.items;
-    if (!items) return;
-    const imgFiles = [];
-    for (const item of items) {
-      if (item.kind === 'file' && item.type && item.type.startsWith('image/')) {
-        const f = item.getAsFile();
-        if (f) imgFiles.push(f);
-      }
-    }
-    if (imgFiles.length) {
-      e.preventDefault();
-      attachFiles(imgFiles);
-    }
-  });
-}
 
 let mobileBridgeActive = false;
 async function refreshMobileBridge() {
