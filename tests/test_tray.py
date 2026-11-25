@@ -14,3 +14,11 @@ def test_tray_stop_is_safe_and_idempotent_without_start():
     tray.stop()
     tray.stop()
     assert len({CMD_OPEN, CMD_DOCTOR, CMD_QUIT}) == 3
+
+
+def test_tray_start_and_stop_no_ctypes_crash():
+    tray = SystemTray(tooltip="Akatikito Smoke Test")
+    # Must never raise access violation or ctypes OverflowError on 64-bit Windows
+    tray.start()
+    tray.stop()
+    tray.stop()

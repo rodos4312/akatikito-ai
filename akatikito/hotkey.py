@@ -79,8 +79,15 @@ def focus_window(win, title: str = "Akatikito") -> None:
     if os.name == "nt":
         try:
             import ctypes
+            from ctypes import wintypes
 
-            user32 = ctypes.windll.user32
+            user32 = ctypes.WinDLL("user32", use_last_error=True)
+            user32.FindWindowW.argtypes = [wintypes.LPCWSTR, wintypes.LPCWSTR]
+            user32.FindWindowW.restype = wintypes.HWND
+            user32.ShowWindow.argtypes = [wintypes.HWND, ctypes.c_int]
+            user32.ShowWindow.restype = wintypes.BOOL
+            user32.SetForegroundWindow.argtypes = [wintypes.HWND]
+            user32.SetForegroundWindow.restype = wintypes.BOOL
             hwnd = user32.FindWindowW(None, str(title))
             if hwnd:
                 user32.ShowWindow(hwnd, 9)  # SW_RESTORE
@@ -119,8 +126,17 @@ class GlobalHotkey:
             import ctypes
             from ctypes import wintypes
 
-            user32 = ctypes.windll.user32
-            kernel32 = ctypes.windll.kernel32
+            user32 = ctypes.WinDLL("user32", use_last_error=True)
+            kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+            kernel32.GetCurrentThreadId.argtypes = []
+            kernel32.GetCurrentThreadId.restype = wintypes.DWORD
+            user32.RegisterHotKey.argtypes = [wintypes.HWND, ctypes.c_int, wintypes.UINT, wintypes.UINT]
+            user32.RegisterHotKey.restype = wintypes.BOOL
+            user32.UnregisterHotKey.argtypes = [wintypes.HWND, ctypes.c_int]
+            user32.UnregisterHotKey.restype = wintypes.BOOL
+            user32.GetMessageW.argtypes = [ctypes.POINTER(wintypes.MSG), wintypes.HWND, wintypes.UINT, wintypes.UINT]
+            user32.GetMessageW.restype = wintypes.BOOL
+
             self._tid = int(kernel32.GetCurrentThreadId())
             ok = bool(user32.RegisterHotKey(None, self.hotkey_id, mods, vk))
             self._registered = ok
@@ -154,8 +170,12 @@ class GlobalHotkey:
         if os.name == "nt" and self._tid:
             try:
                 import ctypes
+                from ctypes import wintypes
 
-                ctypes.windll.user32.PostThreadMessageW(self._tid, WM_QUIT, 0, 0)
+                user32 = ctypes.WinDLL("user32", use_last_error=True)
+                user32.PostThreadMessageW.argtypes = [wintypes.DWORD, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
+                user32.PostThreadMessageW.restype = wintypes.BOOL
+                user32.PostThreadMessageW(self._tid, WM_QUIT, 0, 0)
             except Exception:
                 pass
         if self._thread is not None and self._thread.is_alive():

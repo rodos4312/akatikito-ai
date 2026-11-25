@@ -103,15 +103,21 @@ def main() -> int:
 
             hk_spec = getattr(state.settings, "global_hotkey", "Alt+Space")
             if hk_spec:
-                hotkey = GlobalHotkey(hk_spec, lambda: focus_window(win, APP_NAME))
-                hotkey.start()
-            tray = SystemTray(
-                tooltip=f"{APP_NAME} ({hk_spec or 'Tray'})",
-                on_open=lambda: focus_window(win, APP_NAME),
-                on_doctor=_open_doctor,
-                on_quit=_quit_app,
-            )
-            tray.start()
+                try:
+                    hotkey = GlobalHotkey(hk_spec, lambda: focus_window(win, APP_NAME))
+                    hotkey.start()
+                except Exception:
+                    hotkey = None
+            try:
+                tray = SystemTray(
+                    tooltip=f"{APP_NAME} ({hk_spec or 'Tray'})",
+                    on_open=lambda: focus_window(win, APP_NAME),
+                    on_doctor=_open_doctor,
+                    on_quit=_quit_app,
+                )
+                tray.start()
+            except Exception:
+                tray = None
             webview.start()
         except Exception as exc:  # noqa: BLE001 — fallback to system browser if pywebview unavailable
             if not windowless:
