@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import csv
 import io
+import math
 import os
 import re
 import sqlite3
@@ -10,6 +11,7 @@ import stat
 import unicodedata
 import xml.etree.ElementTree as ET
 import zipfile
+from collections import Counter
 from pathlib import Path
 
 from .workspace import Workspace
@@ -23,6 +25,65 @@ MAX_FILE_BYTES = 10 * 1024 * 1024  # 10 MiB per document
 MAX_FILES = 2000
 MAX_TEXT_CHARS = 120_000
 _TOKEN_RE = re.compile(r"[\w\u0370-\u03ff\u1f00-\u1fff]+", re.UNICODE)
+
+# Lightweight offline bilingual (EL/EN) concept groups for semantic document recall.
+_CONCEPT_GROUPS: tuple[tuple[str, ...], ...] = (
+    ("ρευμα", "δεη", "deh", "ηλεκτρικ", "ενεργει", "electricity", "power", "kwh", "protergia", "heron", "elpedison"),
+    ("τιμολογι", "αποδειξ", "φπα", "invoice", "receipt", "vat", "billing", "πληρωμ", "payment"),
+    ("συμβολαι", "συμφωνητικ", "contract", "agreement", "μνημονι", "nda", "lease"),
+    ("ενοικι", "μισθωτηρι", "rent", "lease", "ακινητ", "διαμερισμ"),
+    ("φορ", "εφορι", "ααδε", "aade", "ενφια", "enfia", "tax", "δηλωσ"),
+    ("νερ", "ευδαπ", "eydap", "υδρευσ", "water"),
+    ("τηλεφων", "internet", "ιντερνετ", "cosmote", "vodafone", "nova", "κινητ", "telecom"),
+    ("μισθ", "μισθοδοσ", "salary", "payroll", "αποδοχ", "εργασι"),
+    ("τραπεζ", "εμβασμ", "iban", "bank", "transfer", "λογαριασμ", "statement"),
+    ("ασφαλει", "ασφαλιστ", "insurance", "policy", "καλυψ"),
+)
+
+
+def _expand_semantic_terms(folded_query: str) -> set[str]:
+    tokens = [t for t in _TOKEN_RE.findall(folded_query) if len(t) >= 2]
+    expanded = set(tokens)
+    for tok in tokens:
+        for group in _CONCEPT_GROUPS:
+            if any(tok.startswith(stem) or stem.startswith(tok) for stem in group):
+                expanded.update(group)
+    return expanded
+
+
+def _trigrams(text: str) -> Counter[str]:
+    clean = " ".join(_TOKEN_RE.findall(text))
+    if len(clean) < 3:
+        return Counter([clean] if clean else [])
+    return Counter(clean[i : i + 3] for i in range(len(clean) - 2))
+
+
+def _cosine_counter(a: Counter[str], b: Counter[str]) -> float:
+    if not a or not b:
+        return 0.0
+    common = set(a.keys()) & set(b.keys())
+    if not common:
+        return 0.0
+    dot = sum(a[k] * b[k] for k in common)
+    na = math.sqrt(sum(v * v for v in a.values()))
+    nb = math.sqrt(sum(v * v for v in b.values()))
+    return (dot / (na * nb)) if (na > 0 and nb > 0) else 0.0
+
+
+def _semantic_excerpt(content: str, terms: set[str], radius: int = 90) -> str:
+    low = content.casefold()
+    pos = -1
+    for t in sorted(terms, key=len, reverse=True):
+        idx = low.find(t)
+        if idx != -1:
+            pos = idx
+            break
+    if pos == -1:
+        return content[:180].replace("\n", " ").strip()
+    start = max(0, pos - radius)
+    end = min(len(content), pos + radius)
+    chunk = content[start:end].replace("\n", " ").strip()
+    return ("... " if start > 0 else "") + chunk + (" ..." if end < len(content) else "")
 
 
 def _extract_pdf(path: Path) -> str:
@@ -286,9 +347,49 @@ class DocIndex:
                 "size": r[3] or 0,
                 "score": round(float(r[4]), 4) if r[4] is not None else 0.0,
                 "snippet": (r[5] or "").replace("\n", " ").strip(),
+                "match_type": "exact",
             }
             for r in rows
         ]
+        # Hybrid Semantic/Morphological fallback when FTS5 finds fewer than `limit` matches
+        if len(results) < limit:
+            folded_q = _fold_diacritics(query)
+            sem_terms = _expand_semantic_terms(folded_q)
+            q_grams = _trigrams(" ".join(sorted(sem_terms)))
+            seen_paths = {item["path"] for item in results}
+            conn2 = self._connect()
+            try:
+                all_rows = conn2.execute(
+                    "SELECT f.path, f.title, f.content, m.kind, m.size "
+                    "FROM doc_fts f LEFT JOIN doc_meta m ON m.path = f.path LIMIT 500"
+                ).fetchall()
+            finally:
+                conn2.close()
+            scored: list[tuple[float, dict]] = []
+            for p_rel, title, content, kind, size in all_rows:
+                if p_rel in seen_paths:
+                    continue
+                hay = f"{title or ''} {(content or '')[:12000]}"
+                hay_low = hay.casefold()
+                stem_hits = sum(1 for t in sem_terms if len(t) >= 3 and t in hay_low)
+                gram_sim = _cosine_counter(q_grams, _trigrams(hay_low[:4000]))
+                hybrid_score = gram_sim + min(0.6, 0.25 * stem_hits)
+                if hybrid_score >= 0.22:
+                    scored.append((
+                        hybrid_score,
+                        {
+                            "path": p_rel,
+                            "title": title or "",
+                            "kind": kind or "",
+                            "size": size or 0,
+                            "score": round(hybrid_score, 4),
+                            "snippet": _semantic_excerpt(content or title or "", sem_terms),
+                            "match_type": "semantic",
+                        },
+                    ))
+            scored.sort(key=lambda pair: pair[0], reverse=True)
+            for _sc, item in scored[: max(0, limit - len(results))]:
+                results.append(item)
         return {"query": query, "results": results, "stats": stats}
 
 
