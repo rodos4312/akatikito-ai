@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS memories (
     status        TEXT    NOT NULL DEFAULT 'confirmed',
     topic         TEXT    NOT NULL DEFAULT '',
     text          TEXT    NOT NULL,
+    text_key      TEXT    NOT NULL DEFAULT '',
     lang          TEXT    NOT NULL DEFAULT '',
     keywords      TEXT    NOT NULL DEFAULT '',
     importance    INTEGER NOT NULL DEFAULT 1 CHECK (importance BETWEEN 0 AND 3),
@@ -46,6 +47,7 @@ CREATE TABLE IF NOT EXISTS memories (
     superseded_by INTEGER REFERENCES memories(id)
 );
 CREATE INDEX IF NOT EXISTS memories_active ON memories(scope, kind) WHERE forgotten = 0 AND superseded_by IS NULL;
+CREATE INDEX IF NOT EXISTS memories_same ON memories(scope, kind, status, text_key) WHERE forgotten = 0 AND superseded_by IS NULL;
 CREATE TABLE IF NOT EXISTS history (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     memory_id   INTEGER NOT NULL,
@@ -65,7 +67,8 @@ CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 """
 _FTS = "CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts USING fts5(keys, sk, tokenize='unicode61 remove_diacritics 0')"
 _PLAIN = "CREATE TABLE IF NOT EXISTS memories_keys (id INTEGER PRIMARY KEY, keys TEXT NOT NULL, sk TEXT NOT NULL)"
-_COLUMNS = ("id", "scope", "kind", "status", "topic", "text", "lang", "keywords", "importance", "created_at",
+_COLUMNS = ("id", "scope", "kind", "status", "topic", "text", "text_key", "lang", "keywords", "importance",
+            "created_at",
             "updated_at", "last_used_at", "use_count", "helpful", "unhelpful", "source", "forgotten", "superseded_by")
 _ACTIVE = "forgotten = 0 AND superseded_by IS NULL"
 
@@ -185,6 +188,24 @@ class MemoryStore:
                 new_id = self._insert(row, created_at)
                 self._log(new_id, "add", None, self._dump(new_id), actor)
             return new_id
+
+    def add_many(self, items: Iterable[dict], *, actor: str = "owner") -> list[int]:
+        """Store many memories in ONE transaction (imports): all of them, or none if any is refused."""
+        prepared = []
+        for item in items:
+            fields = {k: item.get(k, d) for k, d in (("topic", ""), ("scope", "global"), ("kind", "fact"),
+                                                     ("status", "confirmed"), ("importance", 1), ("keywords", ""),
+                                                     ("source", "owner"), ("lang", ""))}
+            prepared.append((self._prepare(item["text"], **fields), item.get("created_at")))
+        ids = []
+        with self._lock, self._transaction():
+            for row, created_at in prepared:
+                existing = self._find_same(row)
+                if existing is None:
+                    existing = self._insert(row, created_at)
+                    self._log(existing, "add", None, self._dump(existing), actor)
+                ids.append(existing)
+        return ids
 
     def update(self, memory_id: int, *, actor: str = "owner", **changes: Any) -> int:
         """Revise a memory: a new row replaces it, the old row stays in history. Returns the new id."""
@@ -321,24 +342,25 @@ class MemoryStore:
             raise MemoryRefused("Η σημασία είναι ακέραιος από 0 έως 3.")
         scope = _clean(scope, 200, "εμβέλεια") or "global"
         _screen(text, topic, keywords)
-        return {"text": _redacted(text), "topic": _redacted(topic), "keywords": _redacted(keywords),
+        from .memory import note_key
+        text = _redacted(text)
+        return {"text": text, "text_key": note_key(text), "topic": _redacted(topic), "keywords": _redacted(keywords),
                 "scope": scope, "kind": kind, "status": status, "importance": importance,
                 "source": _clean(source, 200, "πηγή"), "lang": _clean(lang, 20, "γλώσσα")}
 
     def _find_same(self, row: dict) -> int | None:
-        from .memory import note_key
-        found = self._db.execute(f"SELECT id, text FROM memories WHERE {_ACTIVE} AND scope = ? AND kind = ? "
-                                 "AND status = ?", (row["scope"], row["kind"], row["status"])).fetchall()
-        target = note_key(row["text"])
-        return next((r["id"] for r in found if note_key(r["text"]) == target), None)
+        found = self._db.execute(f"SELECT id FROM memories WHERE {_ACTIVE} AND scope = ? AND kind = ? AND status = ? "
+                                 "AND text_key = ? LIMIT 1",
+                                 (row["scope"], row["kind"], row["status"], row["text_key"])).fetchone()
+        return found[0] if found else None
 
     def _insert(self, row: dict, created_at: float | None) -> int:
         now = time.time()
         cur = self._db.execute(
-            "INSERT INTO memories(scope, kind, status, topic, text, lang, keywords, importance, created_at, "
-            "updated_at, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (row["scope"], row["kind"], row["status"], row["topic"], row["text"], row["lang"], row["keywords"],
-             row["importance"], created_at or now, now, row["source"]))
+            "INSERT INTO memories(scope, kind, status, topic, text, text_key, lang, keywords, importance, created_at, "
+            "updated_at, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (row["scope"], row["kind"], row["status"], row["topic"], row["text"], row["text_key"], row["lang"],
+             row["keywords"], row["importance"], created_at or now, now, row["source"]))
         new_id = int(cur.lastrowid)
         self._index(new_id, row["text"], row["topic"], row["keywords"])
         return new_id
@@ -366,7 +388,8 @@ class MemoryStore:
             frontier = [i for i in found if i not in chain]
             chain.update(frontier)
         marks = ",".join("?" * len(chain))
-        self._db.execute(f"UPDATE memories SET text = '[ξεχάστηκε οριστικά]', topic = '', keywords = '', "
+        self._db.execute(f"UPDATE memories SET text = '[ξεχάστηκε οριστικά]', text_key = '', topic = '', "
+                         f"keywords = '', "
                          f"forgotten = 1 WHERE id IN ({marks})", list(chain))
         self._db.execute(f"UPDATE history SET before_json = NULL, after_json = NULL WHERE memory_id IN ({marks})",
                          list(chain))
