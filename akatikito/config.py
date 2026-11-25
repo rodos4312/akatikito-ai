@@ -39,6 +39,11 @@ class Config:
     # mode, runtime) μπαίνουν πάντα ολόκληρα· οι μνήμες κόβονται στο υπόλοιπο budget.
     system_prompt_budget: int = 11500
     memory_excerpt_overhead: int = 220
+    # Κεντρική μνήμη (MEMORY-PLAN): προφίλ + μνήμες ως κατάσταση εφαρμογής, ανάκληση όταν δεν χωρούν όλες.
+    # False = ακριβώς η παλιά συμπεριφορά (αποσπάσματα από MEMORY.md / profile.json).
+    memory_recall: bool = True
+    memory_core_chars: int = 4000  # same ceiling the legacy profile excerpt had
+    memory_recall_chars: int = 3000
 
     # Περιορισμένη προβολή προς το μοντέλο, με πλήρες τοπικό ιστορικό.
     context_economy: bool = True

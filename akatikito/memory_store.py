@@ -355,7 +355,10 @@ class MemoryStore:
         _screen(text, topic, keywords)
         from .memory import note_key
         text = _redacted(text)
-        return {"text": text, "text_key": note_key(text), "topic": _redacted(topic), "keywords": _redacted(keywords),
+        topic = _redacted(topic)
+        # Same words under another topic are another memory (the profile keys on topic + text).
+        key = f"{note_key(topic)} § {note_key(text)}" if topic else note_key(text)
+        return {"text": text, "text_key": key, "topic": topic, "keywords": _redacted(keywords),
                 "scope": scope, "kind": kind, "status": status, "importance": importance,
                 "source": _clean(source, 200, "πηγή"), "lang": _clean(lang, 20, "γλώσσα")}
 

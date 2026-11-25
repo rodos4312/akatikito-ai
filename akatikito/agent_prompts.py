@@ -85,18 +85,37 @@ def system_prompt(agent) -> str:
     return "\n".join(fixed + agent._memory_prompt_parts(remaining, general))
 
 
-def observe_request_state(agent) -> None:
+def memory_observations(agent, task: str) -> tuple[str, str]:
+    """(profile, memories): the central memory when enabled and healthy, else the legacy excerpts."""
+    config = agent.config
+    if getattr(config, "memory_recall", True):
+        from . import memory_central
+
+        central = memory_central.observations(
+            agent._current_task, agent.ws.root, core_chars=getattr(config, "memory_core_chars", 4000),
+            memory_chars=getattr(config, "memory_recall_chars", 3000))
+        if central is not None:
+            profile, memories, full_profile = central
+            if full_profile:  # cut to the budget: keep the whole profile exactly retrievable
+                key = agent.context.store(global_memory.snapshot()[1] or full_profile)  # the source of truth
+                profile += f"\n[Πλήρες Δομημένο προφίλ χρήστη: recall_context id={key}. Ανακτάται ακριβώς, χωρίς απώλεια.]"
+            return profile, memories
     general, about_user = global_memory.snapshot()
-    task = agent.task.prompt()
-    remaining = max(0, agent.config.system_prompt_budget - len(agent.policy_prompt()) - len(task))
+    remaining = max(0, config.system_prompt_budget - len(agent.policy_prompt()) - len(task))
     profile_excerpt = agent.context.memory_excerpt(
         "Δομημένο προφίλ χρήστη", about_user, min(4000, remaining // 2), agent._current_task
     )
     remaining = max(0, remaining - len(profile_excerpt))
+    return profile_excerpt, "\n".join(agent._memory_prompt_parts(remaining, general))
+
+
+def observe_request_state(agent) -> None:
+    task = agent.task.prompt()
+    profile_excerpt, memories = memory_observations(agent, task)
     updates = {
         "εργασία": task,
         "προτιμήσεις χρήστη": profile_excerpt,
-        "μνήμες": "\n".join(agent._memory_prompt_parts(remaining, general)),
+        "μνήμες": memories,
         "έλεγχοι": (
             "Εκκρεμεί διόρθωση: "
             + json.dumps(
