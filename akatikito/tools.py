@@ -18,6 +18,7 @@ from .config import Config
 from .network_tools import NETWORK_SPECS, NETWORK_HANDLERS, NetworkError, web_fetch, github_search, github_read, github_issues, github_clone
 
 MAX_READ_LINES = READ_LINES
+MAX_READ_CHARS = 24000
 MAX_SEARCH_HITS = 50
 MAX_OUTPUT = 10000
 MAX_PROJECT_HITS = 20
@@ -103,10 +104,10 @@ def read_file(ws: Workspace, path: str, start: int = 1, end: int | None = None,
         return "ΣΦΑΛΜΑ: το 'end' είναι πριν το 'start'."
     body = "\n".join(f"{n:>5} | {lines[n-1]}" for n in range(first,last+1))
     head = f"{ws.relative(target)} — γραμμές {first}-{last} από {total}:\n"
-    result = _clip_with_archive(ws, head + body)
+    result = _clip_with_archive(ws, head + body, limit=MAX_READ_CHARS)
     notes = []
     if mode:
-        notes.append(mode + (" — η προβολή συντομεύτηκε λόγω μεγέθους· το πλήρες κείμενο διατηρείται στο παραπάνω id." if len(head+body)>MAX_OUTPUT else ""))
+        notes.append(mode + (" — η προβολή συντομεύτηκε λόγω μεγέθους· το πλήρες κείμενο διατηρείται στο παραπάνω id." if len(head+body)>MAX_READ_CHARS else ""))
     elif last < min(total,int(end) if end else total):
         notes.append(f"Δεν διαβάστηκε όλο το ζητούμενο εύρος. Συνέχεια με start={last+1}, ή outline=true και anchor_line στη σχετική συνάρτηση.")
     if not anchor_line and data["blocks"] and len(lines)>MAX_READ_LINES and start==1:

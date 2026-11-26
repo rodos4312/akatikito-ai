@@ -124,3 +124,15 @@ def test_python_smoke_check_with_related_pytest_and_mode_gating(tmp_path: Path):
     assert "replace_symbol" in allowed_tools("code")
     assert "smoke_check" in allowed_tools("code")
     assert "smoke_check" in allowed_tools("debug")
+
+
+def test_read_file_does_not_clip_full_350_line_20kb_file(tmp_path: Path):
+    big = tmp_path / "plan.md"
+    # 300 lines x ~65 chars ~= 20KB (previously clipped at 10KB, forcing 2 read_file steps!)
+    big.write_text("\n".join(f"Line {i:03d}: " + ("περιγραφή παιχνιδιού " * 3) for i in range(1, 301)), encoding="utf-8")
+    ws = Workspace(tmp_path)
+    out = dispatch(ws, "read_file", {"path": "plan.md"})
+    assert "Line 001:" in out
+    assert "Line 300:" in out
+    assert "κόπηκε" not in out
+
