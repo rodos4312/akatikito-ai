@@ -111,6 +111,8 @@ class Settings:
     sidebar_collapsed: bool = False
     recent_projects: list[str] = field(default_factory=list)
     global_hotkey: str = "Alt+Space"
+    background_mode: bool = False
+    background_autostart: bool = False
     onboarding_complete: bool = False
     warning: str = field(default="", compare=False)
 
@@ -180,6 +182,8 @@ class Settings:
         settings.cautious_edits = data.get("cautious_edits") is True
         settings.checkpoints = data.get("checkpoints", True) is True
         settings.global_hotkey = str(data.get("global_hotkey", "Alt+Space") or "").strip()
+        settings.background_mode = data.get("background_mode") is True
+        settings.background_autostart = data.get("background_autostart") is True
         raw_cmds = data.get("allowed_commands")
         settings.allowed_commands = [str(x) for x in raw_cmds if isinstance(x, str)] if isinstance(raw_cmds, list) else []
         origins = data.get("key_origins") or {}
@@ -220,6 +224,8 @@ class Settings:
             'voice_model':self.voice_model,'voice_language':self.voice_language,'ui_language':self.ui_language,
             'ui_theme':self.ui_theme,'ui_font_size':int(self.ui_font_size),'sidebar_collapsed':bool(self.sidebar_collapsed),'recent_projects':list(self.recent_projects[:10]),
             'global_hotkey':self.global_hotkey,
+            'background_mode':bool(self.background_mode),
+            'background_autostart':bool(self.background_autostart),
             "version": 1,
             "provider": self.provider,
             "base_url": self.base_url,
