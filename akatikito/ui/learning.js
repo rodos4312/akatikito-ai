@@ -443,6 +443,45 @@ async function createOwnerSkill() {
   await loadLearning(learningOffset);
 }
 
+async function runSkillsTidy() {
+  const proj = learningProject || currentProject || filesProject;
+  const r = await api('/api/learning/action', {project: proj, action: 'skills_tidy'});
+  if (r.error) { showNotice('err', r.error); return; }
+  const panel = document.getElementById('skills-tidy-panel');
+  if (!panel) return;
+  panel.replaceChildren();
+  panel.style.display = 'flex';
+  const rows = Array.isArray(r.proposals) ? r.proposals : [];
+  if (!rows.length) {
+    const ok = document.createElement('div');
+    ok.className = 'hint';
+    ok.textContent = '✅ Δεν βρέθηκαν διπλά, παλιά ή αντιφατικά skills.';
+    panel.appendChild(ok);
+    return;
+  }
+  for (const item of rows) {
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;gap:8px;align-items:center;justify-content:space-between;padding:4px 0';
+    const msg = document.createElement('span');
+    msg.textContent = '• ' + String(item.message || '');
+    row.appendChild(msg);
+    if (item.kind === 'stale' && Array.isArray(item.skills) && item.skills[0]) {
+      const btn = document.createElement('button');
+      btn.className = 'btn';
+      btn.style.width = 'auto';
+      btn.textContent = 'Αρχειοθέτηση';
+      btn.onclick = async () => {
+        const res = await api('/api/learning/action', {project: proj, action: 'skill_archive', name: item.skills[0], user_approved: true});
+        if (res.error) { showNotice('err', res.error); return; }
+        showNotice('ok', res.note || 'Αρχειοθετήθηκε.');
+        await runSkillsTidy();
+      };
+      row.appendChild(btn);
+    }
+    panel.appendChild(row);
+  }
+}
+
 let mcpSignature='';
 function updateBadges(s) {
   const fpEl = document.getElementById('fast-provider');

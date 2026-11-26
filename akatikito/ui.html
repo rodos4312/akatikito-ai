@@ -377,7 +377,9 @@
           <button class="btn primary" data-i18n="sk_btn_new" style="width:auto" onclick="toggleSkillForm()">＋ Δημιουργία νέας συνταγής (Skill)</button>
           <button class="btn" data-i18n="sk_btn_import" style="width:auto" onclick="toggleSkillImportForm()">📥 Εισαγωγή SKILL.md (Hermes / Claude / Cursor)</button>
           <button class="btn" data-i18n="sk_btn_learn" style="width:auto;border-color:var(--accent)" onclick="triggerLearnCommand()">🧠 /learn — Απόσταξη συνομιλίας σε Skill</button>
+          <button class="btn" id="btn-skills-tidy" style="width:auto" onclick="runSkillsTidy()">🧹 Έλεγχος skills</button>
         </div>
+        <div id="skills-tidy-panel" style="display:none;flex-direction:column;gap:6px;background:var(--panel);padding:10px;border-radius:8px;border:1px solid var(--border)"></div>
         <div id="skill-import-form" style="display:none;flex-direction:column;gap:8px;background:var(--panel);padding:12px;border-radius:8px;border:1px solid var(--accent)">
           <div class="field"><label>Επικόλλησε οποιοδήποτε SKILL.md (Hermes, Claude Code, Cursor, Agensi.io) ή φόρτωσε αρχείο .md</label>
             <input type="file" id="skill-import-file" accept=".md,.txt" onchange="loadSkillImportFile(this)" style="font-size:12px">

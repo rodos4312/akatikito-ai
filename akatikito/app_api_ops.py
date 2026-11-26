@@ -71,46 +71,82 @@ class OpsStateMixin:
         except (OSError,ValueError) as exc:
             return {'error':str(exc)}
 
-    def learning_action(self,data):
-        from .profile import Profile
-        from .skills import Skills
-        if self.busy:return {'error':'Περίμενε να ολοκληρωθεί η εργασία.'}
-        if data.get('project')!=str(self._files_root()):
-            return {'error':'Το project άλλαξε· ανανέωσε την προεπισκόπηση.'}
-        action=data.get('action')
+    def learning_action(self, data):
+        if self.busy:
+            return {'error': 'Περίμενε να ολοκληρωθεί η εργασία.'}
+        if data.get('project') != str(self._files_root()):
+            return {'error': 'Το project άλλαξε· ανανέωσε την προεπισκόπηση.'}
+        action = str(data.get('action') or '')
         try:
-            if action in ('memory_approve','memory_reject'):
-                if not data.get('review'):return {'error':'Χρειάζεται η τρέχουσα προεπισκόπηση.'}
-                result=Profile().answer(str(data.get('id','')),action=='memory_approve',data.get('text'),data['review'])
-            elif action=='memory_forget':
-                result=Profile().forget(str(data.get('id','')))
-            elif action=='consolidate':
-                result=Profile().consolidate()
-            elif action in ('skill_approve','skill_reject'):
-                if not data.get('review'):return {'error':'Χρειάζεται η τρέχουσα προεπισκόπηση.'}
-                result=Skills(self._files_root()).answer(str(data.get('id','')),action=='skill_approve',data['review'])
-            elif action=='skill_create':
-                steps=[s.strip() for s in (data.get('steps') or []) if str(s).strip()]
-                result=Skills(self._files_root()).save_owner_skill(
-                    str(data.get('name','')).strip(),str(data.get('description','')).strip(),steps,
-                    str(data.get('scope') or 'user'),category=str(data.get('category') or '').strip(),
-                    triggers=data.get('triggers'),notes=data.get('notes'),
-                    required_tools=data.get('required_tools'),template=str(data.get('template') or ''))
-                result['note']=f"Αποθηκεύτηκε η συνταγή /{result['name']}."
-            elif action=='skill_import':
-                result=Skills(self._files_root()).import_markdown(
-                    str(data.get('markdown') or ''),
-                    scope=str(data.get('scope') or 'user'),
-                )
-                result['note']=f"Εισήχθη με ασφάλεια η συνταγή /{result['name']}."
-            elif action=='skill_delete':
-                result=Skills(self._files_root()).delete_owner_skill(str(data.get('name','')).strip())
-                result['note']=f"Διαγράφηκε η συνταγή /{result['name']}."
-            else:return {'error':'Άγνωστη ενέργεια μνήμης.'}
+            result = self._dispatch_learning_action(action, data)
+            if 'error' in result:
+                return result
             self.push('learning_changed')
             return result
-        except (OSError,ValueError) as exc:
-            return {'error':str(exc)}
+        except (OSError, ValueError, PermissionError) as exc:
+            return {'error': str(exc)}
+
+    def _dispatch_learning_action(self, action: str, data: dict) -> dict:
+        from .profile import Profile
+        from .skills import Skills
+
+        if action in ('memory_approve', 'memory_reject'):
+            if not data.get('review'):
+                return {'error': 'Χρειάζεται η τρέχουσα προεπισκόπηση.'}
+            return Profile().answer(str(data.get('id', '')), action == 'memory_approve', data.get('text'), data['review'])
+        if action == 'memory_forget':
+            return Profile().forget(str(data.get('id', '')))
+        if action == 'consolidate':
+            return Profile().consolidate()
+        if action in ('skill_approve', 'skill_reject'):
+            if not data.get('review'):
+                return {'error': 'Χρειάζεται η τρέχουσα προεπισκόπηση.'}
+            return Skills(self._files_root()).answer(str(data.get('id', '')), action == 'skill_approve', data['review'])
+        if action in ('skill_create', 'skill_import', 'skill_delete'):
+            return self._run_skill_owner_action(action, data)
+        if action in ('skills_tidy', 'skill_archive'):
+            return self._run_skill_curator_action(action, data)
+        return {'error': 'Άγνωστη ενέργεια μνήμης.'}
+
+    def _run_skill_owner_action(self, action: str, data: dict) -> dict:
+        from .skills import Skills
+
+        store = Skills(self._files_root())
+        if action == 'skill_create':
+            steps = [s.strip() for s in (data.get('steps') or []) if str(s).strip()]
+            result = store.save_owner_skill(
+                str(data.get('name', '')).strip(), str(data.get('description', '')).strip(), steps,
+                str(data.get('scope') or 'user'), category=str(data.get('category') or '').strip(),
+                triggers=data.get('triggers'), notes=data.get('notes'),
+                required_tools=data.get('required_tools'), template=str(data.get('template') or ''),
+            )
+            result['note'] = f"Αποθηκεύτηκε η συνταγή /{result['name']}."
+            return result
+        if action == 'skill_import':
+            result = store.import_markdown(str(data.get('markdown') or ''), scope=str(data.get('scope') or 'user'))
+            result['note'] = f"Εισήχθη με ασφάλεια η συνταγή /{result['name']}."
+            return result
+        result = store.delete_owner_skill(str(data.get('name', '')).strip())
+        result['note'] = f"Διαγράφηκε η συνταγή /{result['name']}."
+        return result
+
+    def _run_skill_curator_action(self, action: str, data: dict) -> dict:
+        from .skill_curator import archive_skill, curate_skills
+        from .skills import Skills
+
+        root = self._files_root()
+        if action == 'skills_tidy':
+            return curate_skills(root)
+        name = str(data.get('name') or '').strip()
+        approved = data.get('user_approved') is True
+        entries = Skills(root)._entries()
+        entry = entries.get(name)
+        if not entry:
+            raise ValueError(f"Δεν βρέθηκε το skill: {name}")
+        if entry.get('source') == 'builtin':
+            raise ValueError("Δεν μπορείς να αρχειοθετήσεις ενσωματωμένο skill.")
+        archived_path = archive_skill(entry['path'], user_approved=approved)
+        return {'ok': True, 'name': name, 'archived_to': str(archived_path), 'note': f"Αρχειοθετήθηκε το skill /{name}."}
 
 
     def reminders(self):
