@@ -646,24 +646,40 @@ function esc(s) {
 // ---------- chat rendering ----------
 const chat = document.getElementById("chat");
 
+function isChatNearBottom() {
+  if (!chat || typeof chat.scrollHeight !== "number" || typeof chat.clientHeight !== "number") return true;
+  return (chat.scrollHeight - (chat.scrollTop || 0) - chat.clientHeight) < 80;
+}
+function scrollChatIfPinned(wasPinned) {
+  if (wasPinned !== false && chat) chat.scrollTop = chat.scrollHeight;
+}
+
 let liveStream = null;
 function clearStream() {
   if (liveStream) liveStream.node.remove();
   liveStream = null;
 }
 function streamEvent(kind, data) {
+  const pin = isChatNearBottom();
   if (kind === "stream_start") {
     clearStream();
     const node = document.createElement("div"); node.className = "stream-preview";
     const label = document.createElement("div"); label.className = "hint";
-    label.textContent = "Γράφει… " + (data.model || "");
+    label.textContent = "🧠 Σκέφτεται… " + (data.model || "");
+    const reasoningBody = document.createElement("div"); reasoningBody.className = "stream-reasoning";
     const body = document.createElement("div"); body.style.whiteSpace = "pre-wrap";
-    node.append(label, body); chat.appendChild(node);
-    liveStream = {id:data.stream_id, node, label, body, text:"", status:"active"};
+    node.append(label, reasoningBody, body); chat.appendChild(node);
+    liveStream = {id:data.stream_id, model:data.model || "", node, label, reasoningBody, body, reasoning:"", text:"", status:"active"};
   } else if (liveStream && liveStream.id === data.stream_id) {
-    if (kind === "stream_delta") {
+    if (kind === "stream_reasoning") {
+      liveStream.reasoning += data.text || "";
+      liveStream.reasoningBody.textContent = liveStream.reasoning;
+      liveStream.reasoningBody.scrollTop = liveStream.reasoningBody.scrollHeight;
+      if (!liveStream.text) liveStream.label.textContent = "🧠 Σκέφτεται… " + liveStream.model;
+    } else if (kind === "stream_delta") {
       liveStream.text += data.text || "";
       liveStream.body.textContent = liveStream.text;
+      liveStream.label.textContent = "✍️ Γράφει… " + liveStream.model;
     } else if (kind === "stream_end") {
       liveStream.status = data.status;
       if (data.status === "tools") { clearStream(); return; }
@@ -671,17 +687,24 @@ function streamEvent(kind, data) {
         : data.status === "stopped" ? "Σταμάτησε — ατελές κείμενο" : "Η απάντηση ολοκληρώνεται…";
     }
   }
-  chat.scrollTop = chat.scrollHeight;
+  scrollChatIfPinned(pin);
 }
 function syncStream(state) {
   if (!state) return;
+  const pin = isChatNearBottom();
   if (!liveStream || liveStream.id !== state.id) streamEvent("stream_start", {stream_id:state.id, model:state.model});
+  liveStream.reasoning = state.reasoning || "";
+  liveStream.reasoningBody.textContent = liveStream.reasoning;
   liveStream.text = state.text || "";
   liveStream.body.textContent = liveStream.text;
+  if (liveStream.text) liveStream.label.textContent = "✍️ Γράφει… " + (liveStream.model || "");
+  else if (liveStream.reasoning) liveStream.label.textContent = "🧠 Σκέφτεται… " + (liveStream.model || "");
   if (state.status !== "active") streamEvent("stream_end", {stream_id:state.id, status:state.status});
+  scrollChatIfPinned(pin);
 }
 
 function addMsg(role, text, model = "", provider = "", usage = null) {
+  const pin = role === "user" ? true : isChatNearBottom();
   const div = document.createElement("div");
   div.className = "msg " + role;
   div.dataset.key = role + "|" + String(text || "").trim();  // ταυτότητα για να μη διπλασιάζεται
@@ -717,7 +740,7 @@ function addMsg(role, text, model = "", provider = "", usage = null) {
     }
   }
   chat.appendChild(div);
-  chat.scrollTop = chat.scrollHeight;
+  scrollChatIfPinned(pin);
   return div;
 }
 

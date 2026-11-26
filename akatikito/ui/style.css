@@ -210,7 +210,9 @@
     #files-panel { position:absolute; right:0; top:0; bottom:0; z-index:10; width:340px; max-width:calc(100vw - 280px); box-shadow:-12px 0 35px #0008; }
     #topbar { flex-wrap:wrap; gap:6px; }
   }
-body.simple-view .pro-only,body.simple-view #chat>.steps:not(.important-step),body.simple-view #chat>.status,body.simple-view #tokens,body.simple-view #turn-usage,body.simple-view #context-hint,body.simple-view #context-stats{display:none!important}
+body.simple-view .pro-only,body.simple-view #chat>.steps:not(.important-step):not(.live-step),body.simple-view #turn-usage,body.simple-view #context-hint,body.simple-view #context-stats{display:none!important}
+.stream-reasoning{margin:6px 0 8px;padding:6px 10px;border-left:2px solid var(--accent);background:rgba(137,180,250,0.06);border-radius:0 6px 6px 0;font-size:12px;line-height:1.45;color:var(--dim);white-space:pre-wrap;max-height:150px;overflow-y:auto}
+.stream-reasoning:empty{display:none}
 .recording{border-color:#f16a6a!important;color:#ff8888!important}#voice-panel:has(#voice-message:empty):has(#voice-result:empty){display:none}
   /* ---------- μοντέρνα στοιχεία UI ---------- */
   details.set-group { background: var(--panel2); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; }

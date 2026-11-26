@@ -100,7 +100,9 @@ POST_ROUTES = {
     "/api/mobile-bridge/status": lambda s, _d: s.mobile_bridge_status(),
     "/api/mobile-bridge/start": lambda s, d: s.mobile_bridge_start(d.get("port", 0)),
     "/api/mobile-bridge/stop": lambda s, _d: s.mobile_bridge_stop(),
-    "/api/approval": lambda s, d: s.answer_approval(d.get("id", ""), d.get("allow") is True, d.get("always") is True),
+    "/api/approval": lambda s, d: s.answer_approval(
+        d.get("id", ""), d.get("allow") is True, d.get("always") is True, d.get("autonomous") is True
+    ),
     "/api/learning": lambda s, d: s.learning_view(d.get("offset", 0)),
     "/api/learning/action": lambda s, d: s.learning_action(d),
     "/api/memory": lambda s, d: s.memory_view(d),

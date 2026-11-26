@@ -177,7 +177,7 @@ async function loadProviders() {
   if (r.model) providerModels[sel.value] = r.model;
   document.getElementById("base_url").value = r.base_url || "";
   document.getElementById("project").value = r.project || "";
-  document.getElementById("max_steps").value = r.max_steps || 25;
+  document.getElementById("max_steps").value = r.max_steps || 50;
   document.getElementById("verify").value = r.verify || "";
 
   suggestedModels = (r.suggested || {})[sel.value] || [];

@@ -341,19 +341,27 @@ class Akatikito:
         batcher = DeltaBatcher(
             lambda text: self.events.emit("stream_delta", stream_id=stream_id, text=text)
         )
+        reason_batcher = DeltaBatcher(
+            lambda text: self.events.emit("stream_reasoning", stream_id=stream_id, text=text)
+        )
+        stream_kwargs = {"cache_key": self.cache_id, "on_delta": batcher.feed, "should_stop": lambda: self._stop}
+        if getattr(self.model, "_supports_reasoning_stream", False):
+            stream_kwargs["on_reasoning"] = reason_batcher.feed
         try:
-            reply, usage = stream(request, tools, cache_key=self.cache_id, on_delta=batcher.feed,
-                                  should_stop=lambda: self._stop)
+            reply, usage = stream(request, tools, **stream_kwargs)
+            reason_batcher.flush()
             batcher.flush()
             self.events.emit("stream_end", stream_id=stream_id,
                              status="tools" if reply.get("tool_calls") else "complete")
             return reply, usage
         except ModelStopped:
             self._stop = True
+            reason_batcher.flush()
             batcher.flush()
             self.events.emit("stream_end", stream_id=stream_id, status="stopped")
             return {"content": "", "tool_calls": []}, {}
         except Exception as exc:
+            reason_batcher.flush()
             batcher.flush()
             self.events.emit("stream_end", stream_id=stream_id, status="error")
             self._progress_report("Η ροή απάντησης απέτυχε: " + str(exc))

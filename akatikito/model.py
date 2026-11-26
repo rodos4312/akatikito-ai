@@ -205,11 +205,15 @@ class OpenAIModel:
             return None
         return fb_client.chat(messages, tools=tools, cache_key=cache_key)
 
-    def _try_fallback_stream(self, messages, tools, cache_key, on_delta, should_stop, verdict):
+    _supports_reasoning_stream = True
+
+    def _try_fallback_stream(self, messages, tools, cache_key, on_delta, should_stop, verdict, on_reasoning=None):
         fb_client = self._get_fallback_client(verdict)
         if fb_client is None:
             return None
-        return fb_client.chat_stream(messages, tools=tools, cache_key=cache_key, on_delta=on_delta, should_stop=should_stop)
+        return fb_client.chat_stream(
+            messages, tools=tools, cache_key=cache_key, on_delta=on_delta, should_stop=should_stop, on_reasoning=on_reasoning
+        )
 
     def chat(
         self, messages: list[dict], tools: list[dict] | None = None, cache_key: str | None = None
@@ -270,7 +274,9 @@ class OpenAIModel:
             except Exception:
                 pass  # The reader reports cancellation; never retry a partially read stream.
 
-    def _handle_stream_failure(self, exc, received, attempt, attempts, messages, tools, cache_key, on_delta, should_stop):
+    def _handle_stream_failure(
+        self, exc, received, attempt, attempts, messages, tools, cache_key, on_delta, should_stop, on_reasoning=None
+    ):
         from .model_retry import classify, extract_retry_after, extract_status
 
         if received:
@@ -294,13 +300,27 @@ class OpenAIModel:
             if verdict.wait > 0:
                 time.sleep(verdict.wait)
             return None
-        fb_result = self._try_fallback_stream(messages, tools, cache_key, on_delta, should_stop, verdict)
+        fb_result = self._try_fallback_stream(
+            messages, tools, cache_key, on_delta, should_stop, verdict, on_reasoning=on_reasoning
+        )
         if fb_result is not None:
             return fb_result
         prefix = f"{verdict.message} " if verdict.message else ""
         raise ModelError(prefix + self._format_error(exc)) from exc
 
-    def chat_stream(self, messages, tools=None, cache_key=None, on_delta=None, should_stop=None):
+    @staticmethod
+    def _consume_stream(stream, assembled, on_delta, on_reasoning, should_stop, received_flag):
+        for chunk in stream:
+            received_flag[0] = True
+            if should_stop():
+                raise ModelStopped("Η ροή σταμάτησε από τον χρήστη.")
+            text = assembled.feed(chunk)
+            if assembled.last_reasoning and on_reasoning:
+                on_reasoning(assembled.last_reasoning)
+            if text and on_delta:
+                on_delta(text)
+
+    def chat_stream(self, messages, tools=None, cache_key=None, on_delta=None, should_stop=None, on_reasoning=None):
         """One streamed completion. Retry only before any response chunk was received."""
         should_stop = should_stop or (lambda: False)
         kwargs = self._kwargs(messages, tools, cache_key)
@@ -309,7 +329,7 @@ class OpenAIModel:
         attempts = max(1, self.config.model_retry_attempts)
         for attempt in range(attempts):
             stream = None
-            received = False
+            received_flag = [False]
             try:
                 if should_stop():
                     raise ModelStopped("Η ροή σταμάτησε από τον χρήστη.")
@@ -325,19 +345,14 @@ class OpenAIModel:
                     return {"content": choice.content or "", "tool_calls": calls,
                             "reasoning": self._reasoning_of(choice), **self._protocol_payload(choice)}, usage_of(stream.usage)
                 assembled = StreamReply()
-                for chunk in stream:
-                    received = True
-                    if should_stop():
-                        raise ModelStopped("Η ροή σταμάτησε από τον χρήστη.")
-                    text = assembled.feed(chunk)
-                    if text and on_delta:
-                        on_delta(text)
+                self._consume_stream(stream, assembled, on_delta, on_reasoning, should_stop, received_flag)
                 if should_stop():
                     raise ModelStopped("Η ροή σταμάτησε από τον χρήστη.")
                 return assembled.reply(), assembled.usage
             except ModelStopped:
                 raise
             except Exception as exc:
+                received = received_flag[0]
                 if should_stop():
                     raise ModelStopped("Η ροή σταμάτησε από τον χρήστη.") from exc
                 status = getattr(exc, "status_code", None)
@@ -352,7 +367,7 @@ class OpenAIModel:
                         kwargs.pop("stream"); kwargs.pop("stream_options", None)
                         continue
                 fb_res = self._handle_stream_failure(
-                    exc, received, attempt, attempts, messages, tools, cache_key, on_delta, should_stop
+                    exc, received, attempt, attempts, messages, tools, cache_key, on_delta, should_stop, on_reasoning=on_reasoning
                 )
                 if fb_res is not None:
                     return fb_res

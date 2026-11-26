@@ -19,6 +19,17 @@ const scenarios=String.raw`
  run("renderApprovals([{id:'danger',project:'fixture',risk:'dangerous',kind:'command',details:{command:'rm fixture'}}])");
  const buttons=document.getElementById('permission-panel').children[0].children.filter(x=>x.tagName==='BUTTON');
  assert.equal(buttons.length,2);await buttons[1].onclick();assert.equal(seen.at(-1).body.allow,false);
+ run("renderApprovals([{id:'norm',project:'fixture',risk:'normal',kind:'command',details:{command:'python -c 1'}}])");
+ const normBtns=document.getElementById('permission-panel').children[0].children.filter(x=>x.tagName==='BUTTON');
+ assert.equal(normBtns.length,4);await normBtns[3].onclick();assert.equal(seen.at(-1).body.autonomous,true);
+ // Smart auto-scroll: scrolled-up chat must NOT be yanked back to bottom by setStatus/streamEvent
+ const chatEl=document.getElementById('chat');
+ chatEl.scrollHeight=1000;chatEl.clientHeight=400;chatEl.scrollTop=100;
+ run("addStep('step',{step:3,of:50});setStatus('working');streamEvent('stream_start',{stream_id:'s1',model:'m'});streamEvent('stream_reasoning',{stream_id:'s1',text:'thinking...'});");
+ assert.equal(chatEl.scrollTop,100);
+ run("updateBadges({connected:true,busy:true,model:'m',provider:'p',mode:'code',tokens:{prompt_tokens:12000,completion_tokens:500},preferences:{advanced_view:false},todos:[],subtasks:[],reminders:[]})");
+ assert(document.getElementById('busy-badge').textContent.includes('βήμα 3/50'));
+ assert(document.getElementById('busy-badge').textContent.includes('12.5k tok'));
  run("renderTranscript([{role:'assistant',text:'done',checkpoint:'123'}])");
  const checkpoint=document.getElementById('chat').querySelectorAll('.msg').at(-1).children.find(x=>x.textContent==='Αλλαγές / Αναίρεση');
  assert(checkpoint);await checkpoint.onclick();assert(document.body.children.at(-1).children[0].textContent.includes('+new'));

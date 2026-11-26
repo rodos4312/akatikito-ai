@@ -80,12 +80,30 @@ function friendlyToolCall(name, rawArgs) {
   return `🔧 <b>${esc(name)}</b>`;
 }
 
-let livePhase = "";
+let livePhase = "", liveStep = "";
+function fmtTok(n) {
+  const v = Number(n || 0);
+  return v >= 1000 ? (v / 1000).toFixed(1) + "k" : String(v);
+}
+function formatBusyBadge(s) {
+  const t = (s && s.tokens) || {};
+  const tot = (t.prompt_tokens || 0) + (t.completion_tokens || 0);
+  const base = s && s.busy ? i18nText('badge_busy', '⚡ εργάζεται…') : i18nText('badge_idle', '💤 αδρανής');
+  const stepBit = (s && s.busy && liveStep) ? ' · ' + liveStep : '';
+  const tokBit = tot > 0 ? ' · ' + fmtTok(tot) + ' tok' : '';
+  return base + stepBit + tokBit;
+}
 function addStep(kind, data) {
-  if (kind === "step" || kind === "plan_step") { livePhase = "σκέφτομαι…"; return; }
-  if (kind === "act_step") { livePhase = `εκτελώ ${data.count || ""} εργαλεία…`; return; }
-  if (kind === "verify_step") { livePhase = "επαληθεύω…"; return; }
-  if (kind === "report_step") { livePhase = "συντάσσω απάντηση…"; return; }
+  if (kind === "step") {
+    liveStep = data.step && data.of ? `βήμα ${data.step}/${data.of}` : (data.step ? `βήμα ${data.step}` : "");
+    livePhase = "🧠 σκέφτομαι…";
+    return;
+  }
+  if (kind === "plan_step") { livePhase = "🧠 σκέφτομαι…"; return; }
+  if (kind === "act_step") { livePhase = `🔧 εκτελώ ${data.count || ""} εργαλεία…`; return; }
+  if (kind === "verify_step") { livePhase = "✅ επαληθεύω…"; return; }
+  if (kind === "report_step") { livePhase = "✍️ συντάσσω απάντηση…"; return; }
+  const pin = typeof isChatNearBottom === "function" ? isChatNearBottom() : true;
   const wrap = document.createElement("div");
   wrap.className = "steps";
   chat.appendChild(wrap);
@@ -137,7 +155,7 @@ function addStep(kind, data) {
       div.appendChild(diffWrap);
     }
     wrap.appendChild(div);
-    chat.scrollTop = chat.scrollHeight;
+    if (typeof scrollChatIfPinned === "function") scrollChatIfPinned(pin); else chat.scrollTop = chat.scrollHeight;
     return;
   }
   else if (kind === "repair") html = `🛠 <b>${esc({investigate:"Εντοπισμός αιτίας",diagnosis:"Διάγνωση",passed:"Επαληθεύτηκε η διόρθωση"}[data.phase] || "Διόρθωση")}</b><div class="out">${esc(data.text || "")}</div>`;
@@ -152,19 +170,28 @@ function addStep(kind, data) {
   else if (kind === "fatal") { html = `⚠️ ${esc(data.text)}`; div.classList.add("bad"); }
   else return;
   if(['fatal','give_up','limit','stopped','checkpoint_error'].includes(kind)||(kind==='verify'&&!data.ok))wrap.classList.add('important-step');
+  if(['reasoning','thinking','tool_call','repair'].includes(kind))wrap.classList.add('live-step');
   div.innerHTML = html;
   wrap.appendChild(div);
-  chat.scrollTop = chat.scrollHeight;
+  if (typeof scrollChatIfPinned === "function") scrollChatIfPinned(pin); else chat.scrollTop = chat.scrollHeight;
 }
 
 function setStatus(text) {
-  document.querySelectorAll(".status").forEach(e => e.remove());
-  if (!text) return;
+  const pin = typeof isChatNearBottom === "function" ? isChatNearBottom() : true;
+  const existing = document.querySelectorAll(".status");
+  if (!text) { existing.forEach(e => e.remove()); return; }
+  const html = `<span class="pulse"></span>${text}`;
+  const last = chat.children[chat.children.length - 1];
+  if (existing.length === 1 && existing[0] === last) {
+    if (existing[0].innerHTML !== html) existing[0].innerHTML = html;
+    return;
+  }
+  existing.forEach(e => e.remove());
   const div = document.createElement("div");
   div.className = "status";
-  div.innerHTML = `<span class="pulse"></span>${text}`;
+  div.innerHTML = html;
   chat.appendChild(div);
-  chat.scrollTop = chat.scrollHeight;
+  if (typeof scrollChatIfPinned === "function") scrollChatIfPinned(pin); else chat.scrollTop = chat.scrollHeight;
 }
 
 // ---------- polling ----------
@@ -190,14 +217,16 @@ async function poll() {
     updateBadges(s);
     if (refreshSessions) await loadSessions();
     if (busy) {
-      const t = s.tokens || {};
-      setStatus(`${esc(livePhase || "σκέφτομαι…")} ${esc(s.model || "")} · tokens: ${(t.prompt_tokens||0)} in / ${(t.completion_tokens||0)} out`);
+      const t = s.tokens || {}, tot = (t.prompt_tokens || 0) + (t.completion_tokens || 0);
+      const stepTag = liveStep ? ` (${liveStep})` : "";
+      const tokTag = tot > 0 ? ` · ⚡ ${fmtTok(tot)} tok (${fmtTok(t.prompt_tokens)} in / ${fmtTok(t.completion_tokens)} out)` : "";
+      setStatus(`${esc((livePhase || "🧠 σκέφτομαι…") + stepTag)} ${esc(s.model || "")}${esc(tokTag)}`);
       document.getElementById("stopbtn").style.display = "";
       document.getElementById("stopside").style.display = "";
       const sb = document.getElementById("sendbtn");
       if (sb) { sb.disabled = false; sb.textContent = "🧭 Οδηγία"; sb.title = "Στείλε οδηγία εν κινήσει χωρίς να σταματήσεις την εργασία"; }
     } else {
-      livePhase = "";
+      livePhase = ""; liveStep = "";
       setStatus(null);
       document.getElementById("stopbtn").style.display = "none";
       document.getElementById("stopside").style.display = "none";

@@ -94,7 +94,7 @@ class Settings:
     keys: dict[str, str] = field(default_factory=dict)  # πάροχος -> συγκαλυμμένο κλειδί
     models: dict[str, str] = field(default_factory=dict)
     key_origins: dict[str, str] = field(default_factory=dict)
-    autonomous: bool = False
+    autonomous: bool = True
     cautious_edits: bool = False
     advanced_view: bool = False
     advanced_features: list[str] = field(default_factory=list)
@@ -179,7 +179,7 @@ class Settings:
         except (TypeError, ValueError):
             settings.daily_budget = 0
         settings.model_prices = data.get("model_prices", {}) if isinstance(data.get("model_prices"), dict) else {}
-        settings.autonomous = data.get("autonomous") is True
+        settings.autonomous = data.get("autonomous", True) is True
         _load_routing_fields(settings, data)
         settings.cautious_edits = data.get("cautious_edits") is True
         settings.checkpoints = data.get("checkpoints", True) is True

@@ -168,7 +168,7 @@ async function finishSetup(){
   if(!model||!project){setupEl('error').textContent='Συμπλήρωσε φάκελο και μοντέλο.';return;}
   setupSubmitting=true;setupRender();setupEl('error').textContent='';
   try{
-    const body={...credentials,model,project,max_steps:document.getElementById('max_steps').value||25,verify:document.getElementById('verify').value||''};
+    const body={...credentials,model,project,max_steps:document.getElementById('max_steps').value||50,verify:document.getElementById('verify').value||''};
     let r=await api('/api/connect',body);
     if(r.requires_key_confirmation&&confirm('Το αποθηκευμένο κλειδί ανήκει αλλού. Να χρησιμοποιηθεί στη διεύθυνση '+r.destination+';'))r=await api('/api/connect',{...body,confirm_key_destination:true});
     if(r.error||!r.connected){setupEl('error').textContent=r.error||'Η σύνδεση δεν ολοκληρώθηκε.';return;}

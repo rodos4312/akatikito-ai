@@ -56,6 +56,7 @@ class StreamReply:
     def __init__(self):
         self.content = []
         self.reasoning = []
+        self.last_reasoning = ''
         self.has_reasoning = False
         self.details = []
         self.detail_indices = {}
@@ -70,6 +71,7 @@ class StreamReply:
             self.usage = usage_of(usage)
             self.usage_received = True
         content = ''
+        reasoning_chunk = ''
         for choice in value(chunk, 'choices', []) or []:
             if value(choice, 'index', 0) != 0:
                 continue
@@ -87,6 +89,7 @@ class StreamReply:
             if isinstance(reason, str):
                 self.has_reasoning = True
                 self.reasoning.append(reason)
+                reasoning_chunk += reason
             details = value(delta, 'reasoning_details', extra.get('reasoning_details'))
             if isinstance(details, list):
                 self._details(details)
@@ -111,6 +114,7 @@ class StreamReply:
             finish = value(choice, 'finish_reason')
             if finish is not None:
                 self.finish = finish
+        self.last_reasoning = reasoning_chunk
         return content
 
     def _details(self, fragments):

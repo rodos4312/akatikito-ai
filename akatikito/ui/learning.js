@@ -107,10 +107,10 @@ function renderApprovals(list) {
     else details.textContent = row.details.command || JSON.stringify(row.details,null,2);
     const root = document.createElement('div'); root.className='hint'; root.textContent=row.project;
     box.append(title,root,details);
-    for (const [text,allow,always] of [['Να τρέξει / Εφαρμογή',true,false],['Όχι',false,false],['Πάντα αυτή η εντολή',true,true]]) {
-      if (always && (row.risk==='dangerous' || row.kind!=='command')) continue;
+    for (const [text,allow,always,auto] of [['Να τρέξει / Εφαρμογή',true,false,false],['Όχι',false,false,false],['Πάντα αυτή η εντολή',true,true,false],['⚡ Αυτόνομα (συνηθισμένες)',true,false,true]]) {
+      if ((always || auto) && (row.risk==='dangerous' || row.kind!=='command')) continue;
       const button = document.createElement('button'); button.className='btn'; button.style.width='auto'; button.style.margin='6px 6px 0 0'; button.textContent=text;
-      button.onclick=async()=>{button.disabled=true;await api('/api/approval',{id:row.id,allow,always});}; box.appendChild(button);
+      button.onclick=async()=>{button.disabled=true;await api('/api/approval',{id:row.id,allow,always,...(auto?{autonomous:true}:{})});}; box.appendChild(button);
     }
     panel.appendChild(box);
   }
@@ -598,7 +598,7 @@ function updateBadges(s) {
   document.getElementById("mode-hint").textContent = modeHints[s.auto_mode ? "auto" : s.mode] || "";
   updateUpgrade(s);
   const b = document.getElementById("busy-badge");
-  b.textContent = s.busy ? i18nText('badge_busy', '⚡ εργάζεται…') : i18nText('badge_idle', '💤 αδρανής');
+  b.textContent = formatBusyBadge(s);
   b.classList.toggle("on", !s.busy && s.connected);
   const t = s.tokens || {};
   document.getElementById("tokens").textContent =

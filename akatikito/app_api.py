@@ -87,21 +87,22 @@ class AppState(OpsStateMixin, FilesStateMixin, SessionsUpgradeStateMixin, Memory
             seq = self.event_seq
         self.events.put({"seq": seq, "kind": kind, "data": data, "at": time.time()})
 
+    def _apply_stream_event(self, event) -> None:
+        if event.kind == "stream_start":
+            self.streaming = {"id": event.data["stream_id"], "text": "", "reasoning": "", "status": "active", "model": event.data.get("model", "")}
+            return
+        if event.kind not in ("stream_delta", "stream_reasoning", "stream_end") or not self.streaming or self.streaming["id"] != event.data.get("stream_id"):
+            return
+        cur = dict(self.streaming)
+        if event.kind == "stream_delta": cur["text"] += event.data.get("text", "")
+        elif event.kind == "stream_reasoning": cur["reasoning"] = cur.get("reasoning", "") + event.data.get("text", "")
+        else: cur["status"] = event.data.get("status", "complete")
+        self.streaming = None if cur["status"] == "tools" else cur
+
     def emit_event(self, event) -> None:
         """Ακροατής για τα γεγονότα του agent → ουρά για το UI."""
-        if event.kind == "checkpoint":
-            self._save_session()
-            return
-        if event.kind == "stream_start":
-            self.streaming = {"id": event.data["stream_id"], "text": "", "status": "active",
-                              "model": event.data.get("model", "")}
-        elif event.kind in ("stream_delta", "stream_end") and self.streaming and self.streaming["id"] == event.data.get("stream_id"):
-            current = dict(self.streaming)
-            if event.kind == "stream_delta":
-                current["text"] += event.data.get("text", "")
-            else:
-                current["status"] = event.data.get("status", "complete")
-            self.streaming = None if current["status"] == "tools" else current
+        if event.kind == "checkpoint": self._save_session(); return
+        self._apply_stream_event(event)
         if (event.kind == 'tool_result' and event.data.get('name') in ('edit_file','write_file','create_word_document','create_excel_sheet','create_pdf_document','convert_data_file')
                 and (str(event.data.get('result','')).startswith('ΕΓΙΝΕ') or event.data.get('recovery_required'))):
             try:
@@ -156,9 +157,13 @@ class AppState(OpsStateMixin, FilesStateMixin, SessionsUpgradeStateMixin, Memory
                 'sha256':sha,'diff':text[:120000]},stopped=lambda:agent._stop)
         agent.ws.review_write = review
 
-    def answer_approval(self, ticket, allow=False, always=False):
+    def answer_approval(self, ticket, allow=False, always=False, autonomous=False):
         if isinstance(ticket,str) and ticket.startswith('gateway:'):
             return self.plugin_action({'action':'approval','id':ticket.split(':',1)[1],'allow':allow})
+        if allow is True and autonomous is True:
+            pending = next((p for p in self.approvals.pending() if p.get('id') == ticket), None)
+            if pending and pending.get('risk') != 'dangerous' and pending.get('kind') == 'command' and not self._profile_denial_for_prefs({'autonomous': True}):
+                self.settings.autonomous = True; self._save_settings()
         return {'ok':self.approvals.respond(ticket,allow,always)}
 
     def _resolve_routing_creds(self, provider_name: str) -> tuple[str, str]:
