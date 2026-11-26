@@ -134,19 +134,23 @@ def recommended_chunk_lines(max_output_tokens: int) -> tuple[int, int]:
 
 
 def format_window_hint(context_tokens: int, max_output_tokens: int) -> str:
-    """Build a short runtime prompt line telling the coding model its real window & chunk budget."""
+    """Build a short runtime prompt line telling the coding model its real window budget.
+
+    Only advises chunking when the model actually has a small output limit (<= 8k tokens);
+    large-output models are encouraged to complete edits in as few steps as possible.
+    """
     ctx = _positive_int(context_tokens)
     out = _positive_int(max_output_tokens)
     if not ctx and not out:
         return ""
-    lo, hi = recommended_chunk_lines(out)
     parts = []
     if ctx:
         parts.append(f"context ~{ctx // 1000}k tokens")
     if out:
         parts.append(f"έξοδος ~{out // 1000}k tokens/βήμα")
-    return (
-        f"[ΠΑΡΑΘΥΡΟ ΜΟΝΤΕΛΟΥ: {', '.join(parts)}] "
-        f"Για μεγάλα αρχεία, γράφε συνεκτικά τμήματα ~{lo}–{hi} γραμμών ανά βήμα "
-        "(ούτε τεράστια που κόβονται σε length, ούτε πολλά μικροσκοπικά βήματα)."
-    )
+    if out and out <= 8_192:
+        lo, hi = recommended_chunk_lines(out)
+        advice = f"Επειδή η έξοδος ανά βήμα είναι περιορισμένη, γράφε ~{lo}–{hi} γραμμές ανά βήμα."
+    else:
+        advice = "Έχεις μεγάλο περιθώριο εξόδου: γράφε ολόκληρα αρχεία/ενότητες και ομαδοποίησε τις αλλαγές σε ελάχιστα βήματα."
+    return f"[ΠΑΡΑΘΥΡΟ ΜΟΝΤΕΛΟΥ: {', '.join(parts)}] {advice}"

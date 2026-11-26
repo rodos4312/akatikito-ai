@@ -49,8 +49,10 @@ def test_known_family_fallback_and_adaptive_chunk_lines():
     big_lo, big_hi = recommended_chunk_lines(16384)
     assert small_hi < med_lo < big_lo
 
-    hint = format_window_hint(200_000, 16_384)
-    assert "200k" in hint and "16k" in hint and "550–800" in hint
+    hint_big = format_window_hint(200_000, 16_384)
+    assert "200k" in hint_big and "16k" in hint_big and "μεγάλο περιθώριο" in hint_big
+    hint_small = format_window_hint(128_000, 4_096)
+    assert "150–220" in hint_small
 
 
 def test_openai_model_and_agent_loop_use_detected_openrouter_limits(tmp_path, monkeypatch):
@@ -103,5 +105,5 @@ def test_openai_model_and_agent_loop_use_detected_openrouter_limits(tmp_path, mo
     assert agent.chat("Δες τον κώδικα") == "Έτοιμο."
     assert agent.context.native_context_tokens == 200_000
     assert agent.context.active_max_bytes == int(200_000 * 0.6)
-    assert any("ΠΑΡΑΘΥΡΟ ΜΟΝΤΕΛΟΥ" in s and "550–800" in s for s in seen_system)
+    assert any("ΠΑΡΑΘΥΡΟ ΜΟΝΤΕΛΟΥ" in s and "μεγάλο περιθώριο" in s for s in seen_system)
     assert resolve_cached_limits({}, "missing", "deepseek-chat").context_tokens == 128_000
