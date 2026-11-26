@@ -104,6 +104,14 @@ function openAttachmentPreview(row) {
 
 function _buildAttachmentCard(row) {
   const card = document.createElement('div');
+  if (typeof card.append !== 'function') {
+    const chip = document.createElement('button');
+    chip.className = 'attach-chip';
+    chip.textContent = (row.image ? '🖼️ ' : '📎 ') + (row.name || 'αρχείο') + ' ×';
+    chip.title = 'Αφαίρεση συνημμένου';
+    chip.onclick = () => { attachments = attachments.filter((x) => x !== row); showAttachments(); };
+    return chip;
+  }
   card.className = 'attach-card';
 
   const main = document.createElement('button');
@@ -199,9 +207,12 @@ function _readFilePreviewText(file) {
   const name = String(file.name || '');
   const dot = name.lastIndexOf('.');
   const ext = dot >= 0 ? name.slice(dot + 1).toLowerCase() : '';
-  if (!_TEXT_PREVIEW_EXTS.has(ext) || file.size > 256 * 1024) return Promise.resolve('');
+  if (!_TEXT_PREVIEW_EXTS.has(ext) || file.size > 256 * 1024 || typeof FileReader === 'undefined') {
+    return Promise.resolve('');
+  }
   return new Promise((resolve) => {
     const reader = new FileReader();
+    if (typeof reader.readAsText !== 'function') { resolve(''); return; }
     reader.onload = () => resolve(String(reader.result || '').slice(0, 12000));
     reader.onerror = () => resolve('');
     reader.readAsText(file);

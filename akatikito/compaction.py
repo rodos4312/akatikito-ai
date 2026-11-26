@@ -249,6 +249,26 @@ def compact_conversation(
     return _record_compaction_metrics(agent, before_chars, after_chars, archive_id, method, reason)
 
 
+def _auto_compact_trigger(agent) -> tuple[int, bool] | None:
+    """Return (byte_trigger, should_compact) or None when no active budget/window is set."""
+    cfg = agent.config
+    explicit_budget = int(getattr(agent.context, "active_max_bytes", 0) or cfg.context_active_max_bytes or 0)
+    native_ctx = int(
+        getattr(agent.context, "native_context_tokens", 0)
+        or getattr(getattr(agent, "model", None), "context_window_tokens", 0)
+        or 0
+    )
+    if explicit_budget <= 0 and native_ctx <= 0:
+        return None
+    budget = max(8000, explicit_budget or (native_ctx * 3))
+    threshold = max(0.3, min(0.95, float(getattr(cfg, "auto_compact_threshold", 0.80))))
+    trigger = int(budget * threshold)
+    current_bytes = len(encoded([clean(m) for m in agent.messages]).encode("utf-8"))
+    real_prompt = int(getattr(agent, "_last_prompt_tokens", 0) or 0)
+    token_triggered = bool(real_prompt > 0 and native_ctx > 0 and real_prompt >= int(native_ctx * threshold))
+    return trigger, (current_bytes >= trigger or token_triggered)
+
+
 def maybe_auto_compact(agent) -> dict | None:
     """Automatically demote stale tool outputs or compact history when crossing threshold."""
     cfg = agent.config
@@ -256,20 +276,11 @@ def maybe_auto_compact(agent) -> dict | None:
         return None
     if not agent.messages or len(agent.messages) < 4:
         return None
-    budget = max(8000, int(getattr(agent.context, "active_max_bytes", 0) or cfg.context_active_max_bytes or 160000))
-    threshold = max(0.3, min(0.95, float(getattr(cfg, "auto_compact_threshold", 0.80))))
-    trigger = int(budget * threshold)
-    before_chars = len(encoded([clean(m) for m in agent.messages]))
-    current_bytes = len(encoded([clean(m) for m in agent.messages]).encode("utf-8"))
-    real_prompt = int(getattr(agent, "_last_prompt_tokens", 0) or 0)
-    native_ctx = int(
-        getattr(agent.context, "native_context_tokens", 0)
-        or getattr(getattr(agent, "model", None), "context_window_tokens", 0)
-        or 0
-    )
-    token_triggered = bool(real_prompt > 0 and native_ctx > 0 and real_prompt >= int(native_ctx * threshold))
-    if current_bytes < trigger and not token_triggered:
+    check = _auto_compact_trigger(agent)
+    if check is None or not check[1]:
         return None
+    trigger = check[0]
+    before_chars = len(encoded([clean(m) for m in agent.messages]))
 
     # Stage 1: lossless stale tool-output demotion (0 LLM calls).
     demoted_msgs, count = demote_stale_tool_outputs(agent.messages, agent.context, keep_recent_groups=3)

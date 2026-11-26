@@ -20,12 +20,14 @@ ASK_SYSTEM_PROMPT = """Είσαι ο Akatikito, αξιόπιστος βοηθό�
 # Core read-only tools always advertised in ask mode; specialist read-only tools unlock on topic match
 # and remain session-sticky so KV prompt caching stays intact on follow-up turns.
 ASK_CORE_TOOLS: frozenset[str] = frozenset({
-    "list_files", "read_file", "read_symbol", "search_project", "search_in_file", "find_relevant_files",
+    "list_files", "read_file", "search_project", "search_in_file",
     "read_document", "search_documents", "web_search", "web_fetch",
     "recall_context", "set_mode",
 })
 
 _ASK_TOPIC_GROUPS: tuple[tuple[re.Pattern[str], tuple[str, ...]], ...] = (
+    (re.compile(r"(?:αρχει|κωδικ|συναρτησ|κλασ|φακελ|project|\bfile|\bcode|\bsymbol|\bfunction|\bclass|\bimport|\bdef\b)"),
+     ("find_relevant_files", "read_symbol")),
     (re.compile(r"\b(?:github|repo|repository|issue|issues|pull request|pr|chromium|readme|commit|branch|git|open ?source)\b"),
      ("github_read", "github_issues", "github_search")),
     (re.compile(r"(?:youtube|youtu\.be|βιντεο|\bvideo\b|υποτιτλ|transcript)"),
