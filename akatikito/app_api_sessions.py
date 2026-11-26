@@ -78,6 +78,45 @@ class SessionsUpgradeStateMixin:
         found.sort(key=lambda r: (bool(r.get("pinned")), r.get("score", 0), r.get("updated_at", 0)), reverse=True)
         return {"query": q, "results": found[: max(1, min(100, int(limit or 20)))]}
 
+    def _restore_session_agent_state(self, data: dict) -> None:
+        self.agent.messages = list(data.get("messages") or [])
+        self.agent.tokens = dict(data.get("tokens") or {"prompt_tokens": 0, "completion_tokens": 0})
+        self.agent._verify_failures = 0
+        self.agent.repair.restore(data.get("repair"))
+        self.agent.task.restore(data.get("task_state"))
+        cache = data.get("request_cache")
+        cache = cache if isinstance(cache, dict) else {}
+        identity = (self.agent.config.model, self.agent.config.base_url)
+        self.agent.context.begin_turn()
+        self.agent.context.restore_transport(cache.get("context"), self.agent.messages, identity)
+        ck = cache.get("key")
+        if isinstance(ck, str) and len(ck) == 32 and all(c in "0123456789abcdef" for c in ck):
+            self.agent.cache_id = ck
+        if self.agent.messages and self.agent.messages[0].get("role") == "system":
+            self.agent.messages[0] = {"role": "system", "content": self.agent.policy_prompt()}
+
+    def _restore_session_files(self, data: dict) -> None:
+        self.files = []
+        saved_files = data.get("files")
+        if isinstance(saved_files, list):
+            for row in reversed(saved_files[:100]):
+                try:
+                    if isinstance(row, dict) and row.get("action") in ("νέο", "αλλαγή", "άνοιγμα"):
+                        self._remember_file(row["path"], row["action"])
+                except (ValueError, TypeError, OSError, PermissionError, KeyError):
+                    continue
+            return
+        calls = {}
+        for message in self.agent.messages:
+            calls.update({c["id"]: c.get("function", {}) for c in message.get("tool_calls", [])})
+            fn = calls.get(message.get("tool_call_id"), {})
+            if message.get("role") == "tool" and fn.get("name") in ("write_file", "edit_file") and str(message.get("content", "")).startswith("ΕΓΙΝΕ"):
+                try:
+                    args = json.loads(fn.get("arguments") or "{}")
+                    self._remember_file(args["path"], "νέο" if fn["name"] == "write_file" else "αλλαγή")
+                except (ValueError, TypeError, OSError, PermissionError, KeyError):
+                    continue
+
     def open_session(self, session_id: str, project: str = "") -> dict:
         if self.busy or self.self_update:
             return {"error": "Περίμενε ή ολοκλήρωσε πρώτα την αυτοαναβάθμιση."}
@@ -99,43 +138,11 @@ class SessionsUpgradeStateMixin:
             )
             if result.get("error"):
                 return result
-        self.agent.messages = list(data.get("messages") or [])
-        self.agent.tokens = dict(data.get("tokens") or {"prompt_tokens": 0, "completion_tokens": 0})
-        self.agent._verify_failures = 0
-        self.agent.repair.restore(data.get("repair"))
-        self.agent.task.restore(data.get("task_state"))
-        cache = data.get("request_cache")
-        cache = cache if isinstance(cache, dict) else {}
-        identity = (self.agent.config.model, self.agent.config.base_url)
-        self.agent.context.begin_turn()
-        self.agent.context.restore_transport(cache.get("context"), self.agent.messages, identity)
-        if isinstance(cache.get("key"), str) and len(cache["key"]) == 32 and all(c in "0123456789abcdef" for c in cache["key"]):
-            self.agent.cache_id = cache["key"]
-        if self.agent.messages and self.agent.messages[0].get("role") == "system":
-            self.agent.messages[0] = {"role": "system", "content": self.agent.policy_prompt()}
+        self._restore_session_agent_state(data)
         self.session_id = session_id
         self.transcript = list(data.get("transcript") or [])
         self.streaming = None
-        self.files = []
-        saved_files = data.get("files")
-        if isinstance(saved_files, list):
-            for row in reversed(saved_files[:100]):
-                try:
-                    if isinstance(row, dict) and row.get("action") in ("νέο", "αλλαγή", "άνοιγμα"):
-                        self._remember_file(row["path"], row["action"])
-                except (ValueError, TypeError, OSError, PermissionError, KeyError):
-                    continue
-        else:
-            calls = {}
-            for message in self.agent.messages:
-                calls.update({c["id"]: c.get("function", {}) for c in message.get("tool_calls", [])})
-                fn = calls.get(message.get("tool_call_id"), {})
-                if message.get("role") == "tool" and fn.get("name") in ("write_file", "edit_file") and str(message.get("content", "")).startswith("ΕΓΙΝΕ"):
-                    try:
-                        args = json.loads(fn.get("arguments") or "{}")
-                        self._remember_file(args["path"], "νέο" if fn["name"] == "write_file" else "αλλαγή")
-                    except (ValueError, TypeError, OSError, PermissionError, KeyError):
-                        continue
+        self._restore_session_files(data)
         self.notice = f"Συνέχεια: «{data.get('title') or session_id}»."
         return self.status()
 

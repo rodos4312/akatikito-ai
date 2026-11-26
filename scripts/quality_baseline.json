@@ -25,7 +25,6 @@
   "BLE001": {
     "akatikito/agenda.py": 2,
     "akatikito/agent.py": 7,
-    "akatikito/agent_subtasks.py": 4,
     "akatikito/app_api.py": 12,
     "akatikito/app_api_files.py": 12,
     "akatikito/app_api_ops.py": 22,
