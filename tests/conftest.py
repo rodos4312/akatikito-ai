@@ -59,12 +59,15 @@ def isolate_app_data(monkeypatch, tmp_path_factory):
     data_dir = tmp_path_factory.mktemp("akatikito_data")
     mem_dir = data_dir / "memory"
     mem_dir.mkdir(parents=True, exist_ok=True)
+    updates_dir = data_dir / "updates"
+    updates_dir.mkdir(parents=True, exist_ok=True)
 
     settings_file = data_dir / "settings.json"
     agenda_file = data_dir / "agenda.json"
 
     monkeypatch.setenv("AKATIKITO_SETTINGS_FILE", str(settings_file))
     monkeypatch.setenv("AKATIKITO_MEMORY_DIR", str(mem_dir))
+    monkeypatch.setenv("AKATIKITO_TEMP_DIR", str(updates_dir))
     monkeypatch.setattr(settings_mod, "DEFAULT_PATH", settings_file)
     monkeypatch.setattr(doctor_mod, "DEFAULT_PATH", settings_file)
     monkeypatch.setattr(agenda_mod, "DEFAULT_PATH", agenda_file)
