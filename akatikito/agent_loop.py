@@ -310,7 +310,14 @@ def _process_tool_result(agent, call: dict, result, checking: bool, step: int, d
         result=result,
         step=step,
     )
-    agent.messages.append({"role": "tool", "tool_call_id": call["id"], "content": result, "_written_paths": list(paths)})
+    llm_content = result
+    guardrails = getattr(agent, "_turn_guardrails", None)
+    if guardrails is not None:
+        outcome = guardrails.observe(name, args, result)
+        llm_content = outcome.content
+        if outcome.kind:
+            agent.events.emit("guardrail", guardrail_kind=outcome.kind, tool=name, step=step, text=outcome.notice)
+    agent.messages.append({"role": "tool", "tool_call_id": call["id"], "content": llm_content, "_written_paths": list(paths)})
     _update_turn_tracking(agent, name, args, result)
     if agent.activity.record(name, args, result):
         agent.context.note_progress()
@@ -440,10 +447,13 @@ def _grace_final_summary(agent, step: int) -> str | None:
 
 
 def run_chat_turn(agent, text: str, internal: bool = False) -> str:
+    from .tool_guardrails import ToolLoopGuardrails
+
     effective, can_repair = _begin_turn(agent, text, internal)
     dirty = False
     recovery_attempted: set[str] = set()
     budget_nudged: set[str] = set()
+    agent._turn_guardrails = ToolLoopGuardrails()
     for step in range(1, agent.config.max_steps + 1):
         if agent._filesystem_failure:
             agent.events.emit("checkpoint")
