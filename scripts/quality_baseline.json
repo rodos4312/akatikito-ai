@@ -181,7 +181,6 @@
     "akatikito/tool_plugins.py": 1,
     "akatikito/tool_spill.py": 2,
     "akatikito/tray.py": 8,
-    "akatikito/workflows.py": 1,
     "app.py": 9,
     "scripts/check.py": 1,
     "scripts/health_check.py": 1,

@@ -113,7 +113,6 @@
     "akatikito/tools.py::run_command": 26,
     "akatikito/verification.py::run_checks": 29,
     "akatikito/voice.py::VoiceService._run_worker": 26,
-    "akatikito/workflows.py::observed": 79,
     "akatikito/workspace.py::detect_verify": 21,
     "app.py::main": 33
   },
