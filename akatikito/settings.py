@@ -204,7 +204,7 @@ class Settings:
         if not target.exists():
             return settings
         try:
-            data = json.loads(target.read_text(encoding="utf-8") or "{}")
+            data = json.loads(target.read_text(encoding="utf-8-sig") or "{}")
         except Exception:  # noqa: BLE001 — χαλασμένο αρχείο δεν σταματάει τη δουλειά
             try:
                 target.replace(target.with_suffix(".broken.json"))

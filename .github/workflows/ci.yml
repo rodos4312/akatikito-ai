@@ -84,6 +84,11 @@ jobs:
         run: |
           python -c "import json, subprocess, sys; r = subprocess.run([sys.executable, '-m', 'akatikito.doctor', '--json'], capture_output=True, text=True, encoding='utf-8'); d = json.loads(r.stdout); errs = [c for c in d['checks'] if c['status'] == 'error']; print('Doctor:', d['badge'], d['counts']); sys.exit(1 if errs else 0)"
 
+      - name: Clean-install, zero-PATH boot, upgrade & rollback check (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: ./scripts/clean_install_check.ps1
+
   supply-chain:
     name: Supply Chain Audit
     runs-on: ubuntu-latest

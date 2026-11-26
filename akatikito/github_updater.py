@@ -34,7 +34,7 @@ TRUSTED_HOSTS = {
 }
 PROTECTED_TOP = {"data", ".venv", "venv", ".agent", ".agent_backups", ".git", "node_modules", "dist"}
 PROTECTED_FILES = {"settings.json", "mcp.json", "channels.json", "scheduled.json", "profile.json", "skill_proposals.json"}
-MAX_ZIP_BYTES = 64 * 1024 * 1024
+MAX_ZIP_BYTES = 128 * 1024 * 1024
 MAX_SUMS_BYTES = 64 * 1024
 
 
@@ -170,7 +170,7 @@ def apply_github_update(app_root: Path, zip_url: str, sha_url: str, zip_name: st
     staged: list[tuple[Path, bytes]] = []
     manifest_version = ""
     with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
-        if len(zf.infolist()) > 2000 or sum(i.file_size for i in zf.infolist()) > 128 * 1024 * 1024:
+        if len(zf.infolist()) > 10000 or sum(i.file_size for i in zf.infolist()) > 256 * 1024 * 1024:
             raise ValueError("Το πακέτο ενημέρωσης ξεπερνά τα όρια ασφαλούς αποσυμπίεσης.")
         manifest_entry = next((i for i in zf.infolist() if i.filename.replace("\\", "/").endswith("MANIFEST.json")), None)
         if manifest_entry is None:
@@ -247,3 +247,30 @@ def apply_github_update(app_root: Path, zip_url: str, sha_url: str, zip_name: st
         "sha256": actual_zip_sha,
         "restart_required": True,
     }
+
+
+def restore_github_update_backup(app_root: Path, backup_dir: Path) -> dict:
+    """Restore backed-up application files from a previous update without ever touching user data/."""
+    root = Path(app_root).resolve()
+    bdir = Path(backup_dir).resolve()
+    if not bdir.is_dir():
+        raise FileNotFoundError(f"Δεν βρέθηκε ο φάκελος αντιγράφου ασφαλείας: {bdir}")
+    restored = 0
+    for src in sorted(bdir.rglob("*")):
+        if not src.is_file():
+            continue
+        rel = src.relative_to(bdir)
+        if not rel.parts or rel.parts[0].lower() in PROTECTED_TOP or rel.name.lower() in PROTECTED_FILES:
+            continue
+        target = (root / rel).resolve()
+        if not target.is_relative_to(root):
+            raise PermissionError(f"Μη επιτρεπτή διαδρομή επαναφοράς: {rel}")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        tmp = target.with_name("." + target.name + ".rb.tmp")
+        try:
+            tmp.write_bytes(src.read_bytes())
+            os.replace(tmp, target)
+        finally:
+            tmp.unlink(missing_ok=True)
+        restored += 1
+    return {"ok": True, "restored_files": restored, "backup_dir": str(bdir)}
