@@ -54,19 +54,24 @@ def _make_agent(tmp_path, model, **cfg_kw):
 
 
 def test_two_subtasks_different_files_run_in_parallel(tmp_path):
-    model = SleepFakeModel(delay=0.45)
-    ag = _make_agent(tmp_path, model, max_parallel_subtasks=2)
-    t0 = time.monotonic()
+    barrier = threading.Barrier(2, timeout=3.0)
+    both_entered: list[str] = []
+
+    def responder(messages, idx, user_txt):
+        barrier.wait()  # Only succeeds if both subtasks run concurrently; serial execution deadlocks/times out
+        both_entered.append(user_txt)
+        return {"content": f"DONE:{user_txt}", "tool_calls": [], "usage": {"prompt_tokens": 10, "completion_tokens": 5}}
+
+    ag = _make_agent(tmp_path, SleepFakeModel(responder=responder), max_parallel_subtasks=2)
     raw = ag._run_subtasks([
         {"task": "Task A", "mode": "code", "files": ["a.py"]},
         {"task": "Task B", "mode": "code", "files": ["b.py"]},
     ])
-    elapsed = time.monotonic() - t0
     rows = json.loads(raw)
     assert len(rows) == 2
+    assert len(both_entered) == 2
     assert "DONE:Task A" in rows[0]["summary"]
     assert "DONE:Task B" in rows[1]["summary"]
-    assert elapsed < 0.85, f"Expected parallel execution (<0.85s), took {elapsed:.2f}s"
 
 
 def test_shared_file_serializes_second_subtask(tmp_path):
