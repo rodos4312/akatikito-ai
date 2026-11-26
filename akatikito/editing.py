@@ -271,41 +271,91 @@ def _check_node(target: Path, text: str):
         raise EditError(f"Μη έγκυρο {suffix[1:].upper()}: {detail}"+_REFUSED)
 
 
+def _check_html_scripts(target: Path, text: str) -> None:
+    """Validate balanced <script> tags and inline JS syntax inside HTML files."""
+    opens = list(re.finditer(r"<script\b([^>]*)>", text, re.I))
+    closes = list(re.finditer(r"</script\s*>", text, re.I))
+    if len(opens) != len(closes):
+        raise EditError(
+            f"Μη ισορροπημένα tags <script> στο {target.name} "
+            f"({len(opens)} ανοίγματα / {len(closes)} κλεισίματα)" + _REFUSED
+        )
+    for idx, (op, cl) in enumerate(zip(opens, closes), 1):
+        if cl.start() < op.end():
+            raise EditError(f"Λάθος σειρά <script> / </script> στο {target.name} (block #{idx})" + _REFUSED)
+        attrs = op.group(1) or ""
+        if re.search(r"\bsrc\s*=", attrs, re.I):
+            continue
+        type_m = re.search(r"""\btype\s*=\s*['"]?([^'"\s>]+)""", attrs, re.I)
+        script_type = (type_m.group(1) if type_m else "").lower()
+        if script_type and script_type not in ("text/javascript", "application/javascript", "module"):
+            continue
+        body = text[op.end():cl.start()]
+        if body.strip():
+            _check_node(Path(f"{target.stem}_script{idx}.js"), body)
+
+
+def _check_py(target: Path, text) -> None:
+    try:
+        compile(text if isinstance(text, bytes) else text.removeprefix("\ufeff"), str(target), "exec", dont_inherit=True)
+    except (SyntaxError, ValueError) as exc:
+        detail = f"{getattr(exc, 'msg', str(exc))}, γραμμή {getattr(exc, 'lineno', '?')}"
+        raise EditError("Μη έγκυρη Python: " + detail + ". Απορρίφθηκε ΠΡΙΝ την εγγραφή· το αρχικό αρχείο έμεινε ανέπαφο.") from exc
+
+
+def _check_json(_target: Path, text: str) -> None:
+    try:
+        json.loads(text.removeprefix("\ufeff"))
+    except ValueError as exc:
+        raise EditError(f"Μη έγκυρο JSON: {exc}" + _REFUSED) from exc
+
+
+def _check_toml(_target: Path, text: str) -> None:
+    try:
+        tomllib.loads(text.removeprefix("\ufeff"))
+    except tomllib.TOMLDecodeError as exc:
+        raise EditError(f"Μη έγκυρο TOML: {exc}" + _REFUSED) from exc
+
+
+def _check_yaml(_target: Path, text: str) -> None:
+    try:
+        import yaml
+    except ImportError:
+        return
+    try:
+        yaml.safe_load(text)
+    except yaml.YAMLError as exc:
+        raise EditError(f"Μη έγκυρο YAML: {exc}" + _REFUSED) from exc
+
+
+_TEXT_SYNTAX_CHECKERS = {
+    ".json": _check_json,
+    ".toml": _check_toml,
+    ".yaml": _check_yaml,
+    ".yml": _check_yaml,
+    ".js": _check_node,
+    ".mjs": _check_node,
+    ".cjs": _check_node,
+    ".ts": _check_node,
+    ".html": _check_html_scripts,
+    ".htm": _check_html_scripts,
+}
+
+
 def check_syntax(target: Path, text: str):
-    suffix=target.suffix.lower()
-    if isinstance(text,bytes) and suffix not in (".py",".pyw"):
-        if suffix not in (".json",".toml",".yaml",".yml",".js",".mjs",".cjs",".ts"):
-            return
-        try:text=text.decode("utf-8-sig")
+    suffix = target.suffix.lower()
+    if suffix in (".py", ".pyw"):
+        _check_py(target, text)
+        return
+    checker = _TEXT_SYNTAX_CHECKERS.get(suffix)
+    if checker is None:
+        return
+    if isinstance(text, bytes):
+        try:
+            text = text.decode("utf-8-sig")
         except UnicodeDecodeError as exc:
-            raise EditError(f"{target.name}: απαιτείται έγκυρο UTF-8."+_REFUSED) from exc
-    if suffix in (".py",".pyw"):
-        try:
-            compile(text if isinstance(text,bytes) else text.removeprefix("\ufeff"),str(target),"exec",dont_inherit=True)
-        except (SyntaxError,ValueError) as exc:
-            detail=f"{getattr(exc,'msg',str(exc))}, γραμμή {getattr(exc,'lineno','?')}"
-            raise EditError("Μη έγκυρη Python: "+detail+". Απορρίφθηκε ΠΡΙΝ την εγγραφή· το αρχικό αρχείο έμεινε ανέπαφο.") from exc
-    elif suffix==".json":
-        try:
-            json.loads(text.removeprefix("\ufeff"))
-        except ValueError as exc:
-            raise EditError(f"Μη έγκυρο JSON: {exc}"+_REFUSED) from exc
-    elif suffix==".toml":
-        try:
-            tomllib.loads(text.removeprefix("\ufeff"))
-        except tomllib.TOMLDecodeError as exc:
-            raise EditError(f"Μη έγκυρο TOML: {exc}"+_REFUSED) from exc
-    elif suffix in (".yaml",".yml"):
-        try:
-            import yaml
-        except ImportError:
-            return
-        try:
-            yaml.safe_load(text)
-        except yaml.YAMLError as exc:
-            raise EditError(f"Μη έγκυρο YAML: {exc}"+_REFUSED) from exc
-    elif suffix in (".js",".mjs",".cjs",".ts"):
-        _check_node(target,text)
+            raise EditError(f"{target.name}: απαιτείται έγκυρο UTF-8." + _REFUSED) from exc
+    checker(target, text)
 
 
 def commit(ws, target: Path, original: bytes | None, updated: bytes):

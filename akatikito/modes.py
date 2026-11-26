@@ -20,7 +20,7 @@ ASK_SYSTEM_PROMPT = """Είσαι ο Akatikito, αξιόπιστος βοηθό�
 # Core read-only tools always advertised in ask mode; specialist read-only tools unlock on topic match
 # and remain session-sticky so KV prompt caching stays intact on follow-up turns.
 ASK_CORE_TOOLS: frozenset[str] = frozenset({
-    "list_files", "read_file", "search_project", "search_in_file",
+    "list_files", "read_file", "search_project", "search_in_file", "find_relevant_files",
     "read_document", "search_documents", "web_search", "web_fetch",
     "recall_context", "set_mode",
 })
@@ -79,7 +79,7 @@ MODES: dict[str, dict] = {
     "ask": {
         "label": "Ερώτηση",
         "hint": "απαντάει μόνο από όσα διαβάζει — δεν αλλάζει τίποτα",
-        "tools": ["list_files", "read_file", "recall_context", "search_in_file", "search_project", "set_mode"],
+        "tools": ["list_files", "read_file", "recall_context", "search_in_file", "search_project", "find_relevant_files", "set_mode"],
         "prompt": (
             "Είσαι σε λειτουργία ΕΡΩΤΗΣΗ: μόνο διαβάζεις και απαντάς. "
             "Δεν αλλάζεις ούτε δημιουργείς αρχεία, δεν τρέχεις εντολές που αλλάζουν κάτι. "
@@ -90,7 +90,7 @@ MODES: dict[str, dict] = {
     "architect": {
         "label": "Αρχιτέκτονας",
         "hint": "σχεδιάζει το πλάνο (PLAN.md), δεν γράφει κώδικα",
-        "tools": ["list_files", "read_file", "recall_context", "search_in_file", "search_project", "write_file", "edit_file", "remember", "set_mode"],
+        "tools": ["list_files", "read_file", "recall_context", "search_in_file", "search_project", "find_relevant_files", "write_file", "edit_file", "remember", "set_mode"],
         "prompt": (
             "Είσαι σε λειτουργία ΑΡΧΙΤΕΚΤΟΝΑΣ: σχεδιάζεις, δεν υλοποιείς. "
             "Διάβασε ό,τι χρειάζεται. Δημιούργησε νέο PLAN.md με write_file ή ενημέρωσε υπάρχον PLAN.md με edit_file. "
@@ -101,7 +101,11 @@ MODES: dict[str, dict] = {
     "code": {
         "label": "Κώδικας",
         "hint": "αλλάζει, τρέχει, διορθώνει — πλήρης δουλειά",
-        "tools": ["list_files", "read_file", "recall_context", "search_in_file", "search_project", "edit_file", "write_file", "run_command", "remember", "set_mode", "record_diagnosis"],
+        "tools": [
+            "list_files", "read_file", "recall_context", "search_in_file", "search_project",
+            "find_relevant_files", "edit_file", "write_file", "run_command", "remember",
+            "set_mode", "record_diagnosis",
+        ],
         "prompt": (
             "Είσαι σε λειτουργία ΚΩΔΙΚΑΣ: υλοποιείς. "
             "Πριν αλλάξεις κάτι, διάβασε μόνο τα αρχεία που χρειάζονται. "
@@ -112,7 +116,11 @@ MODES: dict[str, dict] = {
     "debug": {
         "label": "Debug",
         "hint": "ψάχνει σφάλματα με tests και logs",
-        "tools": ["list_files", "read_file", "recall_context", "search_in_file", "search_project", "edit_file", "write_file", "run_command", "remember", "set_mode", "record_diagnosis"],
+        "tools": [
+            "list_files", "read_file", "recall_context", "search_in_file", "search_project",
+            "find_relevant_files", "edit_file", "write_file", "run_command", "remember",
+            "set_mode", "record_diagnosis",
+        ],
         "prompt": (
             "Είσαι σε λειτουργία DEBUG: βρες τη ρίζα του προβλήματος. "
             "Αναπαρήγαγε πρώτα το σφάλμα, διάβασε τα σχετικά αρχεία, εντόπισε την αιτία "
