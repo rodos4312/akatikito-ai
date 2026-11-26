@@ -2,6 +2,7 @@
 from __future__ import annotations
 import copy
 import json
+import math
 import time
 
 
@@ -24,12 +25,18 @@ def usage_of(usage):
         or value(usage, 'cache_creation_input_tokens', 0)
         or (max(0, prompt - cached) if cached > 0 else 0)
     )
-    return {
+    out = {
         'prompt_tokens': prompt,
         'completion_tokens': completion,
         'cache_hit_tokens': cached,
         'cache_miss_tokens': miss,
     }
+    raw_cost = value(usage, 'cost')
+    if raw_cost is None:
+        raw_cost = value(value(usage, 'model_extra'), 'cost')
+    if isinstance(raw_cost, (int, float)) and not isinstance(raw_cost, bool) and math.isfinite(raw_cost) and raw_cost >= 0:
+        out['provider_cost'] = float(raw_cost)
+    return out
 
 
 class StreamAssemblyError(ValueError):

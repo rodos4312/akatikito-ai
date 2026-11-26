@@ -778,7 +778,8 @@ function addMsg(role, text, model = "", provider = "", usage = null) {
       const tot = (usage.prompt_tokens || 0) + (usage.completion_tokens || 0);
       const parts = [(tot >= 1000 ? (tot / 1000).toFixed(1) + 'k' : String(tot)) + ' tok'];
       if (usage.cache_hit_pct > 0) parts.push(usage.cache_hit_pct + '% cache');
-      if (typeof usage.cost_eur === 'number') parts.push(usage.cost_eur.toFixed(4).replace('.', ',') + ' €');
+      if (typeof usage.cost_usd === 'number') parts.push('$' + usage.cost_usd.toFixed(4));
+      else if (typeof usage.cost_eur === 'number') parts.push(usage.cost_eur.toFixed(4).replace('.', ',') + ' €');
       const badge = document.createElement('span');
       badge.className = 'hint';
       badge.style.cssText = 'margin-left:8px;font-size:11px;opacity:.8';

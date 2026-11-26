@@ -206,14 +206,22 @@ def _prepare_step_request(agent, step: int):
     return request, tools, None
 
 
-def _record_model_reply(agent, reply: dict, usage: dict, step: int) -> tuple[list[dict], str, bool]:
+def _accumulate_usage(agent, usage: dict) -> None:
     for key in agent.tokens:
-        agent.tokens[key] += usage.get(key, 0)
+        if key != "provider_cost":
+            agent.tokens[key] += usage.get(key, 0)
+    raw_c = usage.get("provider_cost")
+    if isinstance(raw_c, (int, float)) and not isinstance(raw_c, bool) and raw_c >= 0:
+        agent.tokens["provider_cost"] = round(float(agent.tokens.get("provider_cost", 0.0) or 0.0) + float(raw_c), 8)
     agent.turn_usage["model_calls"] += 1
     agent.turn_usage["prompt_tokens"] += usage.get("prompt_tokens", 0)
     agent.turn_usage["completion_tokens"] += usage.get("completion_tokens", 0)
     if int(usage.get("prompt_tokens", 0) or 0) > 0:
         agent._last_prompt_tokens = int(usage["prompt_tokens"])
+
+
+def _record_model_reply(agent, reply: dict, usage: dict, step: int) -> tuple[list[dict], str, bool]:
+    _accumulate_usage(agent, usage)
     getattr(agent, "usage_hook", lambda _u: None)(usage)
     if agent._stop:
         agent.events.emit("stopped", step=step)

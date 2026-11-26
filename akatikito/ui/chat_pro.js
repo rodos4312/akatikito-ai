@@ -479,9 +479,13 @@
       const fill = document.getElementById('ctx-fill');
       const lbl = document.getElementById('ctx-lbl');
       if (fill) fill.style.width = `${pct}%`;
-      if (lbl) lbl.textContent = (pct > 0 ? `ctx ${pct}%` : '') + (cPct > 0 ? `${pct > 0 ? ' · ' : ''}cache ${cPct}%` : '');
+      const sessCost = Number(s.usage_ledger?.session?.cost || 0);
+      const dayCost = Number(s.usage_ledger?.day?.cost || 0);
+      const costSuffix = sessCost > 0 ? ` · $${sessCost.toFixed(4)}` : '';
+      const costTitle = (sessCost > 0 || dayCost > 0) ? ` · Κόστος chat: $${sessCost.toFixed(4)} (σήμερα: $${dayCost.toFixed(4)})` : '';
+      if (lbl) lbl.textContent = (pct > 0 ? `ctx ${pct}%` : '') + (cPct > 0 ? `${pct > 0 ? ' · ' : ''}cache ${cPct}%` : '') + costSuffix;
       gauge.style.cursor = s.busy ? 'default' : 'pointer';
-      gauge.title = `Context: ${pct}% (${note}) · Prompt: ${t.prompt_tokens || 0} · Cache hit: ${hit} (${cPct}%) — κλικ για συμπίεση (/compact)`;
+      gauge.title = `Context: ${pct}% (${note}) · Prompt: ${t.prompt_tokens || 0} · Cache hit: ${hit} (${cPct}%)${costTitle} — κλικ για συμπίεση (/compact)`;
       gauge.onclick = () => { if (!s.busy) runCompact(); };
     }
     if (autoBtn) {

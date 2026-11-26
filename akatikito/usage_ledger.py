@@ -9,6 +9,12 @@ from pathlib import Path
 _SPARK_BARS = "▁▂▃▄▅▆▇█"
 
 
+def _valid_reported_cost(value) -> float | None:
+    if isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value) and value >= 0:
+        return float(value)
+    return None
+
+
 def _valid_prices(prices) -> bool:
     return bool(
         prices
@@ -70,15 +76,19 @@ class UsageLedger:
     def check(self,budget,session,prices=None):
         if not budget:return ''
         view=self.view(session)['day']
-        if not prices or any(k not in prices for k in ('input','cached','output')) or view.get('unknown',0):return 'Το ημερήσιο όριο κόστους χρειάζεται τιμές μοντέλου και πλήρως αποτιμημένη σημερινή χρήση.'
         if view.get('cost',0)>=budget:return 'Έφτασες το ημερήσιο όριο κόστους. Δεν έγινε νέα κλήση μοντέλου.'
+        provider_priced = view.get('calls', 0) > 0 and view.get('unknown', 0) == 0
+        if (not prices or any(k not in prices for k in ('input','cached','output'))) and not provider_priced:
+            return 'Το ημερήσιο όριο κόστους χρειάζεται τιμές μοντέλου και πλήρως αποτιμημένη σημερινή χρήση.'
+        if view.get('unknown',0):
+            return 'Το ημερήσιο όριο κόστους χρειάζεται τιμές μοντέλου και πλήρως αποτιμημένη σημερινή χρήση.'
         return ''
     def record(self, session, usage, prices=None, day=None, *, model: str = "", project: str = ""):
         values = {k: max(0, int(usage.get(k, 0) or 0)) for k in ("prompt_tokens", "completion_tokens", "cache_hit_tokens")}
         hit = min(values["prompt_tokens"], values["cache_hit_tokens"])
-        cost = None
+        cost = _valid_reported_cost(usage.get("provider_cost"))
         saved = 0.0
-        if _valid_prices(prices):
+        if cost is None and _valid_prices(prices):
             cost = ((values["prompt_tokens"] - hit) * prices["input"] + hit * prices["cached"] + values["completion_tokens"] * prices["output"]) / 1_000_000
             saved = max(0.0, hit * (prices["input"] - prices["cached"]) / 1_000_000)
         with self.lock:
@@ -157,12 +167,25 @@ class UsageLedger:
 
 
 def summarize_turn_delta(before: dict, after: dict, prices: dict | None = None) -> dict:
-    """Compute per-answer token delta, cache-hit percentage, and optional EUR cost."""
+    """Compute per-answer token delta, cache-hit percentage, and provider USD or owner EUR cost."""
     prompt = max(0, int(after.get('prompt_tokens', 0) or 0) - int(before.get('prompt_tokens', 0) or 0))
     comp = max(0, int(after.get('completion_tokens', 0) or 0) - int(before.get('completion_tokens', 0) or 0))
     hit = min(prompt, max(0, int(after.get('cache_hit_tokens', 0) or 0) - int(before.get('cache_hit_tokens', 0) or 0)))
     pct = round(100 * hit / prompt) if prompt > 0 and hit > 0 else 0
+    cost_usd = None
+    if 'provider_cost' in after:
+        c_after = _valid_reported_cost(after.get('provider_cost'))
+        c_before = _valid_reported_cost(before.get('provider_cost')) or 0.0
+        if c_after is not None:
+            cost_usd = round(max(0.0, c_after - c_before), 5)
     cost = None
-    if prices and all(k in prices and isinstance(prices[k], (int, float)) and math.isfinite(prices[k]) and prices[k] >= 0 for k in ('input', 'cached', 'output')):
+    if cost_usd is None and _valid_prices(prices):
         cost = round(((prompt - hit) * prices['input'] + hit * prices['cached'] + comp * prices['output']) / 1_000_000, 5)
-    return {'prompt_tokens': prompt, 'completion_tokens': comp, 'cache_hit_tokens': hit, 'cache_hit_pct': pct, 'cost_eur': cost}
+    return {
+        'prompt_tokens': prompt,
+        'completion_tokens': comp,
+        'cache_hit_tokens': hit,
+        'cache_hit_pct': pct,
+        'cost_eur': cost,
+        'cost_usd': cost_usd,
+    }
