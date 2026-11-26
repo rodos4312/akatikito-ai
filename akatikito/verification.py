@@ -11,12 +11,18 @@ from pathlib import Path
 
 
 def interpreter_for_checks() -> Path:
-    installed = Path(__file__).resolve().parents[1] / ".venv" / "Scripts" / "python.exe"
-    active = Path(sys.prefix) / "Scripts" / "python.exe"
-    candidates = (installed, active, Path(sys.executable).with_name("python.exe"))
+    repo_root = Path(__file__).resolve().parents[1]
+    candidates = (
+        repo_root / ".venv" / "Scripts" / "python.exe",
+        repo_root / ".venv" / "bin" / "python",
+        Path(sys.prefix) / "Scripts" / "python.exe",
+        Path(sys.prefix) / "bin" / "python",
+        Path(sys.executable).with_name("python.exe"),
+        Path(sys.executable),
+    )
     for candidate in candidates:
         if candidate.is_file():
-            return candidate.resolve()
+            return Path(os.path.abspath(candidate))
     raise RuntimeError("Δεν βρέθηκε Python ελέγχων. Άνοιξε το AkatikitoApp.cmd από τον φάκελο της εφαρμογής.")
 
 

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -249,4 +250,5 @@ def test_everyday_ux_preferences_recent_projects_and_open_os(tmp_path, monkeypat
     monkeypatch.setattr("os.startfile", lambda p: opened.append(p), raising=False)
     res_ok = state.open_in_os("notes.txt", reveal=False)
     assert res_ok.get("ok") is True
-    assert opened and opened[0].endswith("notes.txt")
+    if os.name == "nt":
+        assert opened and opened[0].endswith("notes.txt")

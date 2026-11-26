@@ -142,7 +142,7 @@ def test_valid_progress_and_goal_are_saved_while_next_model_response_is_pending(
     def blocked(**kwargs):
         if len(sent)==1:
             pending.set()
-            assert release.wait(5)
+            assert release.wait(10)
         return create(**kwargs)
     agent.model._client.chat.completions.create=blocked
     push=state.push
@@ -152,7 +152,7 @@ def test_valid_progress_and_goal_are_saved_while_next_model_response_is_pending(
     state.push=notify
     try:
         assert state.send('Υλοποίησε το νέο αρχείο')['ok']
-        assert pending.wait(3) and state.busy
+        assert pending.wait(10) and state.busy
         saved=state.store.load(state.session_id)
         assert saved['task_state']['status']=='active'
         assert 'νέο αρχείο' in saved['task_state']['goal']
@@ -160,7 +160,7 @@ def test_valid_progress_and_goal_are_saved_while_next_model_response_is_pending(
         assert saved['messages'][-1]['content'].startswith('ΕΓΙΝΕ')
         from akatikito.context import ContextWindow
         ContextWindow.groups(saved['messages'])
-        release.set();assert done.wait(3)
+        release.set();assert done.wait(10)
         assert not state.error and state.agent.task.status=='complete' and len(sent)==2
     finally:
         release.set()

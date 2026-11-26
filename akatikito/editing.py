@@ -326,7 +326,7 @@ def commit_batch(ws, changes):
             checked(target)
             relative = target.relative_to(ws.root)
         except (ValueError, OSError) as exc:
-            raise EditError("Μη επιτρεπτή διαδρομή: " + str(target)) from exc
+            raise EditError(f"Μη επιτρεπτή διαδρομή: {target}. Δεν εφαρμόστηκε τίποτα.") from exc
         if target == ws.root or target in seen:
             raise EditError(f"{relative}: διπλή ή μη έγκυρη διαδρομή. Δεν εφαρμόστηκε τίποτα.")
         seen.add(target)

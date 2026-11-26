@@ -65,6 +65,7 @@ def test_file_tools_cannot_modify_user_git_or_snapshot_metadata(tmp_path):
     assert not (tmp_path/'.git/config').exists()
 
 
+@pytest.mark.windows
 def test_undo_rejects_junction_changed_since_snapshot(tmp_path):
     source=tmp_path/'source';source.mkdir();(source/'a.txt').write_text('old')
     store=Checkpoints(tmp_path);key=store.begin();(source/'a.txt').write_text('new');store.finish(key)
