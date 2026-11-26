@@ -20,7 +20,7 @@ ASK_SYSTEM_PROMPT = """Είσαι ο Akatikito, αξιόπιστος βοηθό�
 # Core read-only tools always advertised in ask mode; specialist read-only tools unlock on topic match
 # and remain session-sticky so KV prompt caching stays intact on follow-up turns.
 ASK_CORE_TOOLS: frozenset[str] = frozenset({
-    "list_files", "read_file", "search_project", "search_in_file", "find_relevant_files",
+    "list_files", "read_file", "read_symbol", "search_project", "search_in_file", "find_relevant_files",
     "read_document", "search_documents", "web_search", "web_fetch",
     "recall_context", "set_mode",
 })
@@ -79,7 +79,10 @@ MODES: dict[str, dict] = {
     "ask": {
         "label": "Ερώτηση",
         "hint": "απαντάει μόνο από όσα διαβάζει — δεν αλλάζει τίποτα",
-        "tools": ["list_files", "read_file", "recall_context", "search_in_file", "search_project", "find_relevant_files", "set_mode"],
+        "tools": [
+            "list_files", "read_file", "read_symbol", "recall_context",
+            "search_in_file", "search_project", "find_relevant_files", "set_mode",
+        ],
         "prompt": (
             "Είσαι σε λειτουργία ΕΡΩΤΗΣΗ: μόνο διαβάζεις και απαντάς. "
             "Δεν αλλάζεις ούτε δημιουργείς αρχεία, δεν τρέχεις εντολές που αλλάζουν κάτι. "
@@ -90,7 +93,11 @@ MODES: dict[str, dict] = {
     "architect": {
         "label": "Αρχιτέκτονας",
         "hint": "σχεδιάζει το πλάνο (PLAN.md), δεν γράφει κώδικα",
-        "tools": ["list_files", "read_file", "recall_context", "search_in_file", "search_project", "find_relevant_files", "write_file", "edit_file", "remember", "set_mode"],
+        "tools": [
+            "list_files", "read_file", "read_symbol", "recall_context",
+            "search_in_file", "search_project", "find_relevant_files",
+            "write_file", "edit_file", "remember", "set_mode",
+        ],
         "prompt": (
             "Είσαι σε λειτουργία ΑΡΧΙΤΕΚΤΟΝΑΣ: σχεδιάζεις, δεν υλοποιείς. "
             "Διάβασε ό,τι χρειάζεται. Δημιούργησε νέο PLAN.md με write_file ή ενημέρωσε υπάρχον PLAN.md με edit_file. "
@@ -102,14 +109,14 @@ MODES: dict[str, dict] = {
         "label": "Κώδικας",
         "hint": "αλλάζει, τρέχει, διορθώνει — πλήρης δουλειά",
         "tools": [
-            "list_files", "read_file", "recall_context", "search_in_file", "search_project",
-            "find_relevant_files", "edit_file", "write_file", "run_command", "remember",
-            "set_mode", "record_diagnosis",
+            "list_files", "read_file", "read_symbol", "recall_context", "search_in_file", "search_project",
+            "find_relevant_files", "edit_file", "replace_symbol", "write_file", "smoke_check",
+            "run_command", "remember", "set_mode", "record_diagnosis",
         ],
         "prompt": (
             "Είσαι σε λειτουργία ΚΩΔΙΚΑΣ: υλοποιείς. "
-            "Πριν αλλάξεις κάτι, διάβασε μόνο τα αρχεία που χρειάζονται. "
-            "Άλλαξε με edit_file και edits=[{search, replace}], τρέξε έλεγχο και διόρθωσε μέχρι να περάσει. "
+            "Πριν αλλάξεις κάτι, διάβασε μόνο τα αρχεία/σύμβολα που χρειάζονται (read_symbol / read_file). "
+            "Άλλαξε με edit_file ή replace_symbol, τρέξε smoke_check/έλεγχο και διόρθωσε μέχρι να περάσει. "
             "Μην εξηγείς πολύ: κάνε τη δουλειά και πες συνοπτικά τι άλλαξες."
         ),
     },
@@ -117,9 +124,9 @@ MODES: dict[str, dict] = {
         "label": "Debug",
         "hint": "ψάχνει σφάλματα με tests και logs",
         "tools": [
-            "list_files", "read_file", "recall_context", "search_in_file", "search_project",
-            "find_relevant_files", "edit_file", "write_file", "run_command", "remember",
-            "set_mode", "record_diagnosis",
+            "list_files", "read_file", "read_symbol", "recall_context", "search_in_file", "search_project",
+            "find_relevant_files", "edit_file", "replace_symbol", "write_file", "smoke_check",
+            "run_command", "remember", "set_mode", "record_diagnosis",
         ],
         "prompt": (
             "Είσαι σε λειτουργία DEBUG: βρες τη ρίζα του προβλήματος. "
