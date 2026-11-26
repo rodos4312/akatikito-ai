@@ -9,6 +9,7 @@ Safety invariants:
 from __future__ import annotations
 
 import os
+import subprocess
 import sys
 import threading
 import time
@@ -16,6 +17,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable
 
+from .local_store import load_json, save_json
 from .notify import toast as default_toast
 from .scheduler import ScheduledQueue
 from .settings import DEFAULT_PATH, Settings
@@ -85,6 +87,99 @@ def set_windows_autostart(enabled: bool, command: str | None = None, *, backend=
 def is_windows_autostart_enabled(*, backend=None) -> bool:
     reg = backend or _WinRegistryBackend()
     return bool(reg.read(RUN_REG_VALUE))
+
+
+def _default_pid_alive(pid: int) -> bool:
+    if pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+        return True
+    except OSError:
+        return False
+
+
+def _default_spawn_service(cmd: list[str]) -> subprocess.Popen:
+    flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    return subprocess.Popen(
+        cmd,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        creationflags=flags,
+    )
+
+
+class BackgroundServiceController:
+    """Single-instance process controller for the 24/7 background service using a PID lock file."""
+
+    def __init__(
+        self,
+        data_dir: Path,
+        *,
+        app_root: Path | None = None,
+        spawner: Callable[[list[str]], object] | None = None,
+        pid_alive: Callable[[int], bool] | None = None,
+    ) -> None:
+        self.data_dir = Path(data_dir)
+        self.app_root = Path(app_root) if app_root else Path(__file__).resolve().parents[1]
+        self.pid_path = self.data_dir / "background_service.pid"
+        self._spawner = spawner or _default_spawn_service
+        self._pid_alive = pid_alive or _default_pid_alive
+        self._proc = None
+        self._last_error: str = ""
+
+    def _read_pid(self) -> int | None:
+        raw = load_json(self.pid_path, dict)
+        pid = raw.get("pid") if isinstance(raw, dict) else None
+        return int(pid) if isinstance(pid, int) and pid > 0 else None
+
+    def current_pid(self) -> int | None:
+        if self._proc is not None and self._proc.poll() is None:
+            return int(getattr(self._proc, "pid", 0) or 0) or None
+        pid = self._read_pid()
+        if pid and self._pid_alive(pid):
+            return pid
+        return None
+
+    def is_running(self) -> bool:
+        return self.current_pid() is not None
+
+    def start(self) -> dict:
+        existing = self.current_pid()
+        if existing is not None:
+            return {"running": True, "already_running": True, "pid": existing}
+        cmd = [sys.executable, "-m", "akatikito.background_service", "--root", str(self.app_root)]
+        proc = self._spawner(cmd)
+        self._proc = proc
+        pid = int(getattr(proc, "pid", 0) or 0)
+        self.data_dir.mkdir(parents=True, exist_ok=True)
+        save_json(self.pid_path, {"pid": pid, "started_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())})
+        return {"running": True, "already_running": False, "pid": pid}
+
+    def stop(self) -> dict:
+        if self._proc is not None and self._proc.poll() is None:
+            try:
+                self._proc.terminate()
+                self._proc.wait(timeout=3)
+            except (OSError, subprocess.TimeoutExpired) as exc:
+                self._last_error = str(exc)
+        self._proc = None
+        try:
+            self.pid_path.unlink(missing_ok=True)
+        except OSError as exc:
+            self._last_error = str(exc)
+        return {"running": False, "pid": None}
+
+    def status(self, *, enabled: bool = False, autostart: bool = False, daily_budget: float = 0.0) -> dict:
+        pid = self.current_pid()
+        return {
+            "enabled": bool(enabled),
+            "autostart": bool(autostart),
+            "running": pid is not None,
+            "pid": pid,
+            "daily_budget": float(daily_budget or 0.0),
+        }
 
 
 def _prices_for_settings(cfg: Settings) -> dict | None:

@@ -183,6 +183,7 @@ class AppState(OpsStateMixin, FilesStateMixin, SessionsUpgradeStateMixin, Memory
             self._apply_bool_prefs,
             self._apply_routing_and_model_prefs,
             self._apply_budget_and_prices_prefs,
+            self._apply_background_service_pref,
             self._apply_vision_prefs,
             self._apply_ui_and_advanced_prefs,
         ):
@@ -516,7 +517,9 @@ class AppState(OpsStateMixin, FilesStateMixin, SessionsUpgradeStateMixin, Memory
                 'ui_font_size': self.settings.ui_font_size,
                 'sidebar_collapsed': self.settings.sidebar_collapsed,
                 'notes_folder': self.settings.notes_folder,
+                'background_service': self.settings.background_service,
             },
+            'background_service_status': self.background_service_status(),
             'advanced_catalog': __import__('akatikito.advanced', fromlist=['catalog']).catalog(self.settings),
         }
 

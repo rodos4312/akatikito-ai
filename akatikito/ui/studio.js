@@ -212,6 +212,7 @@
     if (fontRange && document.activeElement !== fontRange) fontRange.value = String(sz);
     if (fontVal) fontVal.textContent = sz + 'px';
     if (fontLbl) fontLbl.textContent = sz + 'px';
+    renderBackgroundStatus(s.background_service_status);
   }
 
   function searchSessionsFullText(query) {
@@ -364,6 +365,38 @@
     await loadEmailDrafts();
   }
 
+  function renderBackgroundStatus(bg) {
+    const chk = document.getElementById('background-service');
+    const st = document.getElementById('background-service-status');
+    if (chk && bg) chk.checked = !!bg.enabled;
+    if (st && bg) st.textContent = bg.running ? 'τρέχει' : 'σταματημένο';
+  }
+
+  async function toggleBackgroundService(enabled) {
+    if (typeof root.api !== 'function') return;
+    const budgetEl = document.getElementById('daily-budget');
+    const budget = budgetEl ? Number(budgetEl.value || 0) : undefined;
+    const body = { background_service: !!enabled };
+    if (enabled && Number.isFinite(budget) && budget > 0) body.daily_budget = budget;
+    const r = await root.api('/api/preferences', body);
+    if (r.error) {
+      root.showNotice?.('err', r.error);
+      const chk = document.getElementById('background-service');
+      if (chk) chk.checked = !enabled;
+      return;
+    }
+    renderBackgroundStatus(r.background_service_status);
+    root.showNotice?.('ok', enabled ? 'Η υπηρεσία 24/7 ξεκίνησε.' : 'Η υπηρεσία 24/7 σταμάτησε.');
+  }
+
+  async function stopBackgroundService() {
+    if (typeof root.api !== 'function') return;
+    const r = await root.api('/api/background/stop', {});
+    if (r.error) { root.showNotice?.('err', r.error); return; }
+    renderBackgroundStatus(r.background_service_status);
+    root.showNotice?.('ok', 'Η υπηρεσία 24/7 σταμάτησε.');
+  }
+
   function boot() {
     initNavIcons();
     selectSettingsPane(activeSettingsPane);
@@ -387,6 +420,9 @@
     loadEmailDrafts,
     sendEmailDraft,
     deleteEmailDraft,
+    renderBackgroundStatus,
+    toggleBackgroundService,
+    stopBackgroundService,
     isSidebarCollapsed: () => sidebarCollapsed,
     activeSettingsPane: () => activeSettingsPane,
   };

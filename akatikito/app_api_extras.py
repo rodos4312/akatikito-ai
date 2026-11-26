@@ -102,3 +102,63 @@ class ExtrasStateMixin:
             return self._email_assistant_op(action, payload)
         except (PermissionError, ValueError, OSError) as exc:
             return {"error": str(exc)}
+
+    def _bg_controller(self):
+        if getattr(self, "_bg_ctrl", None) is None:
+            from .background_service import BackgroundServiceController
+
+            self._bg_ctrl = BackgroundServiceController(
+                self._email_dir(),
+                spawner=getattr(self, "_bg_spawner", None),
+                pid_alive=getattr(self, "_bg_pid_alive", None),
+            )
+        return self._bg_ctrl
+
+    def background_service_status(self) -> dict:
+        from .background_service import is_windows_autostart_enabled
+
+        backend = getattr(self, "_bg_registry_backend", None)
+        ctrl = self._bg_controller()
+        return ctrl.status(
+            enabled=bool(self.settings.background_service),
+            autostart=is_windows_autostart_enabled(backend=backend) if backend is not None else bool(self.settings.background_autostart),
+            daily_budget=float(self.settings.daily_budget or 0.0),
+        )
+
+    def _apply_background_service_pref(self, data: dict) -> str | None:
+        if "background_service" not in data:
+            return None
+        val = data["background_service"]
+        if type(val) is not bool:
+            return "Χρειάζεται boolean για τη λειτουργία παρασκηνίου."
+        from .background_service import set_windows_autostart
+
+        backend = getattr(self, "_bg_registry_backend", None)
+        ctrl = self._bg_controller()
+        if val:
+            if float(self.settings.daily_budget or 0.0) <= 0.0:
+                return "Για λειτουργία 24/7 στο παρασκήνιο πρέπει πρώτα να ορίσεις ημερήσιο όριο κόστους (> 0 $)."
+            try:
+                set_windows_autostart(True, backend=backend)
+                ctrl.start()
+            except (OSError, RuntimeError, ValueError) as exc:
+                return str(exc)
+        else:
+            try:
+                set_windows_autostart(False, backend=backend)
+                ctrl.stop()
+            except (OSError, RuntimeError, ValueError) as exc:
+                return str(exc)
+        self.settings.background_service = val
+        self.settings.background_mode = val
+        self.settings.background_autostart = val
+        return None
+
+    def background_service_stop(self) -> dict:
+        if self.busy:
+            return {"error": "Περίμενε να ολοκληρωθεί η εργασία."}
+        err = self._apply_background_service_pref({"background_service": False})
+        if err:
+            return {"error": err}
+        self._save_settings()
+        return {"ok": True, "background_service_status": self.background_service_status()}

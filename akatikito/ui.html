@@ -629,6 +629,13 @@
               <div style="display:flex;gap:6px"><input id="notes-folder" placeholder="(κενό = κλειστό)"><button class="btn" style="width:auto" onclick="saveNotesFolder()">💾</button></div>
             </div>
             <div class="field"><label data-i18n="set_budget_lbl">Ημερήσιο όριο εκτιμώμενου κόστους ($, 0 χωρίς όριο)</label><input id="daily-budget" type="number" min="0" step="0.1" value="0"><span class="hint" data-i18n="budget_hint">Με ενεργό όριο απαιτούνται οι δικές σου τιμές. Η τελευταία κλήση μπορεί να υπερβεί το υπόλοιπο.</span></div>
+            <div class="field" id="background-service-box" style="border-top:1px solid var(--border);padding-top:8px">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
+                <label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input id="background-service" type="checkbox" style="width:auto" onchange="StudioUI.toggleBackgroundService(this.checked)"> <span data-i18n="lbl_background_service">🕒 Να τρέχει στο παρασκήνιο (24/7)</span></label>
+                <span style="display:flex;align-items:center;gap:6px"><strong id="background-service-status" class="hint">σταματημένο</strong><button class="btn" style="width:auto" onclick="StudioUI.stopBackgroundService()">■ Διακοπή</button></span>
+              </div>
+              <span class="hint" data-i18n="lbl_background_service_hint">Εκτελεί προγραμματισμένες εργασίες ακόμα και με κλειστό παράθυρο. Προσοχή κόστους: απαιτείται ημερήσιο όριο > 0 $.</span>
+            </div>
             <div class="field"><label data-i18n="set_prices_lbl">Τιμές ανά 1 εκατ. tokens: είσοδος / cache / έξοδος ($)</label>
               <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
                 <input id="price-input" type="number" min="0" step="0.01" placeholder="Input">
