@@ -83,6 +83,11 @@ RULES: dict[str, RuleSpec] = {
         "Unused local variable",
         "Remove the unused assignment or prefix intentionally discarded values with '_'.",
     ),
+    "AK-SOURCE-READ-TEST": RuleSpec(
+        "AK-SOURCE-READ-TEST",
+        "Test reads akatikito/*.py source text instead of testing behavior",
+        "Test runtime behavior (HTTP, Node VM, or Python API) instead of grepping source code, or justify with '# quality: allow AK-SOURCE-READ-TEST — <reason>'.",
+    ),
 }
 
 
@@ -216,6 +221,19 @@ def _check_hardcoded_paths(rel: str, lines: list[str], findings: list[Finding]) 
             findings.append(Finding("AK-HARDCODED-PATH", rel, idx, "hardcoded user/temp path"))
 
 
+_SOURCE_READ_TEST_RE = re.compile(
+    r"(?:inspect\.getsource\s*\(|(?:ROOT|REPO|BASE|parents\[\d+\])\s*/\s*['\"]akatikito['\"].*\.py['\"]\)\s*\.read_(?:text|bytes)\s*\()"
+)
+
+
+def _check_source_read_tests(rel: str, lines: list[str], findings: list[Finding]) -> None:
+    if not rel.startswith("tests/") or rel == "tests/test_coverage_ratchet_q5.py":
+        return
+    for idx, ln in enumerate(lines, 1):
+        if not ln.lstrip().startswith("#") and _SOURCE_READ_TEST_RE.search(ln) and not _line_allowed(lines, idx, "AK-SOURCE-READ-TEST"):
+            findings.append(Finding("AK-SOURCE-READ-TEST", rel, idx, "test reads akatikito/*.py source directly"))
+
+
 def _scan_ast_file(rel: str, text: str) -> list[Finding]:
     lines = text.splitlines()
     tree = ast.parse(text, filename=rel)
@@ -230,6 +248,7 @@ def _scan_ast_file(rel: str, text: str) -> list[Finding]:
         elif isinstance(node, ast.If) and not is_test and id(node) not in seen_elifs:
             _check_if_ladder(node, rel, lines, seen_elifs, findings)
     _check_hardcoded_paths(rel, lines, findings)
+    _check_source_read_tests(rel, lines, findings)
     return findings
 
 

@@ -46,3 +46,8 @@ jobs:
         env:
           PYTHONUTF8: "1"
         run: python scripts/memory_eval.py
+
+      - name: Area coverage ratchet check
+        env:
+          PYTHONUTF8: "1"
+        run: python scripts/coverage_check.py

@@ -1,3 +1,4 @@
 # Developer tools for check.cmd and CI (not needed to run the app).
 pytest==9.2.0
 ruff==0.16.1
+coverage==7.17.3
