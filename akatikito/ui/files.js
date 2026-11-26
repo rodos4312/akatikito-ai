@@ -81,17 +81,11 @@ function friendlyToolCall(name, rawArgs) {
 }
 
 let livePhase = "", liveStep = "";
-function fmtTok(n) {
-  const v = Number(n || 0);
-  return v >= 1000 ? (v / 1000).toFixed(1) + "k" : String(v);
-}
+function fmtTok(n) { const v = Number(n || 0); return v >= 1000 ? (v / 1000).toFixed(1) + "k" : String(v); }
 function formatBusyBadge(s) {
-  const t = (s && s.tokens) || {};
-  const tot = (t.prompt_tokens || 0) + (t.completion_tokens || 0);
+  const t = (s && s.tokens) || {}, tot = (t.prompt_tokens || 0) + (t.completion_tokens || 0);
   const base = s && s.busy ? i18nText('badge_busy', '⚡ εργάζεται…') : i18nText('badge_idle', '💤 αδρανής');
-  const stepBit = (s && s.busy && liveStep) ? ' · ' + liveStep : '';
-  const tokBit = tot > 0 ? ' · ' + fmtTok(tot) + ' tok' : '';
-  return base + stepBit + tokBit;
+  return base + (s && s.busy && liveStep ? ' · ' + liveStep : '') + (tot > 0 ? ' · ' + fmtTok(tot) + ' tok' : '');
 }
 function addStep(kind, data) {
   if (kind === "step") {
@@ -103,6 +97,7 @@ function addStep(kind, data) {
   if (kind === "act_step") { livePhase = `🔧 εκτελώ ${data.count || ""} εργαλεία…`; return; }
   if (kind === "verify_step") { livePhase = "✅ επαληθεύω…"; return; }
   if (kind === "report_step") { livePhase = "✍️ συντάσσω απάντηση…"; return; }
+  if (typeof ChatPro !== "undefined" && ChatPro.appendTrailStep && ChatPro.appendTrailStep(chat, kind, data)) return;
   const pin = typeof isChatNearBottom === "function" ? isChatNearBottom() : true;
   const wrap = document.createElement("div");
   wrap.className = "steps";
@@ -220,12 +215,15 @@ async function poll() {
       const t = s.tokens || {}, tot = (t.prompt_tokens || 0) + (t.completion_tokens || 0);
       const stepTag = liveStep ? ` (${liveStep})` : "";
       const tokTag = tot > 0 ? ` · ⚡ ${fmtTok(tot)} tok (${fmtTok(t.prompt_tokens)} in / ${fmtTok(t.completion_tokens)} out)` : "";
+      if (typeof ChatPro !== "undefined" && ChatPro.updateActiveTrail) ChatPro.updateActiveTrail(liveStep, tot > 0 ? `⚡ ${fmtTok(tot)} tok` : "");
       setStatus(`${esc((livePhase || "🧠 σκέφτομαι…") + stepTag)} ${esc(s.model || "")}${esc(tokTag)}`);
       document.getElementById("stopbtn").style.display = "";
       document.getElementById("stopside").style.display = "";
       const sb = document.getElementById("sendbtn");
       if (sb) { sb.disabled = false; sb.textContent = "🧭 Οδηγία"; sb.title = "Στείλε οδηγία εν κινήσει χωρίς να σταματήσεις την εργασία"; }
     } else {
+      const t = s.tokens || {}, tot = (t.prompt_tokens || 0) + (t.completion_tokens || 0);
+      if (typeof ChatPro !== "undefined" && ChatPro.sealActiveTrail) ChatPro.sealActiveTrail(tot > 0 ? `Σ ${fmtTok(tot)} tok` : "");
       livePhase = ""; liveStep = "";
       setStatus(null);
       document.getElementById("stopbtn").style.display = "none";

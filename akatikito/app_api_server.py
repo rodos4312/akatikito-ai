@@ -212,7 +212,9 @@ def make_handler(state: AppState) -> type:
             _ui_assets = {
                 '/ui/style.css': ('style.css', 'text/css; charset=utf-8'),
                 '/ui/studio.css': ('studio.css', 'text/css; charset=utf-8'),
+                '/ui/chat_pro.css': ('chat_pro.css', 'text/css; charset=utf-8'),
                 '/ui/chat.js': ('chat.js', 'text/javascript; charset=utf-8'),
+                '/ui/chat_pro.js': ('chat_pro.js', 'text/javascript; charset=utf-8'),
                 '/ui/files.js': ('files.js', 'text/javascript; charset=utf-8'),
                 '/ui/attachments.js': ('attachments.js', 'text/javascript; charset=utf-8'),
                 '/ui/learning.js': ('learning.js', 'text/javascript; charset=utf-8'),

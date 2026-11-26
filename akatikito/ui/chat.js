@@ -678,7 +678,11 @@ function streamEvent(kind, data) {
       if (!liveStream.text) liveStream.label.textContent = "🧠 Σκέφτεται… " + liveStream.model;
     } else if (kind === "stream_delta") {
       liveStream.text += data.text || "";
-      liveStream.body.textContent = liveStream.text;
+      if (typeof ChatPro !== "undefined" && ChatPro.renderMarkdown) {
+        liveStream.body.innerHTML = ChatPro.renderMarkdown(liveStream.text, {streaming: true});
+      } else {
+        liveStream.body.textContent = liveStream.text;
+      }
       liveStream.label.textContent = "✍️ Γράφει… " + liveStream.model;
     } else if (kind === "stream_end") {
       liveStream.status = data.status;
@@ -696,7 +700,11 @@ function syncStream(state) {
   liveStream.reasoning = state.reasoning || "";
   liveStream.reasoningBody.textContent = liveStream.reasoning;
   liveStream.text = state.text || "";
-  liveStream.body.textContent = liveStream.text;
+  if (liveStream.text && typeof ChatPro !== "undefined" && ChatPro.renderMarkdown) {
+    liveStream.body.innerHTML = ChatPro.renderMarkdown(liveStream.text, {streaming: state.status === "active"});
+  } else {
+    liveStream.body.textContent = liveStream.text;
+  }
   if (liveStream.text) liveStream.label.textContent = "✍️ Γράφει… " + (liveStream.model || "");
   else if (liveStream.reasoning) liveStream.label.textContent = "🧠 Σκέφτεται… " + (liveStream.model || "");
   if (state.status !== "active") streamEvent("stream_end", {stream_id:state.id, status:state.status});
@@ -706,13 +714,19 @@ function syncStream(state) {
 function addMsg(role, text, model = "", provider = "", usage = null) {
   const pin = role === "user" ? true : isChatNearBottom();
   const div = document.createElement("div");
-  div.className = "msg " + role;
+  const richMd = role === "assistant" && typeof ChatPro !== "undefined" && ChatPro.renderMarkdown;
+  div.className = "msg " + role + (richMd ? " md-rich" : "");
   div.dataset.key = role + "|" + String(text || "").trim();  // ταυτότητα για να μη διπλασιάζεται
-  div.innerHTML = role === "assistant" ? fmt(text) : esc(text);
+  div.innerHTML = role === "assistant" ? (richMd ? ChatPro.renderMarkdown(text) : fmt(text)) : esc(text);
   if (role === "assistant") {          // κουμπί αντιγραφής κάτω από κάθε απάντηση
     if (model) {
       const label = document.createElement("span");
-      label.className = "model-label"; label.textContent = [provider, model].filter(Boolean).join(" · ");
+      label.className = "model-label";
+      label.textContent = [provider, model].filter(Boolean).join(" · ");
+      if (richMd && ChatPro.formatTimeNow) {
+        const tm = document.createElement("span"); tm.className = "model-time"; tm.textContent = ChatPro.formatTimeNow();
+        label.appendChild(tm);
+      }
       div.prepend(label);
     }
     const b = document.createElement("button");
