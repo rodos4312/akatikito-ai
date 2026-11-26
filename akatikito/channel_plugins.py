@@ -41,11 +41,40 @@ class Plugins:
         value=load_json(self.registry,dict)
         if not isinstance(value,dict):raise PluginError('Μη έγκυρος κατάλογος προσθέτων.')
         return value
-    def catalog(self):
+    def catalog(self, *, settings=None, dev_dir: Path | None = None):
         installed=self.installed();available=[]
         for p in sorted(BUNDLES.glob('*/akatikito-plugin.json')):
             row=manifest(p.read_text(encoding='utf-8'));available.append({**row,'installed':row['id'] in installed,'source':'catalog:'+row['id']})
-        return {'available':available,'installed':list(installed.values())}
+        dev_rows = []
+        if settings is not None:
+            from . import advanced
+            if advanced.enabled(settings, 'plugin_sdk'):
+                from .plugin_sdk import discover_dev_plugins
+                folder = Path(dev_dir) if dev_dir is not None else (self.directory / 'dev')
+                dev_rows = discover_dev_plugins(folder, settings)
+        return {'available':available,'installed':list(installed.values()),'dev':dev_rows}
+
+    def load_dev(self, ident: str, config: dict, *, dev_dir: Path | None = None, settings=None):
+        """Load an unsigned/dev channel plugin ONLY from the explicit dev folder when Advanced `plugin_sdk` is enabled."""
+        from . import advanced
+        if not advanced.enabled(settings, 'plugin_sdk'):
+            raise PermissionError('Η λειτουργία «Δικά μου plugins και skills (SDK)» είναι κλειστή στο Advanced.')
+        from .plugin_sdk import discover_dev_plugins
+        folder = Path(dev_dir) if dev_dir is not None else (self.directory / 'dev')
+        found = {row['id']: row for row in discover_dev_plugins(folder, settings)}
+        row = found.get(ident)
+        if not row:
+            raise PluginError(f'Δεν βρέθηκε dev πρόσθετο: {ident}')
+        base = checked(Path(row['path']))
+        info = manifest(checked(base / 'akatikito-plugin.json').read_text(encoding='utf-8'))
+        code = checked(base / info['entry']).read_text(encoding='utf-8')
+        spec = importlib.util.spec_from_file_location('akatikito_dev_channel_' + ident, base / info['entry'])
+        module = importlib.util.module_from_spec(spec)
+        exec(compile(code, str(base / info['entry']), 'exec'), module.__dict__)
+        adapter = module.create(config)
+        if not all(callable(getattr(adapter, name, None)) for name in ('connect', 'poll', 'send', 'close')):
+            raise PluginError('Το πρόσθετο δεν υλοποιεί Channel API v1.')
+        return adapter
     def _github(self,url):
         parsed=urlparse(str(url))
         parts=[unquote(x) for x in parsed.path.strip('/').split('/')]

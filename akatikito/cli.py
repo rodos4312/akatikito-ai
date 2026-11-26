@@ -165,6 +165,8 @@ def run_cli(
         err = _require_cli_enabled(cfg)
         if err:
             return 1, {"ok": False, "error": err}
+        if not advanced.enabled(cfg, "plugin_sdk"):
+            return 1, {"ok": False, "error": "Η λειτουργία «Δικά μου plugins και skills (SDK)» είναι κλειστή στο Ρυθμίσεις → Advanced."}
         from .plugin_sdk import scaffold_plugin, sign_plugin
 
         if args.action == "new":

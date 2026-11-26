@@ -16,8 +16,14 @@ class OpsStateMixin:
     def plugins_view(self):
         try:
             view = self.gateway.view()
+            from . import advanced
             from .tool_plugins import ToolPlugins
             view['tool_plugins'] = ToolPlugins().catalog()
+            if advanced.enabled(self.settings, 'plugin_sdk'):
+                from .plugin_sdk import discover_dev_plugins
+                view['dev_plugins'] = discover_dev_plugins(self.gateway.plugins.directory / 'dev', self.settings)
+            else:
+                view['dev_plugins'] = []
             return view
         except (OSError,ValueError) as exc:return {'error':str(exc)}
 
