@@ -76,7 +76,7 @@
     "app.py": 13
   },
   "F401": {
-    "akatikito/agent.py": 3,
+    "akatikito/agent.py": 2,
     "akatikito/app_api.py": 9,
     "akatikito/app_api_files.py": 3,
     "akatikito/app_api_ops.py": 2,
