@@ -10,6 +10,7 @@ from email.message import EmailMessage
 from email.utils import parseaddr
 
 from akatikito.channel_sdk import ChannelError, Inbound, chunks
+from akatikito.injection_guard import guard_untrusted_text
 
 
 def _decode_hdr(raw: str) -> str:
@@ -58,6 +59,7 @@ class EmailChannel:
         self.password = parts[1]
         self.imap_host = parts[2] if len(parts) >= 3 and parts[2] else "imap.gmail.com"
         self.smtp_host = parts[3] if len(parts) >= 4 and parts[3] else "smtp.gmail.com"
+        self.allow_send = bool(config.get("allow_send", False))
         self._subjects: dict[str, str] = {}
 
     def connect(self) -> str:
@@ -105,6 +107,7 @@ class EmailChannel:
                     text = f"[Subject: {subject}]\n{body}".strip() if subject else body
                     if not text:
                         continue
+                    text = guard_untrusted_text(text, source=f"email:{sender}")
                     self._subjects[str(uid)] = subject or "Akatikito"
                     events.append(
                         Inbound(
@@ -125,6 +128,8 @@ class EmailChannel:
         return str(next_uid), events
 
     def send(self, event: Inbound, text: str) -> None:
+        if not self.allow_send:
+            raise ChannelError("Το Email είναι μόνο ανάγνωσης από προεπιλογή· καμία αποστολή χωρίς ρητή έγκριση.")
         subj = self._subjects.get(event.thread, "Akatikito")
         reply_subj = subj if subj.lower().startswith("re:") else f"Re: {subj}"
         body = "\n\n".join(chunks(text, 20000))
