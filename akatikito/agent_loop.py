@@ -153,24 +153,15 @@ def _track_cache_frame(agent, request: list[dict], tools: list[dict]) -> None:
         agent.events.emit("cache_notice", label="policy_or_tools", **res)
 
 
-def _prepare_step_request(agent, step: int):
-    agent.events.emit("step", step=step, of=agent.config.max_steps, phase="think")
-    agent.events.emit("plan_step", step=step)
-    allowed = set(agent.allowed_tools()) & agent._turn_tools
-    agent.context.reasoning_identity = (agent.config.model, agent.config.base_url)
-    continuous = bool(
-        getattr(agent.model, "keeps_active_history", False) or getattr(agent.model, "preserves_tool_reasoning", False)
-    )
+def _apply_model_window_policy(agent, continuous: bool) -> None:
     native = max(0, int(getattr(agent.model, "context_window_tokens", 0) or 0))
     max_out = max(0, int(getattr(agent.model, "max_output_tokens", 0) or 0))
     configured = max(0, int(agent.config.context_active_max_bytes))
     if continuous or native:
-        # UTF-8 bytes conservatively bound text token counts; reserve room for tools/output.
         automatic = max(1024, int(native * 0.6)) if native else 160000
         agent.context.active_max_bytes = min(configured, automatic) if configured else automatic
         agent.context.native_context_tokens = native
     agent.context.max_output_tokens = max_out
-    # Never reuse old permissions for the sake of a cache hit.
     policy = agent.policy_prompt()
     if agent.mode in ("code", "debug") and (native or max_out):
         from .model_limits import format_window_hint
@@ -179,6 +170,17 @@ def _prepare_step_request(agent, step: int):
         if whint:
             policy = policy + "\n\n" + whint
     agent.messages[0] = {"role": "system", "content": policy}
+
+
+def _prepare_step_request(agent, step: int):
+    agent.events.emit("step", step=step, of=agent.config.max_steps, phase="think")
+    agent.events.emit("plan_step", step=step)
+    allowed = set(agent.allowed_tools()) & agent._turn_tools
+    agent.context.reasoning_identity = (agent.config.model, agent.config.base_url)
+    continuous = bool(
+        getattr(agent.model, "keeps_active_history", False) or getattr(agent.model, "preserves_tool_reasoning", False)
+    )
+    _apply_model_window_policy(agent, continuous)
     from .turn_recovery import close_interrupted_tool_sequence
     if close_interrupted_tool_sequence(agent.messages):
         agent.context.reset_transport()
@@ -189,6 +191,7 @@ def _prepare_step_request(agent, step: int):
     advertised = modes.select_ask_tools(agent._current_task, allowed, agent._ask_unlocked_tools) if agent.mode == "ask" else allowed
     mcp_specs = agent.mcp.specs() if getattr(agent, "mcp", None) else []
     tools = [t for t in TOOL_SPECS + mcp_specs if t["function"]["name"] in advertised]
+    agent.context.metrics["real_prompt_tokens"] = int(getattr(agent, "_last_prompt_tokens", 0) or 0)
     agent.events.emit("context", **agent.context.metrics)
     agent.events.emit("checkpoint")
     prev_ri = agent.runtime_instructions
@@ -209,6 +212,8 @@ def _record_model_reply(agent, reply: dict, usage: dict, step: int) -> tuple[lis
     agent.turn_usage["model_calls"] += 1
     agent.turn_usage["prompt_tokens"] += usage.get("prompt_tokens", 0)
     agent.turn_usage["completion_tokens"] += usage.get("completion_tokens", 0)
+    if int(usage.get("prompt_tokens", 0) or 0) > 0:
+        agent._last_prompt_tokens = int(usage["prompt_tokens"])
     getattr(agent, "usage_hook", lambda _u: None)(usage)
     if agent._stop:
         agent.events.emit("stopped", step=step)

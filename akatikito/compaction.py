@@ -187,6 +187,8 @@ def _record_compaction_metrics(agent, before_chars: int, after_chars: int, archi
         "method": method,
         "reason": reason,
     }
+    # Clear authoritative pre-compaction prompt token watermark so the next step doesn't re-trigger.
+    agent._last_prompt_tokens = 0
     agent.events.emit("compacted", **payload)
     return payload
 
@@ -259,7 +261,14 @@ def maybe_auto_compact(agent) -> dict | None:
     trigger = int(budget * threshold)
     before_chars = len(encoded([clean(m) for m in agent.messages]))
     current_bytes = len(encoded([clean(m) for m in agent.messages]).encode("utf-8"))
-    if current_bytes < trigger:
+    real_prompt = int(getattr(agent, "_last_prompt_tokens", 0) or 0)
+    native_ctx = int(
+        getattr(agent.context, "native_context_tokens", 0)
+        or getattr(getattr(agent, "model", None), "context_window_tokens", 0)
+        or 0
+    )
+    token_triggered = bool(real_prompt > 0 and native_ctx > 0 and real_prompt >= int(native_ctx * threshold))
+    if current_bytes < trigger and not token_triggered:
         return None
 
     # Stage 1: lossless stale tool-output demotion (0 LLM calls).

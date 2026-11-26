@@ -169,3 +169,18 @@ def test_app_state_compact_session_api_and_busy_guard(tmp_path, monkeypatch):
         assert "Συμπιέστηκε" in res["notice"]
     finally:
         state.close()
+
+
+def test_real_prompt_tokens_calibration_triggers_compaction_and_resets(tmp_path):
+    cfg = Config(auto_mode=False, auto_compact=True, auto_compact_threshold=0.80, context_active_max_bytes=200000)
+    agent = Akatikito(str(tmp_path), cfg, ScriptedModel([]))
+    agent.messages = _make_long_messages(num_turns=7, payload_chars=1200)
+    # Byte footprint is well below 80% of 200k bytes, so byte check alone wouldn't fire.
+    agent.context.native_context_tokens = 128_000
+    agent._last_prompt_tokens = 105_000  # 82% of real 128k window -> must trigger!
+
+    res = maybe_auto_compact(agent)
+    assert res is not None and res["compacted"] is True
+    assert agent._last_prompt_tokens == 0  # Reset after compaction so next step doesn't loop!
+    assert maybe_auto_compact(agent) is None
+
