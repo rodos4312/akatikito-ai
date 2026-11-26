@@ -5,7 +5,7 @@
 # Akatikito — Local-First Desktop & Android AI Agent
 
 [![Release](https://img.shields.io/badge/Release-v2.5.0-22c55e)](https://github.com/rodos4312/akatikito-ai/releases/tag/v2.5.0)
-[![Android APK](https://img.shields.io/badge/Android%20APK-v1.7.0%20arm64-3ddc84)](https://github.com/rodos4312/akatikito-ai/releases/tag/v2.4.0)
+[![Android APK](https://img.shields.io/badge/Android%20APK-v1.8.0%20arm64-3ddc84)](https://github.com/rodos4312/akatikito-ai/releases/tag/v2.5.0)
 [![Website](https://img.shields.io/badge/Website-GitHub%20Pages-38bdf8)](https://rodos4312.github.io/akatikito-ai/)
 [![Languages](https://img.shields.io/badge/UI%20Languages-EL%20%7C%20EN%20%7C%20RU%20%7C%20DE%20%7C%20ES%20%7C%20FR-blue)](#multi-language-interface)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)

@@ -55,5 +55,7 @@ jobs:
         run: python scripts/run_evals.py
 
       - name: Clean-install Doctor health check
+        env:
+          PYTHONUTF8: "1"
         run: |
-          python -c "import json, subprocess, sys; r = subprocess.run([sys.executable, '-m', 'akatikito.doctor', '--json'], capture_output=True, text=True); d = json.loads(r.stdout); errs = [c for c in d['checks'] if c['status'] == 'error']; print('Doctor:', d['badge'], d['counts']); sys.exit(1 if errs else 0)"
+          python -c "import json, subprocess, sys; r = subprocess.run([sys.executable, '-m', 'akatikito.doctor', '--json'], capture_output=True, text=True, encoding='utf-8'); d = json.loads(r.stdout); errs = [c for c in d['checks'] if c['status'] == 'error']; print('Doctor:', d['badge'], d['counts']); sys.exit(1 if errs else 0)"

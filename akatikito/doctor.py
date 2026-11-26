@@ -707,6 +707,11 @@ class Doctor:
 
 
 def _cli(argv: list[str] | None = None) -> int:
+    if hasattr(sys.stdout, "reconfigure"):
+        try:
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
     parser = argparse.ArgumentParser(description="🩺 Γιατρός Akatikito — Διάγνωση & ασφαλής επισκευή")
     parser.add_argument("--project", default="", help="Φάκελος project (προεπιλογή: τρέχων φάκελος)")
     parser.add_argument("--check-api", action="store_true", help="Ζωντανός έλεγχος API key (/models)")
