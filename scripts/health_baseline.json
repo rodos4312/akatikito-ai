@@ -84,7 +84,6 @@
     "akatikito/reading.py::_match_c_cpp_function": 37,
     "akatikito/reading.py::_match_java_cs_method": 27,
     "akatikito/reading.py::_sanitize_lines": 38,
-    "akatikito/reading.py::scan_definitions": 68,
     "akatikito/repair.py::RepairState.failed": 28,
     "akatikito/repo_map.py::RepoMap.render": 35,
     "akatikito/repo_map.py::_describe": 29,
@@ -119,9 +118,7 @@
     "akatikito/workspace.py::detect_verify": 21,
     "app.py::main": 33
   },
-  "depth": {
-    "akatikito/reading.py::scan_definitions": 7
-  },
+  "depth": {},
   "js_complexity": {
     "akatikito/ui/attachments.js::attachFiles": 31,
     "akatikito/ui/chat.js::loadProjectTree": 22,

@@ -394,181 +394,191 @@ def _match_c_cpp_function(sline: str, sanitized: list[str], idx: int, suffix: st
     return None
 
 
+def _scan_js_line(ctx: dict, idx: int, sline: str, raw_header: str, qualify) -> None:
+    line_no = idx + 1
+    sanitized, blocks, scope_stack = ctx["sanitized"], ctx["blocks"], ctx["scope_stack"]
+    mc = _JS_CONTAINER_RE.match(sline)
+    if mc:
+        kind, name = mc.group(1), mc.group(2)
+        end_line, opened = _find_block_end(sanitized, idx)
+        blocks.append((line_no, end_line, qualify(name), raw_header))
+        if opened and end_line > line_no:
+            scope_stack.append((name, kind, end_line))
+        return
+    mf = _JS_FN_RE.match(sline)
+    if mf:
+        name = mf.group(1) or mf.group(2)
+        if name:
+            end_line, _ = _find_block_end(sanitized, idx, max_open_lines=4)
+            blocks.append((line_no, end_line, qualify(name), raw_header))
+        return
+    if scope_stack and scope_stack[-1][1] == "class" and line_no > ctx["in_fn_until"]:
+        mm = _JS_METHOD_RE.match(sline)
+        name = mm.group(1) if mm else ""
+        if name and name not in _CONTROL_KEYWORDS:
+            end_line, opened = _find_block_end(sanitized, idx)
+            blocks.append((line_no, end_line, qualify(name), raw_header))
+            if opened:
+                ctx["in_fn_until"] = max(ctx["in_fn_until"], end_line)
+
+
+def _scan_rust_line(ctx: dict, idx: int, sline: str, raw_header: str, qualify) -> None:
+    line_no = idx + 1
+    sanitized, blocks, scope_stack = ctx["sanitized"], ctx["blocks"], ctx["scope_stack"]
+    mc = _RUST_CONTAINER_RE.match(sline)
+    if mc:
+        kind, name = mc.group(1), mc.group(2)
+        end_line, opened = _find_block_end(sanitized, idx)
+        blocks.append((line_no, end_line, qualify(name), raw_header))
+        if opened and end_line > line_no:
+            scope_stack.append((name, kind, end_line))
+        return
+    mi = _RUST_IMPL_RE.match(sline)
+    if mi:
+        target = mi.group(1).rsplit("::", 1)[-1]
+        end_line, opened = _find_block_end(sanitized, idx)
+        blocks.append((line_no, end_line, qualify(f"impl {target}"), raw_header))
+        if opened and end_line > line_no:
+            scope_stack.append((target, "impl", end_line))
+        return
+    mf = _RUST_FN_RE.match(sline)
+    if mf and mf.group(1):
+        end_line, _ = _find_block_end(sanitized, idx)
+        blocks.append((line_no, end_line, qualify(mf.group(1)), raw_header))
+
+
+def _scan_go_line(ctx: dict, idx: int, sline: str, raw_header: str, _qualify) -> None:
+    line_no = idx + 1
+    sanitized, blocks = ctx["sanitized"], ctx["blocks"]
+    mt = _GO_TYPE_RE.match(sline)
+    if mt:
+        end_line, _ = _find_block_end(sanitized, idx)
+        blocks.append((line_no, end_line, mt.group(1), raw_header))
+        return
+    mf = _GO_FUNC_RE.match(sline)
+    if mf:
+        recv, name = mf.group(1), mf.group(2)
+        qname = f"{recv}.{name}" if recv else name
+        end_line, _ = _find_block_end(sanitized, idx)
+        blocks.append((line_no, end_line, qname, raw_header))
+
+
+def _scan_php_line(ctx: dict, idx: int, sline: str, raw_header: str, qualify) -> None:
+    line_no = idx + 1
+    sanitized, blocks, scope_stack = ctx["sanitized"], ctx["blocks"], ctx["scope_stack"]
+    mc = _PHP_CONTAINER_RE.match(sline)
+    if mc:
+        kind, name = mc.group(1), mc.group(2)
+        end_line, opened = _find_block_end(sanitized, idx)
+        blocks.append((line_no, end_line, qualify(name), raw_header))
+        if opened and end_line > line_no:
+            scope_stack.append((name, kind, end_line))
+        return
+    mf = _PHP_FN_RE.match(sline)
+    if mf and mf.group(1):
+        end_line, _ = _find_block_end(sanitized, idx)
+        blocks.append((line_no, end_line, qualify(mf.group(1)), raw_header))
+
+
+def _scan_java_cs_line(ctx: dict, idx: int, sline: str, raw_header: str, qualify) -> None:
+    line_no = idx + 1
+    sanitized, blocks, scope_stack = ctx["sanitized"], ctx["blocks"], ctx["scope_stack"]
+    mc = _JAVA_CS_CONTAINER_RE.match(sline)
+    if mc:
+        kind, name = mc.group(1), mc.group(2)
+        end_line, opened = _find_block_end(sanitized, idx)
+        if kind != "namespace":
+            blocks.append((line_no, end_line, qualify(name), raw_header))
+        if opened and end_line > line_no:
+            scope_stack.append((name, kind, end_line))
+        return
+    if line_no <= ctx["in_fn_until"]:
+        return
+    enclosing = scope_stack[-1][0] if scope_stack and scope_stack[-1][1] != "namespace" else ""
+    in_iface = bool(scope_stack and scope_stack[-1][1] == "interface")
+    mm = _match_java_cs_method(sline, sanitized, idx, enclosing, in_iface)
+    if not mm:
+        return
+    name, term_idx, term = mm
+    if term == "{":
+        end_line, _ = _find_block_end(sanitized, idx)
+    elif term == "=>":
+        end_line = next(
+            (j + 1 for j in range(term_idx, min(len(sanitized), term_idx + 15)) if ";" in sanitized[j]),
+            min(len(sanitized), term_idx + 15),
+        )
+    else:
+        end_line = term_idx + 1
+    blocks.append((line_no, end_line, qualify(name), raw_header))
+    ctx["in_fn_until"] = max(ctx["in_fn_until"], end_line)
+
+
+def _scan_c_cpp_line(ctx: dict, idx: int, sline: str, raw_header: str, qualify) -> None:
+    line_no = idx + 1
+    sanitized, blocks, scope_stack = ctx["sanitized"], ctx["blocks"], ctx["scope_stack"]
+    mc = _CPP_CONTAINER_RE.match(sline)
+    if mc:
+        kind, name = mc.group(1), mc.group(2)
+        end_line, opened = _find_block_end(sanitized, idx, max_open_lines=4)
+        if opened:
+            if kind != "namespace":
+                blocks.append((line_no, end_line, qualify(name), raw_header))
+            if kind == "namespace" or end_line > line_no:
+                scope_stack.append((name, kind, end_line))
+            return
+    if line_no <= ctx["in_fn_until"]:
+        return
+    enclosing = scope_stack[-1][0] if scope_stack and scope_stack[-1][1] != "namespace" else ""
+    mf = _match_c_cpp_function(sline, sanitized, idx, ctx["suffix"], enclosing)
+    if not mf:
+        return
+    name, start_i, term_idx, term = mf
+    end_line = _find_block_end(sanitized, idx)[0] if term == "{" else term_idx + 1
+    hdr = ctx["lines"][idx].strip()[:160]
+    qname = name if "::" in name else qualify(name)
+    blocks.append((start_i + 1, end_line, qname, hdr))
+    ctx["in_fn_until"] = max(ctx["in_fn_until"], end_line)
+
+
+def _pick_language_scanner(suffix: str):
+    for suffixes, scanner in (
+        (JS_SUFFIXES, _scan_js_line),
+        (RUST_SUFFIXES, _scan_rust_line),
+        (GO_SUFFIXES, _scan_go_line),
+        (PHP_SUFFIXES, _scan_php_line),
+        (JAVA_CS_SUFFIXES, _scan_java_cs_line),
+        (C_CPP_SUFFIXES, _scan_c_cpp_line),
+    ):
+        if suffix in suffixes:
+            return scanner
+    return None
+
+
 def scan_definitions(lines: list[str], suffix: str) -> list[tuple[int, int, str, str]]:
     """Scan structural definitions (classes, structs, traits, functions, methods) for non-Python files."""
-    if not lines or suffix not in SUPPORTED_STRUCT_SUFFIXES:
+    scanner = _pick_language_scanner(suffix) if lines and suffix in SUPPORTED_STRUCT_SUFFIXES else None
+    if scanner is None:
         return []
     sanitized = _sanitize_lines(lines, suffix)
-    blocks: list[tuple[int, int, str, str]] = []
-    # scope_stack entries: (scope_name, kind, end_line_1based)
     scope_stack: list[tuple[str, str, int]] = []
-    in_fn_until = 0
-
+    ctx = {
+        "sanitized": sanitized,
+        "lines": lines,
+        "suffix": suffix,
+        "blocks": [],
+        "scope_stack": scope_stack,
+        "in_fn_until": 0,
+    }
     for idx, sline in enumerate(sanitized):
         line_no = idx + 1
         while scope_stack and line_no > scope_stack[-1][2]:
             scope_stack.pop()
         if not sline.strip():
             continue
-
         raw_header = lines[idx].strip()[:160]
         prefix = ".".join(s[0] for s in scope_stack)
-        qualify = lambda nm: f"{prefix}.{nm}" if prefix else nm
-
-        # 1. JavaScript / TypeScript / HTML
-        if suffix in JS_SUFFIXES:
-            mc = _JS_CONTAINER_RE.match(sline)
-            if mc:
-                kind, name = mc.group(1), mc.group(2)
-                end_line, opened = _find_block_end(sanitized, idx)
-                qname = qualify(name)
-                blocks.append((line_no, end_line, qname, raw_header))
-                if opened and end_line > line_no:
-                    scope_stack.append((name, kind, end_line))
-                continue
-            mf = _JS_FN_RE.match(sline)
-            if mf:
-                name = mf.group(1) or mf.group(2)
-                if name:
-                    end_line, _ = _find_block_end(sanitized, idx, max_open_lines=4)
-                    blocks.append((line_no, end_line, qualify(name), raw_header))
-                continue
-            if scope_stack and scope_stack[-1][1] == "class" and line_no > in_fn_until:
-                mm = _JS_METHOD_RE.match(sline)
-                if mm:
-                    name = mm.group(1)
-                    if name and name not in _CONTROL_KEYWORDS:
-                        end_line, opened = _find_block_end(sanitized, idx)
-                        blocks.append((line_no, end_line, qualify(name), raw_header))
-                        if opened:
-                            in_fn_until = max(in_fn_until, end_line)
-                continue
-
-        # 2. Rust
-        elif suffix in RUST_SUFFIXES:
-            mc = _RUST_CONTAINER_RE.match(sline)
-            if mc:
-                kind, name = mc.group(1), mc.group(2)
-                end_line, opened = _find_block_end(sanitized, idx)
-                blocks.append((line_no, end_line, qualify(name), raw_header))
-                if opened and end_line > line_no:
-                    scope_stack.append((name, kind, end_line))
-                continue
-            mi = _RUST_IMPL_RE.match(sline)
-            if mi:
-                target = mi.group(1).rsplit("::", 1)[-1]
-                end_line, opened = _find_block_end(sanitized, idx)
-                blocks.append((line_no, end_line, qualify(f"impl {target}"), raw_header))
-                if opened and end_line > line_no:
-                    scope_stack.append((target, "impl", end_line))
-                continue
-            mf = _RUST_FN_RE.match(sline)
-            if mf:
-                name = mf.group(1)
-                if name:
-                    end_line, _ = _find_block_end(sanitized, idx)
-                    blocks.append((line_no, end_line, qualify(name), raw_header))
-                continue
-
-        # 3. Go
-        elif suffix in GO_SUFFIXES:
-            mt = _GO_TYPE_RE.match(sline)
-            if mt:
-                name, kind = mt.group(1), mt.group(2)
-                end_line, _ = _find_block_end(sanitized, idx)
-                blocks.append((line_no, end_line, name, raw_header))
-                continue
-            mf = _GO_FUNC_RE.match(sline)
-            if mf:
-                recv, name = mf.group(1), mf.group(2)
-                qname = f"{recv}.{name}" if recv else name
-                end_line, _ = _find_block_end(sanitized, idx)
-                blocks.append((line_no, end_line, qname, raw_header))
-                continue
-
-        # 4. PHP
-        elif suffix in PHP_SUFFIXES:
-            mc = _PHP_CONTAINER_RE.match(sline)
-            if mc:
-                kind, name = mc.group(1), mc.group(2)
-                end_line, opened = _find_block_end(sanitized, idx)
-                blocks.append((line_no, end_line, qualify(name), raw_header))
-                if opened and end_line > line_no:
-                    scope_stack.append((name, kind, end_line))
-                continue
-            mf = _PHP_FN_RE.match(sline)
-            if mf:
-                name = mf.group(1)
-                if name:
-                    end_line, _ = _find_block_end(sanitized, idx)
-                    blocks.append((line_no, end_line, qualify(name), raw_header))
-                continue
-
-        # 5. Java / C#
-        elif suffix in JAVA_CS_SUFFIXES:
-            mc = _JAVA_CS_CONTAINER_RE.match(sline)
-            if mc:
-                kind, name = mc.group(1), mc.group(2)
-                end_line, opened = _find_block_end(sanitized, idx)
-                if kind == "namespace":
-                    if opened and end_line > line_no:
-                        scope_stack.append((name, kind, end_line))
-                else:
-                    blocks.append((line_no, end_line, qualify(name), raw_header))
-                    if opened and end_line > line_no:
-                        scope_stack.append((name, kind, end_line))
-                continue
-            if line_no > in_fn_until:
-                enclosing = scope_stack[-1][0] if scope_stack and scope_stack[-1][1] != "namespace" else ""
-                in_iface = bool(scope_stack and scope_stack[-1][1] == "interface")
-                mm = _match_java_cs_method(sline, sanitized, idx, enclosing, in_iface)
-                if mm:
-                    name, term_idx, term = mm
-                    if term == "{":
-                        end_line, _ = _find_block_end(sanitized, idx)
-                    elif term == "=>":
-                        end_line = term_idx + 1
-                        for j in range(term_idx, min(len(sanitized), term_idx + 15)):
-                            end_line = j + 1
-                            if ";" in sanitized[j]:
-                                break
-                    else:
-                        end_line = term_idx + 1
-                    blocks.append((line_no, end_line, qualify(name), raw_header))
-                    in_fn_until = max(in_fn_until, end_line)
-                continue
-
-        # 6. C / C++
-        elif suffix in C_CPP_SUFFIXES:
-            mc = _CPP_CONTAINER_RE.match(sline)
-            if mc:
-                kind, name = mc.group(1), mc.group(2)
-                end_line, opened = _find_block_end(sanitized, idx, max_open_lines=4)
-                if opened:
-                    if kind == "namespace":
-                        scope_stack.append((name, kind, end_line))
-                    else:
-                        blocks.append((line_no, end_line, qualify(name), raw_header))
-                        if end_line > line_no:
-                            scope_stack.append((name, kind, end_line))
-                    continue
-            if line_no > in_fn_until:
-                enclosing = scope_stack[-1][0] if scope_stack and scope_stack[-1][1] != "namespace" else ""
-                mf = _match_c_cpp_function(sline, sanitized, idx, suffix, enclosing)
-                if mf:
-                    name, start_i, term_idx, term = mf
-                    start_l = start_i + 1
-                    if term == "{":
-                        end_line, _ = _find_block_end(sanitized, idx)
-                    else:
-                        end_line = term_idx + 1
-                    hdr = lines[idx].strip()[:160]
-                    qname = name if "::" in name else qualify(name)
-                    blocks.append((start_l, end_line, qname, hdr))
-                    in_fn_until = max(in_fn_until, end_line)
-                continue
-
-    return blocks
+        scanner(ctx, idx, sline, raw_header, lambda nm, p=prefix: f"{p}.{nm}" if p else nm)
+    return ctx["blocks"]
 
 
 def _scan_script_blocks(lines: list[str], suffix: str = ".js") -> list[tuple[int, int, str, str]]:
