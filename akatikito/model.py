@@ -211,9 +211,10 @@ class OpenAIModel:
         fb_client = self._get_fallback_client(verdict)
         if fb_client is None:
             return None
-        return fb_client.chat_stream(
-            messages, tools=tools, cache_key=cache_key, on_delta=on_delta, should_stop=should_stop, on_reasoning=on_reasoning
-        )
+        kw = {"tools": tools, "cache_key": cache_key, "on_delta": on_delta, "should_stop": should_stop}
+        if on_reasoning is not None and getattr(fb_client, "_supports_reasoning_stream", False):
+            kw["on_reasoning"] = on_reasoning
+        return fb_client.chat_stream(messages, **kw)
 
     def chat(
         self, messages: list[dict], tools: list[dict] | None = None, cache_key: str | None = None
