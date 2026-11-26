@@ -62,6 +62,9 @@ async function pasteInto(el) {
       addPastedAttachment(r.attachment);
       return;
     }
+    if (el && el.id === "prompt" && r.text && typeof ChatUX !== "undefined" && ChatUX.maybeAttachLargePaste) {
+      if (await ChatUX.maybeAttachLargePaste(r.text)) return;
+    }
     el.focus();
     el.setRangeText(r.text || "", start, end, "end");
     el.dispatchEvent(new Event("input", {bubbles:true}));
@@ -638,10 +641,19 @@ document.addEventListener("keydown", function(e) {
     (el.tagName === "TEXTAREA" || (el.tagName === "INPUT" && ["text","password","search","url","email","tel"].includes(el.type)));
   if (k === "v" && editable) { e.preventDefault(); pasteInto(el); }
   if (k === "c") {
-    const selection = editable && typeof el.selectionStart === "number"
-      ? el.value.slice(el.selectionStart, el.selectionEnd)
-      : (window.getSelection ? window.getSelection().toString() : "");
+    const selection = typeof ChatUX !== "undefined" && ChatUX.getSelectedText
+      ? ChatUX.getSelectedText(el)
+      : (editable && typeof el.selectionStart === "number" && el.selectionStart !== el.selectionEnd
+          ? el.value.slice(el.selectionStart, el.selectionEnd)
+          : (window.getSelection ? window.getSelection().toString() : ""));
     if (selection) { e.preventDefault(); copyText(selection); }
+  }
+  if (k === "x" && editable && typeof el.selectionStart === "number" && el.selectionStart !== el.selectionEnd) {
+    e.preventDefault();
+    const picked = el.value.slice(el.selectionStart, el.selectionEnd);
+    copyText(picked);
+    el.setRangeText("", el.selectionStart, el.selectionEnd, "start");
+    el.dispatchEvent(new Event("input", {bubbles:true}));
   }
 });
 

@@ -1,0 +1,120 @@
+/* Chat UX Pro: clean mouse text selection, floating copy pill, right-click menu */
+
+.msg,
+.msg p,
+.msg li,
+.msg pre,
+.msg code,
+.msg td,
+.msg th,
+.msg blockquote,
+.msg h1,
+.msg h2,
+.msg h3,
+.msg h4,
+.turn-trail .out,
+.turn-trail-reason-body {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.msg ::selection,
+#prompt::selection,
+.turn-trail ::selection {
+  background: rgba(79, 140, 255, 0.34);
+  color: inherit;
+}
+
+.msg .model-label,
+.msg .model-time,
+.msg.assistant > .btn,
+.msg .msg-actions,
+.msg .code-head,
+.msg .code-head button,
+.msg .file-cards-row,
+.turn-trail-head,
+.turn-trail-label {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Floating selection toolbar */
+#sel-copy-bar {
+  position: fixed;
+  z-index: 1250;
+  display: none;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  border-radius: 10px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.42);
+  user-select: none;
+}
+#sel-copy-bar.show {
+  display: inline-flex;
+}
+#sel-copy-bar button {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text);
+  border-radius: 7px;
+  padding: 4px 9px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+}
+#sel-copy-bar button:hover {
+  background: var(--panel2);
+  border-color: var(--accent);
+}
+
+/* Custom right-click context menu (mouse-first copy / paste / quote) */
+#chat-ctx-menu {
+  position: fixed;
+  z-index: 1300;
+  display: none;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 196px;
+  padding: 5px;
+  border-radius: 10px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.48);
+  user-select: none;
+}
+#chat-ctx-menu.show {
+  display: flex;
+}
+.ctx-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  color: var(--text);
+  padding: 6px 10px;
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+}
+.ctx-item:hover {
+  background: var(--panel2);
+  border-color: rgba(79, 140, 255, 0.45);
+}
+.ctx-item .ctx-kbd {
+  font-size: 11px;
+  color: var(--dim);
+}
+.ctx-sep {
+  height: 1px;
+  margin: 3px 6px;
+  background: var(--border);
+  opacity: 0.7;
+}
