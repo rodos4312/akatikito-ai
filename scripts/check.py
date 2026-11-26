@@ -66,6 +66,7 @@ class RunContext:
     python: str
     staged: list[str] | None  # None = full repo, list = staged paths only
     ci: bool = False
+    parallel: bool = False
 
 
 @dataclass(frozen=True)
@@ -189,6 +190,11 @@ def _step_node(ctx: RunContext) -> tuple[int, str]:
 
 
 def _step_pytest(ctx: RunContext) -> tuple[int, str]:
+    if ctx.parallel:
+        cmd = [ctx.python, "scripts/run_tests_isolated.py", "--tier", "full"]
+        if ctx.ci:
+            cmd.extend(["--ci", "--retry-flaky"])
+        return _run_cmd(cmd, ctx.root, timeout=900)
     cmd = [ctx.python, "-m", "pytest", "-q", "-p", "no:cacheprovider"]
     if ctx.ci:
         cmd.extend(["-k", "not real_chromium"])
@@ -231,6 +237,7 @@ def main(argv: list[str] | None = None, *, root: Path = ROOT) -> int:
     parser.add_argument("--staged", action="store_true", help="Scope fast checks to git staged files")
     parser.add_argument("--only", default="", help="Comma-separated step names to run")
     parser.add_argument("--ci", action="store_true", help="CI mode (filters real_chromium in pytest)")
+    parser.add_argument("--parallel", action="store_true", help="Run pytest isolated per file in parallel")
     parser.add_argument("--list", action="store_true", help="List available steps and exit")
     args = parser.parse_args(argv)
 
@@ -247,7 +254,7 @@ def main(argv: list[str] | None = None, *, root: Path = ROOT) -> int:
         return 2
 
     staged = staged_files(root) if args.staged else None
-    ctx = RunContext(root=root, python=resolve_python(root), staged=staged, ci=args.ci)
+    ctx = RunContext(root=root, python=resolve_python(root), staged=staged, ci=args.ci, parallel=args.parallel)
     total = len(chosen)
     started_all = time.monotonic()
 

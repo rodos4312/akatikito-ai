@@ -1,8 +1,23 @@
 """Local tests must never reach a billable provider or another external service."""
 import ipaddress
+import os
 import socket
+import sys
 
 import pytest
+
+
+def pytest_configure(config):
+    config.addinivalue_line("markers", "slow: >2s, heavy I/O, large corpus, or browser tests")
+    config.addinivalue_line("markers", "windows: tests that require Windows OS")
+    config.addinivalue_line("markers", "linux: tests that require Linux OS")
+
+
+def pytest_runtest_setup(item):
+    if item.get_closest_marker("windows") and os.name != "nt":
+        pytest.skip("Windows-only test")
+    if item.get_closest_marker("linux") and not sys.platform.startswith("linux"):
+        pytest.skip("Linux-only test")
 
 
 @pytest.fixture(autouse=True)
