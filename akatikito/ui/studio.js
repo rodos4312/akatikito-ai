@@ -314,6 +314,56 @@
     root.loadSessions?.();
   }
 
+  async function loadEmailDrafts() {
+    const box = document.getElementById('email-drafts-list');
+    if (!box || typeof root.api !== 'function') return;
+    try {
+      const r = await root.api('/api/email/drafts');
+      box.replaceChildren();
+      const drafts = r.drafts || [];
+      if (!drafts.length) { box.textContent = 'Καμία πρόχειρη απάντηση email.'; return; }
+      for (const d of drafts) {
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)';
+        const info = document.createElement('span');
+        info.textContent = `${d.to} — ${d.subject} [${d.status}]`;
+        const btns = document.createElement('span');
+        btns.style.cssText = 'display:flex;gap:6px';
+        if (d.status !== 'sent') {
+          const sendBtn = document.createElement('button');
+          sendBtn.className = 'btn primary';
+          sendBtn.style.width = 'auto';
+          sendBtn.textContent = 'Αποστολή';
+          sendBtn.onclick = () => sendEmailDraft(d.id, d.to, d.subject);
+          btns.appendChild(sendBtn);
+        }
+        const delBtn = document.createElement('button');
+        delBtn.className = 'btn';
+        delBtn.style.width = 'auto';
+        delBtn.textContent = 'Διαγραφή';
+        delBtn.onclick = () => deleteEmailDraft(d.id);
+        btns.appendChild(delBtn);
+        row.append(info, btns);
+        box.appendChild(row);
+      }
+    } catch (_) {}
+  }
+
+  async function sendEmailDraft(id, to, subject) {
+    if (typeof root.confirm === 'function' && !root.confirm(`Να σταλεί το email προς ${to} με θέμα «${subject}»;`)) return;
+    const r = await root.api('/api/email/action', { action: 'send', id, user_approved: true });
+    if (r.error) { root.showNotice?.('err', r.error); return; }
+    root.showNotice?.('ok', 'Το email στάλθηκε.');
+    await loadEmailDrafts();
+  }
+
+  async function deleteEmailDraft(id) {
+    const r = await root.api('/api/email/action', { action: 'delete', id });
+    if (r.error) { root.showNotice?.('err', r.error); return; }
+    root.showNotice?.('ok', 'Το πρόχειρο διαγράφηκε.');
+    await loadEmailDrafts();
+  }
+
   function boot() {
     initNavIcons();
     selectSettingsPane(activeSettingsPane);
@@ -334,6 +384,9 @@
     searchSessionsFullText,
     loadFamilyProfiles,
     switchFamilyProfile,
+    loadEmailDrafts,
+    sendEmailDraft,
+    deleteEmailDraft,
     isSidebarCollapsed: () => sidebarCollapsed,
     activeSettingsPane: () => activeSettingsPane,
   };

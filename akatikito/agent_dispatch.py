@@ -13,7 +13,7 @@ from .tools import validate_arguments
 
 LEARNING_TOOLS = ("propose_memory", "propose_skill", "patch_skill")
 UNTRUSTED_SOURCES = {
-    "web_search", "web_fetch", "browser_fetch", "web_news", "youtube_transcript", "read_document",
+    "web_search", "web_fetch", "browser_fetch", "web_news", "youtube_transcript", "read_document", "email_summary",
 }
 ASSISTANT_TEXT_EXTS = (".md", ".txt", ".csv", ".json")
 ASSISTANT_DOC_TOOLS = ("create_word_document", "create_excel_sheet", "create_pdf_document")

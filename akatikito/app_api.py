@@ -384,6 +384,7 @@ class AppState(OpsStateMixin, FilesStateMixin, SessionsUpgradeStateMixin, Memory
                 checkpoints=self.settings.checkpoints,
                 ui_language=self.settings.ui_language,
                 notes_folder=self.settings.notes_folder,
+                email_account_path=self._configured_email_account_str(),
             )
             try:
                 new_agent = Akatikito(root=project, config=config)

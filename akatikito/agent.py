@@ -33,6 +33,7 @@ class Akatikito:
         self.ws.config = self.config
         self.ws.notes_folder = str(getattr(self.config, "notes_folder", "") or "").strip()
         self.ws.search_stopped = lambda: self._stop
+        self.ws.email_account_path = self.config.email_account_path
         self.context = ContextWindow(self.ws, self.config.context_max_chars, self.config.context_recent_groups, self.config.context_economy)
         self.activity = ActivityGuard(self.ws)
         self.task = TaskState()
@@ -216,12 +217,28 @@ class Akatikito:
 
     # ------------------------------------------------------------------ βρόχος
 
+    def _has_email_account(self) -> bool:
+        if getattr(self.ws, 'email_assistant', None) is not None:
+            return True
+        raw = str(getattr(self.ws, 'email_account_path', '') or getattr(self.config, 'email_account_path', '') or '').strip()
+        if not raw:
+            return False
+        from pathlib import Path
+        path = Path(raw)
+        if not path.is_file():
+            return False
+        from .email_assistant import EmailAccount
+        acc = EmailAccount.load(path)
+        return bool(acc.address and acc.secret_masked)
+
     def _filter_disabled_tools(self, tools: set[str]) -> set[str]:
         blocked = getattr(self, '_blocked_advanced_tools', None)
         if blocked:
             tools = tools - blocked
         if not str(getattr(self.config, 'notes_folder', '') or '').strip():
             tools = tools - {'search_notes', 'propose_note_edit'}
+        if not self._has_email_account():
+            tools = tools - {'email_summary', 'email_draft_reply'}
         return tools
 
     def allowed_tools(self, mode=None):

@@ -9,10 +9,11 @@ import uuid
 from pathlib import Path
 
 from . import memory as global_memory
+from .app_api_extras import ExtrasStateMixin
 from .sessions import SessionStore
 
 
-class OpsStateMixin:
+class OpsStateMixin(ExtrasStateMixin):
     def plugins_view(self):
         try:
             view = self.gateway.view()
