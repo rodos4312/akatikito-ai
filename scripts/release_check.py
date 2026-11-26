@@ -155,11 +155,35 @@ def _check_git_release_ready(root: Path) -> list[str]:
     return errors
 
 
+_MD_LINK_RE = re.compile(r"!?\[[^\]]*\]\(([^)]+)\)")
+
+
+def check_getting_started_docs(root: Path = ROOT) -> list[str]:
+    """Verify Getting Started EL/EN guides exist and every local link/image resolves on disk (F5)."""
+    required = ("README.md", "docs/GETTING-STARTED.el.md", "docs/GETTING-STARTED.en.md")
+    errors: list[str] = []
+    for rel in required:
+        md_path = root / rel
+        if not md_path.is_file():
+            errors.append(f"[F5-DOCS] Missing required guide: {rel}")
+            continue
+        text = md_path.read_text(encoding="utf-8-sig", errors="replace")
+        for raw_target in _MD_LINK_RE.findall(text):
+            target = raw_target.strip().split()[0].split("#", 1)[0].split("?", 1)[0]
+            if not target or target.startswith(("http://", "https://", "mailto:", "file://")):
+                continue
+            resolved = (md_path.parent / target).resolve()
+            if not resolved.exists():
+                errors.append(f"[F5-DOCS] Broken link/image in {rel}: '{target}'")
+    return errors
+
+
 def check_all(root: Path = ROOT, *, strict_git: bool = False) -> list[str]:
     errors = []
     errors.extend(check_version_consistency(root))
     errors.extend(check_agents_md_size(root))
     errors.extend(check_settings_docs_drift(root))
+    errors.extend(check_getting_started_docs(root))
     if strict_git:
         errors.extend(_check_git_release_ready(root))
     return errors

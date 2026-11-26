@@ -10,7 +10,17 @@
 [![Languages](https://img.shields.io/badge/UI%20Languages-EL%20%7C%20EN%20%7C%20RU%20%7C%20DE%20%7C%20ES%20%7C%20FR-blue)](#multi-language-interface)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-**Akatikito** is a local-first AI assistant and coding agent for Windows, with an optional Android app. It runs locally in its own desktop window (no background console window), connects to your choice of LLM provider (DeepSeek, OpenAI, Anthropic, Gemini, Z.ai GLM, OpenRouter, Ollama, or custom OpenAI-compatible endpoints), and keeps files, API keys, and memory under local user control.
+**Akatikito** is a local-first AI assistant for Windows (with an optional Android app) that runs in its own window and keeps your files, API keys, and memory privately on your own computer.
+
+## Start in 5 Minutes (No Python Needed) / Ξεκίνα σε 5 λεπτά
+
+- **Ελληνικός οδηγός (5 βήματα με εικόνες):** [docs/GETTING-STARTED.el.md](docs/GETTING-STARTED.el.md)
+- **English guide (5 steps with images):** [docs/GETTING-STARTED.en.md](docs/GETTING-STARTED.en.md)
+
+1. Download **`Akatikito-v2.5.0-portable.zip`** from [Releases](https://github.com/rodos4312/akatikito-ai/releases) *(Python 3.11 + all packages included)*.
+2. Right-click → **Extract All**.
+3. Double-click **`AkatikitoApp.cmd`** *(if Windows SmartScreen appears, click **More info → Run anyway**)*.
+4. Choose **AI account** or **Local AI (Ollama / LM Studio)** and ask your first question.
 
 ![Akatikito Desktop v2.5.0](docs/screenshots/desktop-home.png)
 

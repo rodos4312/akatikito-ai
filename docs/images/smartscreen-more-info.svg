@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 680 230" width="680" height="230" role="img" aria-label="Windows SmartScreen More info then Run anyway guide">
+  <rect width="680" height="230" rx="12" fill="#005a9e"/>
+  <g font-family="Segoe UI, Arial, sans-serif">
+    <text x="28" y="42" fill="#ffffff" font-size="20" font-weight="600">Windows protected your PC / Τα Windows προστάτευσαν τον υπολογιστή σας</text>
+    <text x="28" y="74" fill="#e0f2fe" font-size="13">Microsoft Defender SmartScreen shows this for open-source apps without a paid certificate.</text>
+    <text x="28" y="96" fill="#e0f2fe" font-size="13">Εμφανίζεται σε ανοιχτού κώδικα εφαρμογές χωρίς πληρωμένο πιστοποιητικό υπογραφής.</text>
+
+    <rect x="28" y="118" width="248" height="36" rx="6" fill="#0369a1" stroke="#facc15" stroke-width="2"/>
+    <text x="42" y="141" fill="#fef08a" font-size="13" font-weight="700">① Click "More info" / Περισσότερες πληροφορίες</text>
+
+    <rect x="300" y="168" width="235" height="40" rx="6" fill="#16a34a" stroke="#bbf7d0" stroke-width="2"/>
+    <text x="316" y="193" fill="#ffffff" font-size="13" font-weight="700">② Click "Run anyway" / Εκτέλεση ούτως ή άλλως</text>
+
+    <rect x="550" y="168" width="102" height="40" rx="6" fill="#1e293b" stroke="#94a3b8"/>
+    <text x="568" y="193" fill="#cbd5e1" font-size="12">Don't run</text>
+  </g>
+</svg>
