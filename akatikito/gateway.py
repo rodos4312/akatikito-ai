@@ -50,9 +50,14 @@ class Gateway:
                 accepted=self.receive(ident,bot,next_cursor,events)
                 self.channel_status[ident]={'state':'connected','bot':bot};failures=0
                 for event in accepted:
-                    if event.text.strip()=='/stop':
-                        with self.active_lock:active=self.active.get(event.key())
-                        if active:active['state'].stop()
+                    text = event.text.strip()
+                    if text == '/stop':
+                        with self.active_lock:
+                            active = self.active.get(event.key())
+                        if active:
+                            active['state'].stop()
+                    elif text.startswith('/approve '):
+                        self._resolve_inline_approval(event, text)
                 self.stop_event.wait(.05)
             except Exception as exc:
                 self.channel_status[ident]={'state':'error','message':'Η σύνδεση δεν ολοκληρώθηκε. Έλεγξε token, δικαιώματα και δίκτυο.'}
@@ -118,6 +123,9 @@ class Gateway:
         if command=='/status':
             sid=self.store.route(event);self.store.finish(row['id'],'Συνεδρία '+sid+' · '+self.settings.provider+' / '+self.settings.model+' · Λειτουργία: '+str(config.get('mode','ask')));return
         if command=='/stop':self.store.finish(row['id'],'Ζητήθηκε διακοπή της δικής σου εργασίας.');return
+        if command.startswith('/approve '):
+            self.store.finish(row['id'], self._resolve_inline_approval(event, command))
+            return
         if command=='/skills':
             from .skills import Skills
             cat=Skills(config.get('project','.')).catalog()
@@ -149,13 +157,15 @@ class Gateway:
             with self.active_lock:self.active[event.key()]={'state':state,'event':event}
             result=state.send(event.text)
             if result.get('error'):raise ValueError(result['error'])
-            notified=False
+            notified = False
             while state.busy:
-                if self.stop_event.wait(.1):state.stop();return
-                if state.approvals.pending() and not notified:
-                    notified=True
-                    try:self.adapters[event.platform].send(event,'Χρειάζεται έγκριση στο παράθυρο του Akatikito. Η εργασία περιμένει εκεί.')
-                    except Exception:pass
+                if self.stop_event.wait(.1):
+                    state.stop()
+                    return
+                pending = state.approvals.pending()
+                if pending and not notified:
+                    notified = True
+                    self._notify_pending_approval(event, pending[0])
             answers=[m['text'] for m in state.transcript if m.get('role')=='assistant']
             if state.error:raise ValueError('Η εργασία απέτυχε· δες τη συνεδρία στο Akatikito.')
             self.store.finish(row['id'],answers[-1] if answers else 'Η εργασία σταμάτησε χωρίς τελική απάντηση.')
@@ -164,6 +174,39 @@ class Gateway:
         finally:
             with self.active_lock:self.active.pop(event.key(),None)
             if state:state.close()
+    def _notify_pending_approval(self, event, item: dict) -> None:
+        adapter = self.adapters.get(event.platform)
+        if adapter is None:
+            return
+        dangerous = item.get('risk') == 'dangerous'
+        details = item.get('details') or {}
+        summary = f"{item.get('kind', 'action')}: {json.dumps(details, ensure_ascii=False)}"
+        try:
+            if callable(getattr(adapter, 'send_approval', None)):
+                adapter.send_approval(event, str(item.get('id', '')), summary, dangerous=dangerous)
+            else:
+                adapter.send(event, 'Χρειάζεται έγκριση στο παράθυρο του Akatikito. Η εργασία περιμένει εκεί.')
+        except Exception:  # noqa: BLE001, S110 — best-effort channel notification
+            pass
+
+    def _resolve_inline_approval(self, event, command: str) -> str:
+        parts = command.strip().split()
+        if len(parts) != 3 or parts[2] not in ('0', '1'):
+            return 'Μη έγκυρη εντολή έγκρισης.'
+        ticket, allow = parts[1], parts[2] == '1'
+        with self.active_lock:
+            active = self.active.get(event.key())
+        if not active:
+            return 'Δεν υπάρχει ενεργή εκκρεμής έγκριση.'
+        broker = active['state'].approvals
+        item = next((p for p in broker.pending() if p.get('id') == ticket), None)
+        if not item:
+            return 'Το αίτημα έγκρισης έληξε ή δεν βρέθηκε.'
+        if item.get('risk') == 'dangerous' and allow:
+            return 'Οι επικίνδυνες ενέργειες εγκρίνονται μόνο από τον υπολογιστή.'
+        broker.respond(ticket, allow=allow, always=False)
+        return 'Η έγκριση καταχωρήθηκε.' if allow else 'Η ενέργεια απορρίφθηκε.'
+
     def deliver(self,row):
         event=Inbound(**json.loads(row['payload']));adapter=self.adapters.get(event.platform)
         if adapter is None or not self.matches_binding(event):return
