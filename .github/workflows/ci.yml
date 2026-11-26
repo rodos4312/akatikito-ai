@@ -28,11 +28,8 @@ jobs:
           pip install -r requirements-features.txt
           pip install -r requirements-dev.txt
 
-      - name: Ruff (ruff.toml) & quality ratchets (size + complexity)
-        run: |
-          ruff check --config ruff.toml akatikito scripts tests app.py
-          python scripts/size_check.py
-          python scripts/health_check.py
+      - name: Unified fast quality checks (ruff, size, health, JS, node UI)
+        run: python scripts/check.py --fast
 
       - name: Security audit Python dependencies (pip-audit)
         run: |
@@ -43,13 +40,8 @@ jobs:
         working-directory: akatikito/template_parsers
         run: npm.cmd ci --no-audit --no-fund
 
-      - name: Validate UI JavaScript & Node UI tests
-        run: |
-          Get-ChildItem akatikito\ui\*.js, akatikito\onboarding.js | ForEach-Object { node --check $_.FullName; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE } }
-          Get-ChildItem tests\*.cjs | ForEach-Object { node $_.FullName; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE } }
-
       - name: Run Python test suites
-        run: pytest -k "not real_chromium" -q -p no:cacheprovider
+        run: python scripts/check.py --only pytest --ci
 
       - name: Run 10-scenario offline eval harness
         run: python scripts/run_evals.py

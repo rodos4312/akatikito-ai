@@ -1,4 +1,10 @@
 #!/bin/sh
-# Akatikito: quick checks before every commit (ruff, UI JavaScript, node UI tests).
-# The full suite with pytest runs in pre-push. Emergency bypass: git commit --no-verify
-exec cmd.exe //c ".\check.cmd" --fast
+# Akatikito: staged-aware quick checks before every commit (QUALITY-PLAN-2 Q1).
+# Full suite (with pytest) runs in pre-push. Emergency bypass: git commit --no-verify
+if [ -x ".venv/Scripts/python.exe" ]; then
+  exec ".venv/Scripts/python.exe" scripts/check.py --staged
+elif [ -x ".venv/bin/python" ]; then
+  exec ".venv/bin/python" scripts/check.py --staged
+else
+  exec python scripts/check.py --staged
+fi

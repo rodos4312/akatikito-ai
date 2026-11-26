@@ -1,4 +1,10 @@
 #!/bin/sh
-# Akatikito: full checks (including pytest) before every push.
+# Akatikito: full checks (including pytest) before every push (QUALITY-PLAN-2 Q1).
 # Emergency bypass: git push --no-verify
-exec cmd.exe //c ".\check.cmd"
+if [ -x ".venv/Scripts/python.exe" ]; then
+  exec ".venv/Scripts/python.exe" scripts/check.py
+elif [ -x ".venv/bin/python" ]; then
+  exec ".venv/bin/python" scripts/check.py
+else
+  exec python scripts/check.py
+fi
