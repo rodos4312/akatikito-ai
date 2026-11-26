@@ -25,6 +25,88 @@ _DEC_CONSTANTS = {
 }
 
 
+def _check_decimal(v: Decimal) -> Decimal:
+    if not v.is_finite() or (v and abs(v.adjusted()) > 1000):
+        raise ValueError("Ο αριθμός ξεπερνά το όριο.")
+    return v
+
+
+def _decimal_pow(base: Decimal, exp: Decimal) -> Decimal:
+    if abs(exp) > 1000:
+        raise ValueError("Πολύ μεγάλος εκθέτης.")
+    if exp == exp.to_integral_value():
+        return _check_decimal(base ** int(exp))
+    out = float(base) ** float(exp)
+    if not math.isfinite(out):
+        raise ValueError("Μη έγκυρο αριθμητικό αποτέλεσμα.")
+    return _check_decimal(Decimal(str(out)))
+
+
+_BIN_OPS = {
+    ast.Add: lambda a, b: _check_decimal(a + b),
+    ast.Sub: lambda a, b: _check_decimal(a - b),
+    ast.Mult: lambda a, b: _check_decimal(a * b),
+    ast.Div: lambda a, b: _check_decimal(a / b),
+    ast.FloorDiv: lambda a, b: _check_decimal(a // b),
+    ast.Mod: lambda a, b: _check_decimal(a % b),
+    ast.Pow: _decimal_pow,
+}
+
+
+def _eval_round(args: list[Decimal]) -> Decimal:
+    places = int(args[1]) if len(args) == 2 else 0
+    if abs(places) > 30:
+        raise ValueError("Πολλά δεκαδικά ψηφία.")
+    return _check_decimal(args[0].quantize(Decimal(1).scaleb(-places), rounding=ROUND_HALF_UP))
+
+
+def _eval_trig_log(fname: str, val: Decimal) -> Decimal:
+    out = getattr(math, fname)(float(val))
+    if not math.isfinite(out):
+        raise ValueError("Μη έγκυρο αριθμητικό αποτέλεσμα.")
+    return _check_decimal(Decimal(str(out)))
+
+
+def _eval_math_func(fname: str, args: list[Decimal]) -> Decimal:
+    n = len(args)
+    if n == 1:
+        if fname == "abs":
+            return abs(args[0])
+        if fname == "sqrt":
+            return _check_decimal(args[0].sqrt())
+        if fname in ("ceil", "floor"):
+            return Decimal(math.ceil(args[0]) if fname == "ceil" else math.floor(args[0]))
+        if fname in ("log", "log10", "sin", "cos", "tan"):
+            return _eval_trig_log(fname, args[0])
+    if fname == "round" and n in (1, 2):
+        return _eval_round(args)
+    if fname == "pow" and n == 2:
+        return _decimal_pow(args[0], args[1])
+    if 1 <= n <= 500:
+        if fname == "min":
+            return min(args)
+        if fname == "max":
+            return max(args)
+        if fname == "sum":
+            return _check_decimal(sum(args, Decimal(0)))
+    raise ValueError("Μη επιτρεπτή μαθηματική έκφραση.")
+
+
+def _eval_call_node(node: ast.Call, eval_fn, depth: int) -> Decimal:
+    if not isinstance(node.func, ast.Name):
+        raise ValueError("Μη επιτρεπτή μαθηματική έκφραση.")
+    if node.keywords:
+        raise ValueError("Δεν επιτρέπονται ονομαστικά ορίσματα στη μαθηματική έκφραση.")
+    fname = node.func.id
+    if fname in ("sum", "min", "max") and len(node.args) == 1 and isinstance(node.args[0], (ast.List, ast.Tuple)):
+        seq = [eval_fn(elt, depth + 1) for elt in node.args[0].elts]
+        if not seq or len(seq) > 500:
+            raise ValueError("Δώσε 1–500 αριθμούς.")
+        return _eval_math_func(fname, seq)
+    args = [eval_fn(a, depth + 1) for a in node.args]
+    return _eval_math_func(fname, args)
+
+
 def _safe_eval_decimal(expr: str) -> Decimal:
     """Evaluate mathematical expression strictly via AST whitelist using 50-digit Decimal arithmetic."""
     src = expr.strip()
@@ -34,11 +116,6 @@ def _safe_eval_decimal(expr: str) -> Decimal:
     if sum(1 for _ in ast.walk(tree)) > 200:
         raise ValueError("Πολύ σύνθετη μαθηματική έκφραση.")
 
-    def _check_num(v: Decimal) -> Decimal:
-        if not v.is_finite() or (v and abs(v.adjusted()) > 1000):
-            raise ValueError("Ο αριθμός ξεπερνά το όριο.")
-        return v
-
     def _eval(node, depth: int = 0) -> Decimal:
         if depth > 25:
             raise ValueError("Πολύ βαθιά μαθηματική έκφραση.")
@@ -47,82 +124,22 @@ def _safe_eval_decimal(expr: str) -> Decimal:
         if isinstance(node, ast.Constant) and type(node.value) in (int, float):
             seg = ast.get_source_segment(src, node)
             raw = seg.replace("_", "") if seg else str(node.value)
-            return _check_num(Decimal(raw))
+            return _check_decimal(Decimal(raw))
         if isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.UAdd, ast.USub)):
             val = _eval(node.operand, depth + 1)
             return val if isinstance(node.op, ast.UAdd) else -val
-        if isinstance(node, ast.BinOp):
-            left, right = _eval(node.left, depth + 1), _eval(node.right, depth + 1)
-            if isinstance(node.op, ast.Add):
-                return _check_num(left + right)
-            if isinstance(node.op, ast.Sub):
-                return _check_num(left - right)
-            if isinstance(node.op, ast.Mult):
-                return _check_num(left * right)
-            if isinstance(node.op, ast.Div):
-                return _check_num(left / right)
-            if isinstance(node.op, ast.FloorDiv):
-                return _check_num(left // right)
-            if isinstance(node.op, ast.Mod):
-                return _check_num(left % right)
-            if isinstance(node.op, ast.Pow):
-                if abs(right) > 1000:
-                    raise ValueError("Πολύ μεγάλος εκθέτης.")
-                if right == right.to_integral_value():
-                    return _check_num(left ** int(right))
-                out = float(left) ** float(right)
-                if not math.isfinite(out):
-                    raise ValueError("Μη έγκυρο αριθμητικό αποτέλεσμα.")
-                return _check_num(Decimal(str(out)))
+        if isinstance(node, ast.BinOp) and type(node.op) in _BIN_OPS:
+            return _BIN_OPS[type(node.op)](_eval(node.left, depth + 1), _eval(node.right, depth + 1))
         if isinstance(node, ast.Name) and node.id in _DEC_CONSTANTS:
             return _DEC_CONSTANTS[node.id]
-        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
-            if node.keywords:
-                raise ValueError("Δεν επιτρέπονται ονομαστικά ορίσματα στη μαθηματική έκφραση.")
-            fname = node.func.id
-            if fname in ("sum", "min", "max") and len(node.args) == 1 and isinstance(node.args[0], (ast.List, ast.Tuple)):
-                seq = [_eval(elt, depth + 1) for elt in node.args[0].elts]
-                if not seq or len(seq) > 500:
-                    raise ValueError("Δώσε 1–500 αριθμούς.")
-                if fname == "sum":
-                    return _check_num(sum(seq, Decimal(0)))
-                return min(seq) if fname == "min" else max(seq)
-            args = [_eval(a, depth + 1) for a in node.args]
-            if fname == "abs" and len(args) == 1:
-                return abs(args[0])
-            if fname == "sqrt" and len(args) == 1:
-                return _check_num(args[0].sqrt())
-            if fname in ("min", "max") and 1 <= len(args) <= 500:
-                return min(args) if fname == "min" else max(args)
-            if fname == "sum" and 1 <= len(args) <= 500:
-                return _check_num(sum(args, Decimal(0)))
-            if fname == "round" and len(args) in (1, 2):
-                places = int(args[1]) if len(args) == 2 else 0
-                if abs(places) > 30:
-                    raise ValueError("Πολλά δεκαδικά ψηφία.")
-                return _check_num(args[0].quantize(Decimal(1).scaleb(-places), rounding=ROUND_HALF_UP))
-            if fname == "pow" and len(args) == 2:
-                if abs(args[1]) > 1000:
-                    raise ValueError("Πολύ μεγάλος εκθέτης.")
-                if args[1] == args[1].to_integral_value():
-                    return _check_num(args[0] ** int(args[1]))
-                out = float(args[0]) ** float(args[1])
-                if not math.isfinite(out):
-                    raise ValueError("Μη έγκυρο αριθμητικό αποτέλεσμα.")
-                return _check_num(Decimal(str(out)))
-            if fname in ("ceil", "floor") and len(args) == 1:
-                return Decimal(math.ceil(args[0]) if fname == "ceil" else math.floor(args[0]))
-            if fname in ("log", "log10", "sin", "cos", "tan") and len(args) == 1:
-                out = getattr(math, fname)(float(args[0]))
-                if not math.isfinite(out):
-                    raise ValueError("Μη έγκυρο αριθμητικό αποτέλεσμα.")
-                return _check_num(Decimal(str(out)))
+        if isinstance(node, ast.Call):
+            return _eval_call_node(node, _eval, depth)
         raise ValueError("Μη επιτρεπτή μαθηματική έκφραση.")
 
     try:
         with localcontext() as ctx:
             ctx.prec = 50
-            return _check_num(_eval(tree))
+            return _check_decimal(_eval(tree))
     except (ArithmeticError, InvalidOperation) as exc:
         raise ValueError("Μη έγκυρος ή υπερβολικά μεγάλος υπολογισμός.") from exc
 
@@ -231,6 +248,107 @@ def tool_calculate_expression(ws, expression: str, vat_rate: float | None = None
     return json.dumps(result, ensure_ascii=False, indent=2)
 
 
+def _decode_data_bytes(raw_bytes: bytes, encoding: str) -> str:
+    enc = str(encoding or "auto").strip().lower()
+    if enc == "auto":
+        if raw_bytes.startswith((b"\xff\xfe\x00\x00", b"\x00\x00\xfe\xff")):
+            enc = "utf-32"
+        elif raw_bytes.startswith((b"\xff\xfe", b"\xfe\xff")):
+            enc = "utf-16"
+        else:
+            enc = "utf-8-sig"
+    if enc not in ("utf-8", "utf-8-sig", "utf-16", "utf-32", "cp1253", "cp1252"):
+        raise ValueError("Μη επιτρεπτή κωδικοποίηση. Υποστηρίζονται: auto, utf-8, utf-8-sig, utf-16, utf-32, cp1253, cp1252.")
+    try:
+        return raw_bytes.decode(enc)
+    except UnicodeError as exc:
+        raise ValueError("Η κωδικοποίηση δεν ταιριάζει. Επίλεξε ρητά encoding· δεν αντικαταστάθηκαν χαρακτήρες.") from exc
+
+
+def _parse_csv_rows(raw_text: str) -> tuple[list[str], list[dict]] | None:
+    reader = csv.reader(io.StringIO(raw_text))
+    raw_headers = next(reader, [])
+    if not raw_headers:
+        return None
+    headers = [str(h).strip() for h in raw_headers]
+    if any(not h for h in headers) or len(set(headers)) != len(headers) or len(headers) > 100:
+        raise ValueError("Χρειάζονται μη κενές και μοναδικές επικεφαλίδες CSV (έως 100 στήλες).")
+    rows: list[dict] = []
+    for row in reader:
+        if not row:
+            continue
+        if len(row) != len(headers):
+            raise ValueError("Ασυνεπές πλήθος στηλών CSV· δεν χάθηκαν κελιά.")
+        rows.append(dict(zip(headers, row)))
+        if len(rows) > 10000:
+            raise ValueError("Όριο 10.000 εγγραφών CSV.")
+    return headers, rows
+
+
+def _parse_json_rows(raw_text: str) -> tuple[list[str], list[dict]]:
+    parsed = json.loads(raw_text)
+    if isinstance(parsed, dict):
+        parsed = [parsed]
+    if not isinstance(parsed, list) or len(parsed) > 10000 or not all(isinstance(x, dict) for x in parsed):
+        raise ValueError("Το JSON πρέπει να περιέχει λίστα αντικειμένων έως 10.000 εγγραφές.")
+    headers = list(dict.fromkeys(str(k) for item in parsed for k in item.keys()))
+    if len(headers) > 100:
+        raise ValueError("Όριο 100 στηλών JSON.")
+    rows = [{str(k): v for k, v in item.items()} for item in parsed]
+    return headers, rows
+
+
+def _render_converted_rows(headers: list[str], rows: list[dict], fmt: str) -> str:
+    if fmt == "json":
+        return json.dumps(rows, ensure_ascii=False, indent=2)
+    if fmt not in ("csv", "markdown"):
+        raise ValueError("Το target_format πρέπει να είναι 'json', 'csv' ή 'markdown'.")
+    if any(isinstance(v, (dict, list)) for r in rows for v in r.values()):
+        raise ValueError("Τα σύνθετα JSON δεδομένα (λίστες/αντικείμενα) διατηρούνται μόνο σε μορφή JSON.")
+    if fmt == "csv":
+        buf = io.StringIO()
+        writer = csv.DictWriter(buf, fieldnames=headers, lineterminator="\n")
+        writer.writeheader()
+        for r in rows:
+            writer.writerow({h: ("" if r.get(h) is None else r.get(h)) for h in headers})
+        return buf.getvalue()
+    if not headers:
+        return "(Χωρίς δεδομένα)"
+    esc = lambda v: str("" if v is None else v).replace("|", "\\|").replace("\n", "<br>")
+    head_line = "| " + " | ".join(esc(h) for h in headers) + " |"
+    sep_line = "| " + " | ".join("---" for _ in headers) + " |"
+    body_lines = ["| " + " | ".join(esc(r.get(h, "")) for h in headers) + " |" for r in rows]
+    return "\n".join([head_line, sep_line, *body_lines])
+
+
+def _write_converted_output(ws, output_path: str, fmt: str, rendered: str, expected_sha256: str, row_count: int) -> str:
+    from .editing import check_syntax, commit
+    from .local_store import checked
+    from .tools import EditError, _protect_live_source
+
+    out_target = checked(ws.resolve(output_path))
+    _protect_live_source(out_target)
+    expected_ext = {"json": ".json", "csv": ".csv", "markdown": ".md"}[fmt]
+    if out_target.suffix.lower() != expected_ext:
+        raise ValueError(f"Η κατάληξη του output_path πρέπει να είναι {expected_ext} για μορφή {fmt}.")
+    raw_prev = out_target.read_bytes() if out_target.is_file() else None
+    if expected_sha256:
+        if raw_prev is None:
+            raise ValueError("Το αρχικό αρχείο εξόδου δεν υπάρχει πια. Ανανέωσε την ανάγνωση.")
+        if hashlib.sha256(raw_prev).hexdigest() != expected_sha256:
+            raise ValueError("Το αρχείο εξόδου άλλαξε από το αναμενόμενο SHA256. Διάβασέ το ξανά.")
+    orig_text = raw_prev.decode("utf-8", errors="replace") if raw_prev is not None else ""
+    try:
+        check_syntax(out_target, rendered)
+        guard = getattr(ws, "write_guard", None)
+        if guard:
+            guard(out_target, orig_text, rendered)
+        commit(ws, out_target, raw_prev, rendered.encode("utf-8"))
+    except (EditError, FileExistsError) as exc:
+        return "ΣΦΑΛΜΑ: " + str(exc)
+    return f"ΕΓΙΝΕ: μετατράπηκαν {row_count} εγγραφές στο {ws.relative(out_target)}\n\n" + rendered[:4000]
+
+
 def tool_convert_data_file(
     ws,
     source_path: str,
@@ -239,114 +357,27 @@ def tool_convert_data_file(
     encoding: str = "auto",
     expected_sha256: str = "",
 ) -> str:
-    from .tools import _protect_live_source
     from .local_store import checked
+    from .tools import _clip_with_archive
 
     src = checked(ws.resolve(source_path))
     if not src.is_file() or src.stat().st_size > 8 * 1024 * 1024:
         raise ValueError("Χρειάζεται υπάρχον αρχείο CSV ή JSON έως 8 MiB.")
     suffix = src.suffix.lower()
-    raw_bytes = src.read_bytes()
-    enc = str(encoding or "auto").strip().lower()
-    if enc == "auto":
-        enc = (
-            "utf-32" if raw_bytes.startswith((b"\xff\xfe\x00\x00", b"\x00\x00\xfe\xff"))
-            else "utf-16" if raw_bytes.startswith((b"\xff\xfe", b"\xfe\xff"))
-            else "utf-8-sig"
-        )
-    if enc not in ("utf-8", "utf-8-sig", "utf-16", "utf-32", "cp1253", "cp1252"):
-        raise ValueError("Μη επιτρεπτή κωδικοποίηση. Υποστηρίζονται: auto, utf-8, utf-8-sig, utf-16, utf-32, cp1253, cp1252.")
-    try:
-        raw_text = raw_bytes.decode(enc)
-    except UnicodeError as exc:
-        raise ValueError("Η κωδικοποίηση δεν ταιριάζει. Επίλεξε ρητά encoding· δεν αντικαταστάθηκαν χαρακτήρες.") from exc
-
-    rows: list[dict] = []
-    headers: list[str] = []
-
+    raw_text = _decode_data_bytes(src.read_bytes(), encoding)
     if suffix == ".csv":
-        reader = csv.reader(io.StringIO(raw_text))
-        raw_headers = next(reader, [])
-        if not raw_headers:
+        parsed = _parse_csv_rows(raw_text)
+        if parsed is None:
             return "Το αρχείο CSV είναι κενό."
-        headers = [str(h).strip() for h in raw_headers]
-        if any(not h for h in headers) or len(set(headers)) != len(headers) or len(headers) > 100:
-            raise ValueError("Χρειάζονται μη κενές και μοναδικές επικεφαλίδες CSV (έως 100 στήλες).")
-        for r in reader:
-            if not r:
-                continue
-            if len(r) != len(headers):
-                raise ValueError("Ασυνεπές πλήθος στηλών CSV· δεν χάθηκαν κελιά.")
-            rows.append(dict(zip(headers, r)))
-            if len(rows) > 10000:
-                raise ValueError("Όριο 10.000 εγγραφών CSV.")
+        headers, rows = parsed
     elif suffix == ".json":
-        parsed = json.loads(raw_text)
-        if isinstance(parsed, dict):
-            parsed = [parsed]
-        if not isinstance(parsed, list) or len(parsed) > 10000 or not all(isinstance(x, dict) for x in parsed):
-            raise ValueError("Το JSON πρέπει να περιέχει λίστα αντικειμένων έως 10.000 εγγραφές.")
-        headers = list(dict.fromkeys(str(k) for item in parsed for k in item.keys()))
-        if len(headers) > 100:
-            raise ValueError("Όριο 100 στηλών JSON.")
-        rows = [{str(k): v for k, v in item.items()} for item in parsed]
+        headers, rows = _parse_json_rows(raw_text)
     else:
         raise ValueError("Υποστηρίζονται αρχεία εισόδου .csv και .json.")
-
     fmt = str(target_format or "markdown").strip().lower()
-    if fmt == "json":
-        rendered = json.dumps(rows, ensure_ascii=False, indent=2)
-    elif fmt in ("csv", "markdown"):
-        if any(isinstance(v, (dict, list)) for r in rows for v in r.values()):
-            raise ValueError("Τα σύνθετα JSON δεδομένα (λίστες/αντικείμενα) διατηρούνται μόνο σε μορφή JSON.")
-        if fmt == "csv":
-            buf = io.StringIO()
-            writer = csv.DictWriter(buf, fieldnames=headers, lineterminator="\n")
-            writer.writeheader()
-            for r in rows:
-                writer.writerow({h: ("" if r.get(h) is None else r.get(h)) for h in headers})
-            rendered = buf.getvalue()
-        else:
-            if not headers:
-                rendered = "(Χωρίς δεδομένα)"
-            else:
-                esc = lambda v: str("" if v is None else v).replace("|", "\\|").replace("\n", "<br>")
-                head_line = "| " + " | ".join(esc(h) for h in headers) + " |"
-                sep_line = "| " + " | ".join("---" for _ in headers) + " |"
-                body_lines = [
-                    "| " + " | ".join(esc(r.get(h, "")) for h in headers) + " |"
-                    for r in rows
-                ]
-                rendered = "\n".join([head_line, sep_line, *body_lines])
-    else:
-        raise ValueError("Το target_format πρέπει να είναι 'json', 'csv' ή 'markdown'.")
-
+    rendered = _render_converted_rows(headers, rows, fmt)
     if output_path and str(output_path).strip():
-        from .editing import check_syntax, commit
-        from .tools import EditError
-
-        out_target = checked(ws.resolve(str(output_path).strip()))
-        _protect_live_source(out_target)
-        expected_ext = {"json": ".json", "csv": ".csv", "markdown": ".md"}[fmt]
-        if out_target.suffix.lower() != expected_ext:
-            raise ValueError(f"Η κατάληξη του output_path πρέπει να είναι {expected_ext} για μορφή {fmt}.")
-        raw_prev = out_target.read_bytes() if out_target.is_file() else None
-        if expected_sha256:
-            if raw_prev is None:
-                raise ValueError("Το αρχικό αρχείο εξόδου δεν υπάρχει πια. Ανανέωσε την ανάγνωση.")
-            if hashlib.sha256(raw_prev).hexdigest() != expected_sha256:
-                raise ValueError("Το αρχείο εξόδου άλλαξε από το αναμενόμενο SHA256. Διάβασέ το ξανά.")
-        orig_text = raw_prev.decode("utf-8", errors="replace") if raw_prev is not None else ""
-        try:
-            check_syntax(out_target, rendered)
-            guard = getattr(ws, "write_guard", None)
-            if guard:
-                guard(out_target, orig_text, rendered)
-            commit(ws, out_target, raw_prev, rendered.encode("utf-8"))
-        except (EditError, FileExistsError) as exc:
-            return "ΣΦΑΛΜΑ: " + str(exc)
-        return f"ΕΓΙΝΕ: μετατράπηκαν {len(rows)} εγγραφές στο {ws.relative(out_target)}\n\n" + rendered[:4000]
-    from .tools import _clip_with_archive
+        return _write_converted_output(ws, str(output_path).strip(), fmt, rendered, expected_sha256, len(rows))
     return _clip_with_archive(ws, rendered)
 
 
@@ -547,8 +578,8 @@ class ToolPlugins:
             data = load_json(self.path, dict)
             if isinstance(data, dict):
                 return {str(k): bool(v) for k, v in data.items()}
-        except Exception:
-            pass
+        except (OSError, ValueError):
+            return {}
         return {}
 
     def is_enabled(self, plugin_id: str) -> bool:

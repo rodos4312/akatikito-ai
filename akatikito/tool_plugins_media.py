@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+_ZIP_SKIP_PARTS = {".git", ".agent_backups", ".venv", "venv", "__pycache__", "node_modules"}
+
 
 def _guard_output_write(ws, target: Path, overwrite: bool) -> None:
     """Prevent accidental overwrite of existing files or live source files unless explicitly approved."""
@@ -21,6 +23,89 @@ def _guard_output_write(ws, target: Path, overwrite: bool) -> None:
             ws.backup(target)
 
 
+def _pdf_info(ws, src_path: str) -> str:
+    from pypdf import PdfReader
+
+    target = ws.resolve(src_path)
+    if not target.is_file():
+        raise ValueError(f"Δεν βρέθηκε το PDF: {src_path}")
+    reader = PdfReader(str(target))
+    meta = reader.metadata or {}
+    title = str(meta.get("/Title") or "—")
+    return f"PDF {ws.relative(target)}: {len(reader.pages)} σελίδες · Τίτλος: {title} · Μέγεθος: {target.stat().st_size} bytes"
+
+
+def _pdf_merge(ws, src_list: list[str], output_path: str, overwrite: bool) -> str:
+    from pypdf import PdfReader, PdfWriter
+
+    if len(src_list) < 2:
+        raise ValueError("Για merge χρειάζονται τουλάχιστον 2 PDF αρχεία.")
+    if not output_path or not output_path.strip():
+        raise ValueError("Δώσε output_path για το ενωμένο PDF.")
+    out = ws.resolve(output_path)
+    _guard_output_write(ws, out, overwrite)
+    writer = PdfWriter()
+    total_pages = 0
+    for item in src_list[:50]:
+        p = ws.resolve(item)
+        if not p.is_file():
+            raise ValueError(f"Δεν βρέθηκε το PDF: {item}")
+        for pg in PdfReader(str(p)).pages:
+            writer.add_page(pg)
+            total_pages += 1
+    out.parent.mkdir(parents=True, exist_ok=True)
+    with out.open("wb") as fh:
+        writer.write(fh)
+    return f"ΕΓΙΝΕ: ενώθηκαν {len(src_list)} PDF ({total_pages} σελίδες) στο {ws.relative(out)}"
+
+
+def _parse_page_ranges(raw_pages: str, total: int) -> list[int]:
+    selected: list[int] = []
+    for part in raw_pages.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        try:
+            if "-" in part:
+                a, b = part.split("-", 1)
+                if not a.strip() or not b.strip():
+                    raise ValueError("missing bound")
+                start_i, end_i = int(a.strip()), int(b.strip())
+                if start_i < 1 or end_i < start_i:
+                    raise ValueError("invalid bounds")
+                selected.extend(range(max(1, start_i), min(total, end_i) + 1))
+            else:
+                idx = int(part)
+                if 1 <= idx <= total:
+                    selected.append(idx)
+        except ValueError as exc:
+            raise ValueError(f"Μη έγκυρο εύρος σελίδων '{part}' (παράδειγμα: '1-3,5').") from exc
+    if not selected:
+        raise ValueError(f"Μη έγκυρο εύρος σελίδων (1–{total}).")
+    return selected
+
+
+def _pdf_split(ws, src_path: str, output_path: str, pages: str, overwrite: bool) -> str:
+    from pypdf import PdfReader, PdfWriter
+
+    if not output_path or not output_path.strip():
+        raise ValueError("Δώσε output_path για το νέο PDF.")
+    target = ws.resolve(src_path)
+    if not target.is_file():
+        raise ValueError(f"Δεν βρέθηκε το PDF: {src_path}")
+    reader = PdfReader(str(target))
+    selected = _parse_page_ranges(str(pages or f"1-{len(reader.pages)}").strip(), len(reader.pages))
+    writer = PdfWriter()
+    for idx in selected:
+        writer.add_page(reader.pages[idx - 1])
+    out = ws.resolve(output_path)
+    _guard_output_write(ws, out, overwrite)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    with out.open("wb") as fh:
+        writer.write(fh)
+    return f"ΕΓΙΝΕ: εξήχθησαν {len(selected)} σελίδες από {ws.relative(target)} στο {ws.relative(out)}"
+
+
 def tool_pdf_toolkit(
     ws,
     action: str = "info",
@@ -30,86 +115,16 @@ def tool_pdf_toolkit(
     overwrite: bool = False,
 ) -> str:
     """Merge, split, or inspect PDF files safely inside the project workspace."""
-    from pypdf import PdfReader, PdfWriter
-
     act = str(action or "info").strip().lower()
     src_list = [str(p).strip() for p in (paths or []) if str(p).strip()]
     if not src_list:
         raise ValueError("Δώσε τουλάχιστον μία διαδρομή PDF στο paths.")
-
     if act == "info":
-        target = ws.resolve(src_list[0])
-        if not target.is_file():
-            raise ValueError(f"Δεν βρέθηκε το PDF: {src_list[0]}")
-        reader = PdfReader(str(target))
-        meta = reader.metadata or {}
-        title = str(meta.get("/Title") or "—")
-        return f"PDF {ws.relative(target)}: {len(reader.pages)} σελίδες · Τίτλος: {title} · Μέγεθος: {target.stat().st_size} bytes"
-
+        return _pdf_info(ws, src_list[0])
     if act == "merge":
-        if len(src_list) < 2:
-            raise ValueError("Για merge χρειάζονται τουλάχιστον 2 PDF αρχεία.")
-        if not output_path or not output_path.strip():
-            raise ValueError("Δώσε output_path για το ενωμένο PDF.")
-        out = ws.resolve(output_path)
-        _guard_output_write(ws, out, overwrite)
-        writer = PdfWriter()
-        total_pages = 0
-        for item in src_list[:50]:
-            p = ws.resolve(item)
-            if not p.is_file():
-                raise ValueError(f"Δεν βρέθηκε το PDF: {item}")
-            reader = PdfReader(str(p))
-            for pg in reader.pages:
-                writer.add_page(pg)
-                total_pages += 1
-        out.parent.mkdir(parents=True, exist_ok=True)
-        with out.open("wb") as fh:
-            writer.write(fh)
-        return f"ΕΓΙΝΕ: ενώθηκαν {len(src_list)} PDF ({total_pages} σελίδες) στο {ws.relative(out)}"
-
+        return _pdf_merge(ws, src_list, output_path, overwrite)
     if act == "split":
-        if not output_path or not output_path.strip():
-            raise ValueError("Δώσε output_path για το νέο PDF.")
-        target = ws.resolve(src_list[0])
-        if not target.is_file():
-            raise ValueError(f"Δεν βρέθηκε το PDF: {src_list[0]}")
-        reader = PdfReader(str(target))
-        n = len(reader.pages)
-        selected: list[int] = []
-        raw_pages = str(pages or f"1-{n}").strip()
-        for part in raw_pages.split(","):
-            part = part.strip()
-            if not part:
-                continue
-            try:
-                if "-" in part:
-                    a, b = part.split("-", 1)
-                    if not a.strip() or not b.strip():
-                        raise ValueError("missing bound")
-                    start_i = int(a.strip())
-                    end_i = int(b.strip())
-                    if start_i < 1 or end_i < start_i:
-                        raise ValueError("invalid bounds")
-                    selected.extend(range(max(1, start_i), min(n, end_i) + 1))
-                else:
-                    idx = int(part)
-                    if 1 <= idx <= n:
-                        selected.append(idx)
-            except ValueError as exc:
-                raise ValueError(f"Μη έγκυρο εύρος σελίδων '{part}' (παράδειγμα: '1-3,5').") from exc
-        if not selected:
-            raise ValueError(f"Μη έγκυρο εύρος σελίδων (1–{n}).")
-        writer = PdfWriter()
-        for idx in selected:
-            writer.add_page(reader.pages[idx - 1])
-        out = ws.resolve(output_path)
-        _guard_output_write(ws, out, overwrite)
-        out.parent.mkdir(parents=True, exist_ok=True)
-        with out.open("wb") as fh:
-            writer.write(fh)
-        return f"ΕΓΙΝΕ: εξήχθησαν {len(selected)} σελίδες από {ws.relative(target)} στο {ws.relative(out)}"
-
+        return _pdf_split(ws, src_list[0], output_path, pages, overwrite)
     raise ValueError("Μη έγκυρη ενέργεια pdf_toolkit (χρησιμοποίησε info, merge ή split).")
 
 
@@ -153,6 +168,85 @@ def tool_image_tools(
     return f"ΕΓΙΝΕ: {ws.relative(src)} ({orig_size[0]}x{orig_size[1]}) → {ws.relative(out)} ({new_size[0]}x{new_size[1]}, {out.stat().st_size} bytes)"
 
 
+def _zip_list(ws, arc: Path, archive_path: str) -> str:
+    import zipfile
+
+    if not arc.is_file():
+        raise ValueError(f"Δεν βρέθηκε το αρχείο ZIP: {archive_path}")
+    with zipfile.ZipFile(arc, "r") as zf:
+        infos = zf.infolist()
+        lines = [f"ZIP {ws.relative(arc)} ({len(infos)} στοιχεία):"]
+        for info in infos[:100]:
+            lines.append(f"- {info.filename} ({info.file_size} bytes)")
+        if len(infos) > 100:
+            lines.append(f"... (+{len(infos) - 100} ακόμα)")
+    return "\n".join(lines)
+
+
+def _zip_should_skip(path: Path, arc_resolved: Path) -> bool:
+    return path.resolve() == arc_resolved or path.name == ".env" or any(sp in path.parts for sp in _ZIP_SKIP_PARTS)
+
+
+def _zip_create(ws, arc: Path, paths: list[str] | None, overwrite: bool) -> str:
+    import zipfile
+
+    items = [str(p).strip() for p in (paths or []) if str(p).strip()]
+    if not items:
+        raise ValueError("Δώσε paths για συμπίεση στο .zip.")
+    _guard_output_write(ws, arc, overwrite)
+    arc.parent.mkdir(parents=True, exist_ok=True)
+    arc_resolved = arc.resolve()
+    count = 0
+    with zipfile.ZipFile(arc, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        for item in items[:500]:
+            if count >= 2000:
+                break
+            p = ws.resolve(item)
+            candidates = [p] if p.is_file() else ([c for c in p.rglob("*") if c.is_file()] if p.is_dir() else [])
+            for child in candidates:
+                if count >= 2000:
+                    break
+                if _zip_should_skip(child, arc_resolved):
+                    continue
+                zf.write(child, arcname=ws.relative(child).replace("\\", "/"))
+                count += 1
+    return f"ΕΓΙΝΕ: δημιουργήθηκε το {ws.relative(arc)} ({count} αρχεία, {arc.stat().st_size} bytes)"
+
+
+def _zip_extract(ws, arc: Path, archive_path: str, destination: str, overwrite: bool) -> str:
+    import zipfile
+
+    if not arc.is_file():
+        raise ValueError(f"Δεν βρέθηκε το αρχείο ZIP: {archive_path}")
+    dest_root = ws.resolve(destination or ".")
+    dest_root.mkdir(parents=True, exist_ok=True)
+    dest_resolved = dest_root.resolve()
+    total_bytes = 0
+    extracted = 0
+    with zipfile.ZipFile(arc, "r") as zf:
+        for info in zf.infolist():
+            if info.is_dir():
+                continue
+            if info.file_size > 32 * 1024 * 1024 or total_bytes + info.file_size > 64 * 1024 * 1024:
+                raise ValueError("Το ZIP ξεπερνά το όριο ασφαλείας αποσυμπίεσης (64 MiB).")
+            # Strict Zip-Slip guard using Path.relative_to (prevents out -> out2 prefix bypass!)
+            target = ws.resolve(str((dest_root / info.filename).resolve()))
+            try:
+                target.relative_to(dest_resolved)
+            except ValueError as exc:
+                raise PermissionError(f"Μη ασφαλής διαδρομή μέσα στο ZIP: {info.filename}") from exc
+            _guard_output_write(ws, target, overwrite)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            with zf.open(info, "r") as src_f:
+                data = src_f.read(32 * 1024 * 1024 + 1)
+                if len(data) > 32 * 1024 * 1024 or total_bytes + len(data) > 64 * 1024 * 1024:
+                    raise ValueError("Το ZIP ξεπερνά το όριο ασφαλείας αποσυμπίεσης (64 MiB).")
+                target.write_bytes(data)
+                total_bytes += len(data)
+                extracted += 1
+    return f"ΕΓΙΝΕ: αποσυμπιέστηκαν {extracted} αρχεία ({total_bytes} bytes) στο {ws.relative(dest_root)}"
+
+
 def tool_zip_manager(
     ws,
     action: str = "list",
@@ -162,84 +256,14 @@ def tool_zip_manager(
     overwrite: bool = False,
 ) -> str:
     """Safely list, create, or extract ZIP archives inside the project (with Zip-Slip guard)."""
-    import zipfile
-
     act = str(action or "list").strip().lower()
     if not archive_path or not archive_path.strip():
         raise ValueError("Δώσε διαδρομή αρχείου .zip στο archive_path.")
     arc = ws.resolve(archive_path)
-
     if act == "list":
-        if not arc.is_file():
-            raise ValueError(f"Δεν βρέθηκε το αρχείο ZIP: {archive_path}")
-        with zipfile.ZipFile(arc, "r") as zf:
-            infos = zf.infolist()
-            lines = [f"ZIP {ws.relative(arc)} ({len(infos)} στοιχεία):"]
-            for info in infos[:100]:
-                lines.append(f"- {info.filename} ({info.file_size} bytes)")
-            if len(infos) > 100:
-                lines.append(f"... (+{len(infos) - 100} ακόμα)")
-        return "\n".join(lines)
-
+        return _zip_list(ws, arc, archive_path)
     if act == "create":
-        items = [str(p).strip() for p in (paths or []) if str(p).strip()]
-        if not items:
-            raise ValueError("Δώσε paths για συμπίεση στο .zip.")
-        _guard_output_write(ws, arc, overwrite)
-        arc.parent.mkdir(parents=True, exist_ok=True)
-        arc_resolved = arc.resolve()
-        skip_parts = {".git", ".agent_backups", ".venv", "venv", "__pycache__", "node_modules"}
-        count = 0
-        with zipfile.ZipFile(arc, "w", compression=zipfile.ZIP_DEFLATED) as zf:
-            for item in items[:500]:
-                if count >= 2000:
-                    break
-                p = ws.resolve(item)
-                if p.is_file():
-                    if p.resolve() == arc_resolved or p.name == ".env" or any(sp in p.parts for sp in skip_parts):
-                        continue
-                    zf.write(p, arcname=ws.relative(p).replace("\\", "/"))
-                    count += 1
-                elif p.is_dir():
-                    for child in p.rglob("*"):
-                        if count >= 2000:
-                            break
-                        if not child.is_file():
-                            continue
-                        if child.resolve() == arc_resolved or child.name == ".env" or any(sp in child.parts for sp in skip_parts):
-                            continue
-                        zf.write(child, arcname=ws.relative(child).replace("\\", "/"))
-                        count += 1
-        return f"ΕΓΙΝΕ: δημιουργήθηκε το {ws.relative(arc)} ({count} αρχεία, {arc.stat().st_size} bytes)"
-
+        return _zip_create(ws, arc, paths, overwrite)
     if act == "extract":
-        if not arc.is_file():
-            raise ValueError(f"Δεν βρέθηκε το αρχείο ZIP: {archive_path}")
-        dest_root = ws.resolve(destination or ".")
-        dest_root.mkdir(parents=True, exist_ok=True)
-        total_bytes = 0
-        extracted = 0
-        with zipfile.ZipFile(arc, "r") as zf:
-            for info in zf.infolist():
-                if info.is_dir():
-                    continue
-                if info.file_size > 32 * 1024 * 1024 or total_bytes + info.file_size > 64 * 1024 * 1024:
-                    raise ValueError("Το ZIP ξεπερνά το όριο ασφαλείας αποσυμπίεσης (64 MiB).")
-                # Strict Zip-Slip guard using Path.relative_to (prevents out -> out2 prefix bypass!)
-                target = ws.resolve(str((dest_root / info.filename).resolve()))
-                try:
-                    target.relative_to(dest_root.resolve())
-                except ValueError as exc:
-                    raise PermissionError(f"Μη ασφαλής διαδρομή μέσα στο ZIP: {info.filename}") from exc
-                _guard_output_write(ws, target, overwrite)
-                target.parent.mkdir(parents=True, exist_ok=True)
-                with zf.open(info, "r") as src_f:
-                    data = src_f.read(32 * 1024 * 1024 + 1)
-                    if len(data) > 32 * 1024 * 1024 or total_bytes + len(data) > 64 * 1024 * 1024:
-                        raise ValueError("Το ZIP ξεπερνά το όριο ασφαλείας αποσυμπίεσης (64 MiB).")
-                    target.write_bytes(data)
-                    total_bytes += len(data)
-                    extracted += 1
-        return f"ΕΓΙΝΕ: αποσυμπιέστηκαν {extracted} αρχεία ({total_bytes} bytes) στο {ws.relative(dest_root)}"
-
+        return _zip_extract(ws, arc, archive_path, destination, overwrite)
     raise ValueError("Μη έγκυρη ενέργεια zip_manager (list, create ή extract).")
