@@ -280,6 +280,40 @@
     });
   }
 
+  async function loadFamilyProfiles() {
+    const sel = document.getElementById('family-profile-select');
+    const stEl = document.getElementById('family-profile-status');
+    if (!sel || typeof root.api !== 'function') return;
+    try {
+      const r = await root.api('/api/profiles');
+      sel.replaceChildren();
+      for (const p of r.profiles || []) {
+        const opt = document.createElement('option');
+        opt.value = p.id;
+        opt.textContent = `${p.display_name || p.id} (${p.role})`;
+        if (r.active && r.active.id === p.id) opt.selected = true;
+        sel.appendChild(opt);
+      }
+      if (stEl) {
+        stEl.textContent = r.active
+          ? `Ενεργό προφίλ: ${r.active.display_name || r.active.id} (${r.active.role})`
+          : 'Ένα προφίλ (προεπιλογή) — τα υπάρχοντα δεδομένα μένουν αυτούσια.';
+      }
+    } catch (_) {}
+  }
+
+  async function switchFamilyProfile() {
+    const sel = document.getElementById('family-profile-select');
+    if (!sel || !sel.value || typeof root.api !== 'function') return;
+    const pin = typeof root.prompt === 'function' ? (root.prompt('Κωδικός PIN (κενό αν δεν απαιτείται):') || '') : '';
+    const r = await root.api('/api/profiles/action', { action: 'switch', id: sel.value, pin });
+    if (r.error) { root.showNotice?.('err', r.error); return; }
+    root.showNotice?.('ok', `Αλλαγή στο προφίλ: ${(r.active && r.active.display_name) || sel.value}`);
+    await loadFamilyProfiles();
+    root.loadProviders?.();
+    root.loadSessions?.();
+  }
+
   function boot() {
     initNavIcons();
     selectSettingsPane(activeSettingsPane);
@@ -298,6 +332,8 @@
     loadUsageInsights,
     syncSettingsControls,
     searchSessionsFullText,
+    loadFamilyProfiles,
+    switchFamilyProfile,
     isSidebarCollapsed: () => sidebarCollapsed,
     activeSettingsPane: () => activeSettingsPane,
   };

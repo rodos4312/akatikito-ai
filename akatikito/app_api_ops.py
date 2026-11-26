@@ -558,3 +558,133 @@ class OpsStateMixin:
         except Exception as exc:
             return {'error': str(exc)}
 
+    def _base_data_dir(self) -> Path:
+        if not hasattr(self, '_family_base_dir'):
+            from . import settings as _settings
+            self._family_base_dir = Path(_settings.DEFAULT_PATH).expanduser().resolve().parent
+        return self._family_base_dir
+
+    def _family_manager(self):
+        if getattr(self, '_family_mgr', None) is None:
+            from .family_profiles import FamilyProfiles
+            self._family_mgr = FamilyProfiles(
+                self._base_data_dir(),
+                clock=lambda: getattr(self, '_family_clock', time.monotonic)(),
+            )
+        return self._family_mgr
+
+    def active_profile_paths(self):
+        mgr = self._family_manager()
+        active = mgr.active_profile()
+        return mgr.paths_for(active['id']) if active else None
+
+    def _settings_path(self) -> Path:
+        paths = self.active_profile_paths()
+        if paths is not None:
+            return paths.settings_file
+        from . import settings as _settings
+        return Path(_settings.DEFAULT_PATH)
+
+    def _apply_active_profile(self, paths) -> None:
+        from . import settings as _settings
+        from .usage_ledger import UsageLedger
+        paths.memory_dir.mkdir(parents=True, exist_ok=True)
+        global_memory.DIR = paths.memory_dir
+        self.settings = _settings.Settings.load(paths.settings_file)
+        active = self._family_manager().active_profile() or {}
+        cap = float(active.get('daily_budget') or 0.0)
+        if cap > 0 and (self.settings.daily_budget <= 0 or (active.get('role') == 'restricted' and self.settings.daily_budget > cap)):
+            self.settings.daily_budget = cap
+        self.usage_ledger = UsageLedger(paths.usage_file)
+        self._profile_agenda_file = paths.agenda_file
+        self._profile_sessions_dir = paths.sessions_dir
+        self.agent = None
+        self.store = None
+        self.session_id = None
+        self.transcript = []
+        self.files = []
+        self.streaming = None
+
+    def family_profiles_view(self) -> dict:
+        mgr = self._family_manager()
+        return {'active': mgr.active_profile(), 'profiles': mgr.list_profiles()}
+
+    def check_profile_access(
+        self,
+        *,
+        tool_name: str = '',
+        project_path=None,
+        mobile_bridge: bool = False,
+        advanced: bool = False,
+    ) -> tuple[bool, str]:
+        mgr = self._family_manager()
+        active = mgr.active_profile()
+        if active is None:
+            return True, ''
+        return mgr.check_access(
+            active['id'],
+            tool_name=tool_name,
+            project_path=project_path,
+            mobile_bridge=mobile_bridge,
+            advanced=advanced,
+        )
+
+    def _apply_notes_folder_pref(self, data: dict) -> str | None:
+        if 'notes_folder' not in data:
+            return None
+        raw_nf = str(data.get('notes_folder') or '').strip()
+        if raw_nf:
+            nf_path = Path(raw_nf).expanduser().resolve()
+            if not nf_path.is_dir():
+                return 'Ο φάκελος σημειώσεων δεν υπάρχει.'
+            self.settings.notes_folder = str(nf_path)
+        else:
+            self.settings.notes_folder = ''
+        if self.agent is not None:
+            self.agent.config.notes_folder = self.settings.notes_folder
+            self.agent.ws.notes_folder = self.settings.notes_folder
+        return None
+
+    def _profile_denial_for_prefs(self, data: dict) -> str | None:
+        if data.get('advanced_features'):
+            ok, reason = self.check_profile_access(advanced=True)
+            if not ok:
+                return reason
+        return None
+
+    def family_profile_action(self, data: dict) -> dict:
+        if self.busy:
+            return {'error': 'Περίμενε να ολοκληρωθεί η εργασία.'}
+        from .family_profiles import PinLockoutError
+        mgr = self._family_manager()
+        action = str((data or {}).get('action') or '').strip()
+        try:
+            if action == 'init_primary':
+                prof = mgr.init_primary_profile(
+                    display_name=str(data.get('display_name') or 'Κύριο'),
+                    pin=str(data.get('pin') or ''),
+                )
+                return {'ok': True, 'profile': prof, **self.family_profiles_view()}
+            if action == 'create':
+                prof = mgr.create_profile(
+                    str(data.get('id') or ''),
+                    str(data.get('display_name') or ''),
+                    role=str(data.get('role') or 'standard'),
+                    pin=str(data.get('pin') or ''),
+                    daily_budget=float(data.get('daily_budget') or 0.0),
+                    allow_commands=bool(data.get('allow_commands', True)),
+                    allow_mobile_bridge=bool(data.get('allow_mobile_bridge', True)),
+                    allowed_projects=list(data.get('allowed_projects') or []),
+                )
+                return {'ok': True, 'profile': prof, **self.family_profiles_view()}
+            if action == 'switch':
+                paths = mgr.switch_profile(str(data.get('id') or ''), pin=str(data.get('pin') or ''))
+                self._apply_active_profile(paths)
+                return {'ok': True, **self.family_profiles_view()}
+            return {'error': 'Άγνωστη ενέργεια προφίλ.'}
+        except PinLockoutError as exc:
+            return {'error': str(exc), 'retry_after': exc.retry_after}
+        except (PermissionError, ValueError, TypeError) as exc:
+            return {'error': str(exc)}
+
+

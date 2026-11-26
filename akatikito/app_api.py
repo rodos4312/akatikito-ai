@@ -120,7 +120,7 @@ class AppState(OpsStateMixin, FilesStateMixin, SessionsUpgradeStateMixin, Memory
 
     def _remember_commands(self, values):
         self.settings.allowed_commands = values
-        self.settings.save()
+        self.settings.save(self._settings_path())
 
     def _bind_permissions(self, agent):
         agent.mcp=self.mcp
@@ -132,10 +132,14 @@ class AppState(OpsStateMixin, FilesStateMixin, SessionsUpgradeStateMixin, Memory
             model=agent.config.model, project=agent.ws.root.name,
         )
         agent.config.supports_vision = endpoint_identity(agent.config.base_url)+'|'+agent.config.model in self.settings.vision_models
-        agent.ws.command_guard = lambda command,risk:self.approvals.request(
-            agent.ws.root,'command',{'command':command},risk,
-            autonomous=self.settings.autonomous,stopped=lambda:agent._stop)
+        def cmd_guard(command, risk):
+            ok, reason = self.check_profile_access(tool_name='run_command', project_path=agent.ws.root)
+            if not ok: raise PermissionError(reason)
+            return self.approvals.request(agent.ws.root,'command',{'command':command},risk,autonomous=self.settings.autonomous,stopped=lambda:agent._stop)
+        agent.ws.command_guard = cmd_guard
         def review(target,original,updated):
+            ok, reason = self.check_profile_access(tool_name='write_file', project_path=target)
+            if not ok: raise PermissionError(reason)
             if not self.settings.cautious_edits:return True
             import difflib,hashlib
             sha=hashlib.sha256(updated).hexdigest()
@@ -175,6 +179,7 @@ class AppState(OpsStateMixin, FilesStateMixin, SessionsUpgradeStateMixin, Memory
         if self.busy:
             return {'error': 'Περίμενε να ολοκληρωθεί η εργασία.'}
         for step in (
+            self._profile_denial_for_prefs,
             self._apply_bool_prefs,
             self._apply_routing_and_model_prefs,
             self._apply_budget_and_prices_prefs,
@@ -188,7 +193,7 @@ class AppState(OpsStateMixin, FilesStateMixin, SessionsUpgradeStateMixin, Memory
             from .checkpoints import Checkpoints
             self.agent.config.checkpoints = self.settings.checkpoints
             self.agent.checkpoint_store = Checkpoints(self.agent.ws.root) if self.settings.checkpoints else None
-        self.settings.save()
+        self.settings.save(self._settings_path())
         return self.status()
 
     def _apply_bool_prefs(self, data: dict) -> str | None:
@@ -301,22 +306,6 @@ class AppState(OpsStateMixin, FilesStateMixin, SessionsUpgradeStateMixin, Memory
             self.notice = note.get('notice', '')
         return err
 
-    def _apply_notes_folder_pref(self, data: dict) -> str | None:
-        if 'notes_folder' not in data:
-            return None
-        raw_nf = str(data.get('notes_folder') or '').strip()
-        if raw_nf:
-            nf_path = Path(raw_nf).expanduser().resolve()
-            if not nf_path.is_dir():
-                return 'Ο φάκελος σημειώσεων δεν υπάρχει.'
-            self.settings.notes_folder = str(nf_path)
-        else:
-            self.settings.notes_folder = ''
-        if self.agent is not None:
-            self.agent.config.notes_folder = self.settings.notes_folder
-            self.agent.ws.notes_folder = self.settings.notes_folder
-        return None
-
     def upload_attachment(self,data):
         if self.busy or not self.agent:return {'error':'Συνδέσου και περίμενε να τελειώσει η εργασία.'}
         if data.get('project') is not None and (data.get('project')!=str(self.agent.ws.root) or (data.get('session_id') or '')!=(self.session_id or '')):return {'error':'Άλλαξε η συνομιλία. Επίλεξε ξανά το συνημμένο.'}
@@ -414,7 +403,7 @@ class AppState(OpsStateMixin, FilesStateMixin, SessionsUpgradeStateMixin, Memory
                 updated.set_key(provider, key)
                 updated.key_origins[provider] = destination
             updated.onboarding_complete = True
-            try:updated.save()
+            try:updated.save(self._settings_path())
             except (OSError,ValueError):
                 return {'error':'Δεν αποθηκεύτηκαν οι ρυθμίσεις. Ο οδηγός δεν ολοκληρώθηκε· η προηγούμενη σύνδεση διατηρήθηκε.'}
             self.settings=updated
@@ -724,7 +713,7 @@ class AppState(OpsStateMixin, FilesStateMixin, SessionsUpgradeStateMixin, Memory
         language=data.get('language',self.settings.voice_language)
         if self.busy or self.voice.busy():return {'error':'Περίμενε να ολοκληρωθεί η εργασία.'}
         if model not in MODELS or language not in LANGUAGES:return {'error':'Μη έγκυρη ρύθμιση φωνής.'}
-        self.settings.voice_model=model;self.settings.voice_language=language;self.settings.save()
+        self.settings.voice_model=model;self.settings.voice_language=language;self.settings.save(self._settings_path())
         return self.voice_status()
 
     def start_voice(self,data,prepare=False):

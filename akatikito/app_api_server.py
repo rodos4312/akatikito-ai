@@ -129,6 +129,7 @@ POST_ROUTES = {
     "/api/copy": lambda s, d: s.copy_text(d.get("text", "")),
     "/api/paste": lambda s, d: s.paste_text(d),
     "/api/chat/export": lambda s, d: s.export_chat(d),
+    "/api/profiles/action": lambda s, d: s.family_profile_action(d),
 }
 
 
@@ -248,6 +249,8 @@ def make_handler(state: AppState) -> type:
                 self._send({"sessions": state.sessions()})
             elif path == "/api/backups":
                 self._send({"backups": state.backups()})
+            elif path == "/api/profiles":
+                self._send(state.family_profiles_view())
             else:
                 self._send({"error": "άγνωστη διαδρομή"}, 404)
 

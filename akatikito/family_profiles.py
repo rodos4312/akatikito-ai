@@ -12,6 +12,8 @@ import hashlib
 import hmac
 import re
 import secrets
+import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -21,6 +23,16 @@ _PROFILE_ID_RE = re.compile(r"^[a-z][a-z0-9_-]{1,31}$")
 _VALID_ROLES = ("admin", "standard", "restricted")
 _ROLE_RANK = {"restricted": 0, "standard": 1, "admin": 2}
 _PBKDF2_ITERS = 120_000
+PIN_MAX_WRONG = 5
+PIN_LOCKOUT_SECONDS = 30.0
+
+
+class PinLockoutError(PermissionError):
+    """Raised when too many invalid PIN attempts trigger temporary lockout."""
+
+    def __init__(self, message: str, *, retry_after: float) -> None:
+        super().__init__(message)
+        self.retry_after = max(0.0, float(retry_after))
 
 
 def _hash_pin(pin: str) -> str:
@@ -59,15 +71,19 @@ class ProfilePaths:
     memory_db: Path
     usage_file: Path
     sessions_dir: Path
+    agenda_file: Path
 
 
 class FamilyProfiles:
     """Manages isolated family profiles stored under `<data_dir>/profiles/`."""
 
-    def __init__(self, data_dir: str | Path) -> None:
+    def __init__(self, data_dir: str | Path, *, clock: Callable[[], float] | None = None) -> None:
         self.data_dir = Path(data_dir).expanduser().resolve()
         self.profiles_dir = self.data_dir / "profiles"
         self.registry_path = self.profiles_dir / "registry.json"
+        self._clock = clock or time.monotonic
+        self._pin_failures: dict[str, int] = {}
+        self._pin_locked_until: dict[str, float] = {}
 
     def _load(self) -> dict:
         data = load_json(self.registry_path, lambda: {"active": "", "profiles": {}})
@@ -79,13 +95,7 @@ class FamilyProfiles:
         self.profiles_dir.mkdir(parents=True, exist_ok=True)
         save_json(self.registry_path, data)
 
-    def paths_for(self, profile_id: str) -> ProfilePaths:
-        pid = str(profile_id or "").strip().lower()
-        if not _PROFILE_ID_RE.fullmatch(pid):
-            raise ValueError("Μη έγκυρο αναγνωριστικό προφίλ (μόνο πεζά a-z, 0-9, -, _).")
-        root = (self.profiles_dir / pid).resolve()
-        if not root.is_relative_to(self.profiles_dir.resolve()):
-            raise ValueError("Μη επιτρεπτή διαδρομή προφίλ.")
+    def _paths_from_root(self, pid: str, root: Path) -> ProfilePaths:
         mem_dir = root / "memory"
         return ProfilePaths(
             profile_id=pid,
@@ -95,7 +105,44 @@ class FamilyProfiles:
             memory_db=mem_dir / "memory.db",
             usage_file=root / "usage.json",
             sessions_dir=root / "sessions",
+            agenda_file=root / "agenda.json",
         )
+
+    def paths_for(self, profile_id: str) -> ProfilePaths:
+        pid = str(profile_id or "").strip().lower()
+        if not _PROFILE_ID_RE.fullmatch(pid):
+            raise ValueError("Μη έγκυρο αναγνωριστικό προφίλ (μόνο πεζά a-z, 0-9, -, _).")
+        row = self._load()["profiles"].get(pid)
+        if isinstance(row, dict) and row.get("in_place") is True:
+            return self._paths_from_root(pid, self.data_dir)
+        root = (self.profiles_dir / pid).resolve()
+        if not root.is_relative_to(self.profiles_dir.resolve()):
+            raise ValueError("Μη επιτρεπτή διαδρομή προφίλ.")
+        return self._paths_from_root(pid, root)
+
+    def init_primary_profile(self, display_name: str = "Κύριο", *, pin: str = "") -> dict:
+        """Register existing data_dir in-place as the primary admin profile (zero copy)."""
+        data = self._load()
+        if "primary" in data["profiles"]:
+            return self._public_view(data["profiles"]["primary"])
+        if not str(pin or "").strip():
+            raise ValueError("Το κύριο προφίλ (admin) χρειάζεται PIN προστασίας.")
+        record = {
+            "id": "primary",
+            "display_name": str(display_name or "Κύριο").strip()[:60],
+            "role": "admin",
+            "pin_hash": _hash_pin(pin),
+            "daily_budget": 0.0,
+            "allow_commands": True,
+            "allow_mobile_bridge": True,
+            "allowed_projects": [],
+            "in_place": True,
+        }
+        data["profiles"]["primary"] = record
+        if not data.get("active"):
+            data["active"] = "primary"
+        self._save(data)
+        return self._public_view(record)
 
     def create_profile(
         self,
@@ -150,6 +197,27 @@ class FamilyProfiles:
         row = data["profiles"].get(active_id)
         return self._public_view(row) if row else None
 
+    def _verify_pin_with_lockout(self, profile_id: str, pin_hash: str, pin: str) -> None:
+        now = float(self._clock())
+        locked_until = self._pin_locked_until.get(profile_id, 0.0)
+        if now < locked_until:
+            remaining = locked_until - now
+            raise PinLockoutError(
+                f"Πολλές λανθασμένες προσπάθειες PIN. Δοκίμασε ξανά σε {int(remaining) + 1} δευτ.",
+                retry_after=remaining,
+            )
+        if locked_until:
+            self._pin_locked_until.pop(profile_id, None)
+            self._pin_failures.pop(profile_id, None)
+        if not pin_hash or not _verify_pin(pin, pin_hash):
+            fails = self._pin_failures.get(profile_id, 0) + 1
+            self._pin_failures[profile_id] = fails
+            if fails >= PIN_MAX_WRONG:
+                self._pin_locked_until[profile_id] = now + PIN_LOCKOUT_SECONDS
+                self._pin_failures[profile_id] = 0
+            raise PermissionError("Απαιτείται έγκυρος κωδικός PIN για αλλαγή σε αυτό το προφίλ.")
+        self._pin_failures.pop(profile_id, None)
+
     def switch_profile(self, target_id: str, *, pin: str = "") -> ProfilePaths:
         """Switch active profile; requires valid PIN when target has PIN or higher privilege."""
         data = self._load()
@@ -159,8 +227,7 @@ class FamilyProfiles:
         current = data["profiles"].get(data.get("active") or "")
         elevating = current is not None and _ROLE_RANK[target["role"]] > _ROLE_RANK[current["role"]]
         if target.get("pin_hash") or elevating:
-            if not target.get("pin_hash") or not _verify_pin(pin, target["pin_hash"]):
-                raise PermissionError("Απαιτείται έγκυρος κωδικός PIN για αλλαγή σε αυτό το προφίλ.")
+            self._verify_pin_with_lockout(target["id"], str(target.get("pin_hash") or ""), pin)
         data["active"] = target["id"]
         self._save(data)
         return self.paths_for(target["id"])
@@ -172,12 +239,15 @@ class FamilyProfiles:
         tool_name: str = "",
         project_path: str | Path | None = None,
         mobile_bridge: bool = False,
+        advanced: bool = False,
     ) -> tuple[bool, str]:
-        """Enforce restricted profile boundaries (commands, mobile bridge, allowed folders)."""
+        """Enforce restricted profile boundaries (commands, mobile bridge, advanced, allowed folders)."""
         data = self._load()
         row = data["profiles"].get(str(profile_id or "").strip().lower())
         if row is None:
             return False, "Άγνωστο προφίλ."
+        if advanced and row.get("role") == "restricted":
+            return False, "Το τρέχον προφίλ δεν επιτρέπει αλλαγές στο Advanced."
         if tool_name == "run_command" and not row.get("allow_commands", True):
             return False, "Η εκτέλεση εντολών (run_command) είναι απενεργοποιημένη σε αυτό το προφίλ."
         if mobile_bridge and not row.get("allow_mobile_bridge", True):
