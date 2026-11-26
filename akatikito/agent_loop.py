@@ -377,6 +377,14 @@ def _call_model_with_recovery(agent, request, tools, step: int, attempted: set[s
                 return {"content": early, "tool_calls": []}, {}
 
 
+def _append_internal_nudge(agent, note: str) -> None:
+    """Attach a pacing note to the latest trailing tool result when possible (cache-friendly)."""
+    if agent.messages and agent.messages[-1].get("role") == "tool" and isinstance(agent.messages[-1].get("content"), str):
+        agent.messages[-1]["content"] = agent.messages[-1]["content"].rstrip() + "\n\n" + note
+        return
+    agent.messages.append({"role": "user", "content": note, "_origin": "internal"})
+
+
 def _maybe_step_budget_nudge(agent, step: int, nudged: set[str]) -> None:
     """Inject concise internal pacing hints at 65% and 85% of max_steps so turns finish cleanly."""
     limit = int(getattr(agent.config, "max_steps", 0) or 0)
@@ -386,26 +394,49 @@ def _maybe_step_budget_nudge(agent, step: int, nudged: set[str]) -> None:
     wrap_at = max(warn_at + 2, int(limit * 0.85))
     if step >= wrap_at and "wrap" not in nudged:
         nudged.add("wrap")
-        agent.messages.append({
-            "role": "user",
-            "content": (
-                f"[ΤΕΛΙΚΗ ΕΥΘΕΙΑ: βήμα {step}/{limit}] Ολοκλήρωσε τώρα: κάνε μόνο την απαραίτητη "
-                "τελική αλλαγή, τρέξε 1 τελικό έλεγχο και δώσε καθαρή απάντηση στον χρήστη. "
-                "Μην ξεκινάς νέο fine-tuning."
-            ),
-            "_origin": "internal",
-        })
+        _append_internal_nudge(
+            agent,
+            f"[ΤΕΛΙΚΗ ΕΥΘΕΙΑ: βήμα {step}/{limit}] Ολοκλήρωσε τώρα: κάνε μόνο την απαραίτητη "
+            "τελική αλλαγή, τρέξε 1 τελικό έλεγχο και δώσε καθαρή απάντηση στον χρήστη. "
+            "Μην ξεκινάς νέο fine-tuning.",
+        )
     elif step >= warn_at and "pace" not in nudged:
         nudged.add("pace")
-        agent.messages.append({
-            "role": "user",
-            "content": (
-                f"[ΡΥΘΜΟΣ ΒΗΜΑΤΩΝ: βήμα {step}/{limit}] Ομαδοποίησε τις υπόλοιπες αλλαγές "
-                "σε 1-2 edits και απέφυγε επαναληπτικά micro-edits ή πολλαπλά run_command — "
-                "μόλις περάσει ο έλεγχος, κλείσε με την τελική απάντηση."
-            ),
-            "_origin": "internal",
-        })
+        _append_internal_nudge(
+            agent,
+            f"[ΡΥΘΜΟΣ ΒΗΜΑΤΩΝ: βήμα {step}/{limit}] Ομαδοποίησε τις υπόλοιπες αλλαγές "
+            "σε 1-2 edits και απέφυγε επαναληπτικά micro-edits ή πολλαπλά run_command — "
+            "μόλις περάσει ο έλεγχος, κλείσε με την τελική απάντηση.",
+        )
+
+
+def _grace_final_summary(agent, step: int) -> str | None:
+    """Give the model one final tool-free grace call on step-limit exhaustion for a clean summary."""
+    from .model import ModelError
+
+    limit = int(getattr(agent.config, "max_steps", 0) or 0)
+    if limit < 5 or agent._stop or agent.repair.pending:
+        return None
+    _append_internal_nudge(
+        agent,
+        f"[ΟΡΙΟ ΒΗΜΑΤΩΝ {limit}/{limit} — ΤΕΛΙΚΗ ΣΥΝΟΨΗ ΧΩΡΙΣ ΕΡΓΑΛΕΙΑ] "
+        "Έφτασες στο όριο βημάτων. Δεν υπάρχουν άλλα εργαλεία σε αυτή την κλήση. "
+        "Γράψε τώρα μια σύντομη, ξεκάθαρη σύνοψη για τον χρήστη: τι ολοκληρώθηκε, "
+        "ποια αρχεία άλλαξαν/ελέγχθηκαν, και τι απομένει αν χρειάζεται συνέχεια.",
+    )
+    request, _tools, early = _prepare_step_request(agent, step)
+    if early is not None:
+        return early
+    try:
+        reply, usage = agent._model_reply(request, [], step)
+    except ModelError:
+        return None
+    _calls, content, stopped = _record_model_reply(agent, reply, usage, step)
+    if stopped or not content:
+        return None
+    agent.events.emit("report_step", step=step)
+    agent.events.emit("answer", text=content, steps=step, tokens=dict(agent.tokens))
+    return content
 
 
 def run_chat_turn(agent, text: str, internal: bool = False) -> str:
@@ -445,4 +476,7 @@ def run_chat_turn(agent, text: str, internal: bool = False) -> str:
     agent.events.emit("limit", steps=agent.config.max_steps)
     if agent.repair.pending:
         return agent._repair_report()
+    grace = _grace_final_summary(agent, agent.config.max_steps)
+    if grace is not None:
+        return grace
     return agent._progress_report(f"Έφτασα το όριο των {agent.config.max_steps} βημάτων.")
