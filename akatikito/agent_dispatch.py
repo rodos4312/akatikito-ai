@@ -77,7 +77,7 @@ def _check_learning_quota(agent, name: str, args: dict) -> tuple[tuple[str, str]
 
 def _target_paths(args: dict) -> list[str]:
     if isinstance(args.get("files"), list):
-        return [item.get("path", "") for item in args.get("files", [])]
+        return [item.get("path", "") if isinstance(item, dict) else str(item) for item in args.get("files", [])]
     return [args.get("path", "")]
 
 

@@ -41,7 +41,7 @@ FEATURES: dict[str, Feature] = {
             "git",
             "Εργαλεία Git",
             "Έλεγχος κατάστασης, διαφορών, commit και draft PR με υποχρεωτικούς ελέγχους (μόνο σε φακέλους Ανάπτυξης).",
-            tools=("git_status_diff",),
+            tools=("git_status_diff", "git_prepare_commit", "git_commit", "prepare_draft_pr"),
             warning="Ενεργοποιεί εργαλεία Git (status, diff, commit με έλεγχο). Ποτέ force-push ή --no-verify.",
         ),
         Feature(
@@ -129,4 +129,6 @@ def apply_preferences(settings, agent, data: dict) -> str | None:
     settings.advanced_features = sanitize_feature_list(raw)
     if agent is not None and data.get("apply_now", True):
         agent._blocked_advanced_tools = blocked_tools(settings)
+        if getattr(agent, "ws", None) is not None:
+            agent.ws.advanced_settings = settings
     return None

@@ -421,6 +421,7 @@ class AppState(OpsStateMixin, FilesStateMixin, SessionsUpgradeStateMixin, Memory
             self.agent=new_agent
             from . import advanced
             self.agent._blocked_advanced_tools = advanced.blocked_tools(updated)
+            self.agent.ws.advanced_settings = updated
             self.agent.events.subscribe(self.emit_event)
             self._bind_permissions(self.agent)
             self.store = SessionStore(project)

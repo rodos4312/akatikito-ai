@@ -166,3 +166,4 @@ for _name in ('code','debug','assistant'):
     MODES[_name]['tools'] += ['create_word_document','create_excel_sheet','create_pdf_document','plan_file_operations','apply_file_operations','plan_file_undo','undo_file_operations']
 for _name in ('code', 'assistant'):
     MODES[_name]['tools'] += ['propose_note_edit', 'build_content_draft']
+MODES['code']['tools'] += ['git_prepare_commit', 'git_commit', 'prepare_draft_pr']

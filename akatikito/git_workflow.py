@@ -187,3 +187,93 @@ def prepare_draft_pr(
         "pushed": False,
         "published": False,
     }
+
+
+def _ws_settings(ws):
+    cfg = getattr(ws, "advanced_settings", None)
+    if cfg is not None:
+        return cfg
+    from .settings import Settings
+
+    return Settings.load()
+
+
+def tool_git_prepare_commit(ws, files: list[str] | None = None) -> str:
+    import json
+
+    res = prepare_commit(ws.root, _ws_settings(ws), project_profile="dev", files=files)
+    return json.dumps(res, ensure_ascii=False, indent=2)
+
+
+def tool_git_commit(ws, message: str, files: list[str] | None = None) -> str:
+    import json
+
+    cfg = _ws_settings(ws)
+    prep = prepare_commit(ws.root, cfg, project_profile="dev", files=files)
+    if not prep.get("ok"):
+        return json.dumps(prep, ensure_ascii=False, indent=2)
+    confirm = getattr(ws, "confirm_write", None)
+    preview = f"Git commit: {message}\nFiles: {', '.join(prep['files'])}\n{prep.get('diff_stat', '')}"
+    if callable(confirm) and not confirm(f"git_commit:{message[:60]}", preview):
+        return "ΑΠΟΡΡΙΨΗ: ο χρήστης δεν ενέκρινε το git commit."
+    done = execute_commit(ws.root, cfg, message, project_profile="dev", files=prep["files"], user_approved=True)
+    return json.dumps(done, ensure_ascii=False, indent=2)
+
+
+def tool_prepare_draft_pr(ws, title: str, body: str, base_branch: str = "main") -> str:
+    import json
+
+    res = prepare_draft_pr(ws.root, _ws_settings(ws), title=title, body=body, base_branch=base_branch, project_profile="dev")
+    return json.dumps(res, ensure_ascii=False, indent=2)
+
+
+GIT_WORKFLOW_SPECS: list[dict] = [
+    {
+        "type": "function",
+        "function": {
+            "name": "git_prepare_commit",
+            "description": "Scan changed files for secrets and preview diff before committing (Advanced Git only).",
+            "parameters": {
+                "type": "object",
+                "properties": {"files": {"type": "array", "items": {"type": "string"}}},
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "git_commit",
+            "description": "Create a local Git commit after secret scan and explicit owner diff approval (never pushes).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "message": {"type": "string", "description": "Clean commit message"},
+                    "files": {"type": "array", "items": {"type": "string"}},
+                },
+                "required": ["message"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "prepare_draft_pr",
+            "description": "Prepare draft Pull Request text and diff summary locally (never pushes or publishes).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "title": {"type": "string"},
+                    "body": {"type": "string"},
+                    "base_branch": {"type": "string"},
+                },
+                "required": ["title", "body"],
+            },
+        },
+    },
+]
+
+GIT_WORKFLOW_HANDLERS = {
+    "git_prepare_commit": tool_git_prepare_commit,
+    "git_commit": tool_git_commit,
+    "prepare_draft_pr": tool_prepare_draft_pr,
+}
