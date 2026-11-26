@@ -51,3 +51,12 @@ jobs:
         env:
           PYTHONUTF8: "1"
         run: python scripts/coverage_check.py
+
+      - name: Playwright live browser UI smoke (Ubuntu)
+        if: runner.os == 'Linux'
+        env:
+          PYTHONUTF8: "1"
+        run: |
+          python -m pip install playwright
+          python -m playwright install chromium
+          python -m pytest tests/test_ui_playwright_smoke.py -q

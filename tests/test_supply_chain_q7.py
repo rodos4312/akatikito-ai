@@ -7,6 +7,7 @@ from scripts.supply_chain_check import (
     check_release_age,
     check_requirement_bounds,
     check_workflow_sha_pins,
+    diff_requirement_maps,
     run_offline_checks,
 )
 
@@ -50,3 +51,11 @@ def test_requirement_bounds_and_release_age_policy(tmp_path):
 def test_real_repo_passes_offline_supply_chain_checks():
     ok, errs = run_offline_checks()
     assert ok, f"Supply chain issues: {errs}"
+
+
+def test_dependency_diff_report_detects_added_changed_removed():
+    old = {"ruff": "==0.15.0", "oldpkg": "==1.0.0", "pytest": "==9.2.0"}
+    new = {"ruff": "==0.16.1", "coverage": "==7.17.3", "pytest": "==9.2.0"}
+    changes = diff_requirement_maps(old, new)
+    by_pkg = {c["pkg"]: c["change"] for c in changes}
+    assert by_pkg == {"coverage": "added", "oldpkg": "removed", "ruff": "changed"}

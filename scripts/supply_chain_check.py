@@ -11,6 +11,7 @@ from typing import Callable
 
 ROOT = Path(__file__).resolve().parents[1]
 MIN_RELEASE_AGE_DAYS = 7
+REQ_FILES = ("requirements.txt", "requirements-features.txt", "requirements-dev.txt")
 
 _USES_RE = re.compile(r"^\s*-?\s*uses:\s*([^\s#]+)")
 _SHA_REF_RE = re.compile(r"@[0-9a-f]{40}$")
@@ -150,6 +151,70 @@ def check_osv(root: Path = ROOT) -> list[str]:
     return errors
 
 
+def _parse_req_map(text: str) -> dict[str, str]:
+    out: dict[str, str] = {}
+    for line in text.splitlines():
+        clean = line.split("#", 1)[0].strip()
+        if not clean or clean.startswith("-"):
+            continue
+        m = re.match(r"^([A-Za-z0-9_.-]+)\s*(.*)$", clean)
+        if m:
+            out[m.group(1).lower()] = m.group(2).strip()
+    return out
+
+
+def diff_requirement_maps(old_map: dict[str, str], new_map: dict[str, str]) -> list[dict[str, str]]:
+    changes: list[dict[str, str]] = []
+    for pkg in sorted(set(old_map) | set(new_map)):
+        before, after = old_map.get(pkg), new_map.get(pkg)
+        if before is None and after is not None:
+            changes.append({"pkg": pkg, "change": "added", "before": "", "after": after})
+        elif before is not None and after is None:
+            changes.append({"pkg": pkg, "change": "removed", "before": before, "after": ""})
+        elif before != after:
+            changes.append({"pkg": pkg, "change": "changed", "before": before or "", "after": after or ""})
+    return changes
+
+
+def dependency_diff_report(root: Path = ROOT, base_ref: str = "HEAD~1") -> list[dict[str, str]]:
+    import shutil
+    import subprocess
+
+    git_bin = shutil.which("git")
+    if not git_bin or not (root / ".git").exists():
+        return []
+    all_changes: list[dict[str, str]] = []
+    for rel in REQ_FILES:
+        cur_path = root / rel
+        new_map = _parse_req_map(cur_path.read_text(encoding="utf-8-sig")) if cur_path.is_file() else {}
+        show = subprocess.run(
+            [git_bin, "show", f"{base_ref}:{rel}"],
+            cwd=str(root), capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=10,
+        )
+        old_map = _parse_req_map(show.stdout) if show.returncode == 0 else {}
+        for row in diff_requirement_maps(old_map, new_map):
+            all_changes.append({"file": rel, **row})
+    return all_changes
+
+
+def _emit_diff_report(changes: list[dict[str, str]]) -> None:
+    import os
+
+    lines = ["### Dependency & Lockfile Diff (Q7)"]
+    if not changes:
+        lines.append("No Python requirement additions, removals, or version changes detected.")
+    else:
+        lines.extend(["| File | Package | Change | Before | After |", "|---|---|---|---|---|"])
+        for c in changes:
+            lines.append(f"| `{c['file']}` | `{c['pkg']}` | **{c['change']}** | `{c['before']}` | `{c['after']}` |")
+    report = "\n".join(lines)
+    print(report)
+    summary_file = os.environ.get("GITHUB_STEP_SUMMARY", "").strip()
+    if summary_file:
+        with Path(summary_file).open("a", encoding="utf-8") as fh:
+            fh.write("\n" + report + "\n")
+
+
 def run_offline_checks(root: Path = ROOT) -> tuple[bool, list[str]]:
     errors = check_workflow_sha_pins(root) + check_requirement_bounds(root)
     return (len(errors) == 0), errors
@@ -164,6 +229,8 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Supply-chain policy checks (QUALITY-PLAN-2 Q7)")
     parser.add_argument("--release-age", action="store_true", help="Check PyPI 7-day release age (requires network)")
     parser.add_argument("--osv", action="store_true", help="Query OSV.dev for known advisories (requires network)")
+    parser.add_argument("--diff-report", action="store_true", help="Print dependency diff table vs --base-ref")
+    parser.add_argument("--base-ref", default="HEAD~1", help="Git ref for --diff-report (default: HEAD~1)")
     parser.add_argument("--json", action="store_true", help="Output JSON report")
     args = parser.parse_args(argv)
 
@@ -172,6 +239,8 @@ def main(argv: list[str] | None = None) -> int:
         errors.extend(check_release_age())
     if args.osv:
         errors.extend(check_osv())
+    if args.diff_report:
+        _emit_diff_report(dependency_diff_report(ROOT, args.base_ref))
     ok = len(errors) == 0
     if args.json:
         print(json.dumps({"ok": ok, "errors": errors}, ensure_ascii=False, indent=2))

@@ -100,5 +100,5 @@ jobs:
           PYTHONUTF8: "1"
         run: |
           python -m pip install httpx pip-audit
-          python scripts/supply_chain_check.py --release-age --osv
+          python scripts/supply_chain_check.py --release-age --osv --diff-report
           pip-audit -r requirements.txt -r requirements-features.txt --progress-spinner off
