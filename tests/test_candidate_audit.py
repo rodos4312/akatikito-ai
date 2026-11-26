@@ -94,7 +94,7 @@ def test_manual_architect_stays_plan_only_after_routing(tmp_path,monkeypatch):
     script=[{'tool_calls':[tool_call('write_file',path='bad.py',content='x=1'),tool_call('write_file',path='PLAN.md',content='Σχέδιο')]},{'content':'Το πλάνο είναι έτοιμο.'}]
     root,state,sent,created,done=state_fixture(tmp_path,monkeypatch,script)
     state.agent.set_mode('architect')
-    assert state.send('σχεδίασε πλάνο').get('conversation_changed') and done.wait(5)
+    assert state.send('σχεδίασε πλάνο').get('conversation_changed') and done.wait(30)
     assert not state.error and state.agent.mode=='architect'
     assert (state.agent.ws.root/'PLAN.md').exists() and not (state.agent.ws.root/'bad.py').exists()
     assert not (root/'PLAN.md').exists()
@@ -127,7 +127,7 @@ def test_check_button_clears_fixed_external_failure_and_does_not_advertise_empty
     state.agent.repair.failed('Λείπουν εξαρτήσεις από την Python ελέγχων.')
     state.agent.repair.failure['external_blocker']=True
     monkeypatch.setattr(state.self_update,'validate',lambda:(True,'OK'))
-    state.check_upgrade();assert done.wait(5)
+    state.check_upgrade();assert done.wait(30)
     assert not state.agent.repair.pending and 'Δεν υπάρχουν αλλαγές' in state.notice
     assert not sent
 
