@@ -146,3 +146,72 @@ def request_publish_handoff(draft_path: str | Path, *, user_approved: bool = Fal
     if not path.is_file():
         raise FileNotFoundError(f"Δεν βρέθηκε το πρόχειρο: {path}")
     return {"ready_for_manual_publish": True, "path": str(path), "published": False}
+
+
+def tool_build_content_draft(
+    ws,
+    topic: str,
+    outline: list[str],
+    body: str,
+    sources: list[dict],
+    fmt: str = "md",
+    output_subdir: str = "drafts",
+    title: str = "",
+) -> str:
+    """Model tool wrapper: saves sourced MD/DOCX draft strictly inside workspace; never publishes."""
+    target_dir = ws.resolve(output_subdir or "drafts")
+    parsed_sources = [
+        ContentSource(title=str(s.get("title") or "Πηγή"), reference=str(s.get("reference") or ""))
+        for s in (sources or [])
+        if isinstance(s, dict) and str(s.get("reference") or "").strip()
+    ]
+    res = build_content_draft(
+        topic,
+        outline=[str(x) for x in (outline or [])],
+        body=body,
+        sources=parsed_sources,
+        output_dir=target_dir,
+        fmt=fmt,
+        title=title or None,
+    )
+    rel = ws.relative(Path(res["path"]))
+    return f"ΕΓΙΝΕ: αποθηκεύτηκε τοπικό πρόχειρο ({res['format']}) στο {rel} με {len(parsed_sources)} πηγές (χωρίς δημοσίευση)."
+
+
+CONTENT_SPECS: list[dict] = [
+    {
+        "type": "function",
+        "function": {
+            "name": "build_content_draft",
+            "description": "Save a reviewed Research->Outline->Draft content piece locally as .md or .docx with verified sources (never publishes).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "topic": {"type": "string", "description": "Topic of the piece"},
+                    "outline": {"type": "array", "items": {"type": "string"}, "description": "Outline sections"},
+                    "body": {"type": "string", "description": "Full text body"},
+                    "sources": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "title": {"type": "string"},
+                                "reference": {"type": "string"},
+                            },
+                            "required": ["title", "reference"],
+                        },
+                        "description": "Verified sources",
+                    },
+                    "fmt": {"type": "string", "enum": ["md", "docx"], "description": "Output format (md or docx)"},
+                    "output_subdir": {"type": "string", "description": "Relative folder inside project (default drafts)"},
+                    "title": {"type": "string", "description": "Optional heading"},
+                },
+                "required": ["topic", "outline", "body", "sources"],
+            },
+        },
+    }
+]
+
+CONTENT_HANDLERS = {
+    "build_content_draft": tool_build_content_draft,
+}
