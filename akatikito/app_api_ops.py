@@ -661,6 +661,20 @@ class OpsStateMixin(ExtrasStateMixin):
                 return reason
         return None
 
+    def _family_create_profile(self, mgr, data: dict) -> dict:
+        mgr.verify_admin_pin(str(data.get('admin_pin') or ''))
+        prof = mgr.create_profile(
+            str(data.get('id') or ''),
+            str(data.get('display_name') or ''),
+            role=str(data.get('role') or 'standard'),
+            pin=str(data.get('pin') or ''),
+            daily_budget=float(data.get('daily_budget') or 0.0),
+            allow_commands=bool(data.get('allow_commands', True)),
+            allow_mobile_bridge=bool(data.get('allow_mobile_bridge', True)),
+            allowed_projects=list(data.get('allowed_projects') or []),
+        )
+        return {'ok': True, 'profile': prof, **self.family_profiles_view()}
+
     def family_profile_action(self, data: dict) -> dict:
         if self.busy:
             return {'error': 'Περίμενε να ολοκληρωθεί η εργασία.'}
@@ -675,17 +689,7 @@ class OpsStateMixin(ExtrasStateMixin):
                 )
                 return {'ok': True, 'profile': prof, **self.family_profiles_view()}
             if action == 'create':
-                prof = mgr.create_profile(
-                    str(data.get('id') or ''),
-                    str(data.get('display_name') or ''),
-                    role=str(data.get('role') or 'standard'),
-                    pin=str(data.get('pin') or ''),
-                    daily_budget=float(data.get('daily_budget') or 0.0),
-                    allow_commands=bool(data.get('allow_commands', True)),
-                    allow_mobile_bridge=bool(data.get('allow_mobile_bridge', True)),
-                    allowed_projects=list(data.get('allowed_projects') or []),
-                )
-                return {'ok': True, 'profile': prof, **self.family_profiles_view()}
+                return self._family_create_profile(mgr, data)
             if action == 'switch':
                 paths = mgr.switch_profile(str(data.get('id') or ''), pin=str(data.get('pin') or ''))
                 self._apply_active_profile(paths)

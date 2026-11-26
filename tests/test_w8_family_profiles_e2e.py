@@ -77,6 +77,7 @@ def test_w8_two_profiles_in_same_appstate_isolate_all_data_and_enforce_pin_backo
             "role": "restricted",
             "daily_budget": 0.20,
             "allowed_projects": [str(school)],
+            "admin_pin": "2468",
         }
     )
     assert not r_child.get("error"), r_child

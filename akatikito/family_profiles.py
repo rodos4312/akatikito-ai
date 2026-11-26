@@ -218,6 +218,20 @@ class FamilyProfiles:
             raise PermissionError("Απαιτείται έγκυρος κωδικός PIN για αλλαγή σε αυτό το προφίλ.")
         self._pin_failures.pop(profile_id, None)
 
+    def verify_admin_pin(self, admin_pin: str) -> None:
+        """Require the primary/admin profile PIN before creating new profiles."""
+        data = self._load()
+        profiles = data.get("profiles") or {}
+        admin = profiles.get("primary")
+        if not (isinstance(admin, dict) and admin.get("pin_hash")):
+            admin = next(
+                (row for row in profiles.values() if row.get("role") == "admin" and row.get("pin_hash")),
+                None,
+            )
+        if admin is None:
+            return
+        self._verify_pin_with_lockout(admin["id"], str(admin.get("pin_hash") or ""), admin_pin)
+
     def switch_profile(self, target_id: str, *, pin: str = "") -> ProfilePaths:
         """Switch active profile; requires valid PIN when target has PIN or higher privilege."""
         data = self._load()

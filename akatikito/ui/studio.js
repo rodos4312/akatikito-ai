@@ -397,6 +397,46 @@
     root.showNotice?.('ok', 'Η υπηρεσία 24/7 σταμάτησε.');
   }
 
+  function slugProfileId(name) {
+    const clean = String(name || '').toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 24);
+    if (/^[a-z][a-z0-9_-]{1,31}$/.test(clean)) return clean;
+    return 'p-' + Math.random().toString(36).slice(2, 8);
+  }
+
+  function validateNewProfileForm(name, role, pin, confirmPin) {
+    if (!name) return 'Γράψε όνομα για το νέο προφίλ.';
+    if (role === 'admin') {
+      if (pin.length < 4) return 'Το προφίλ ενήλικα απαιτεί PIN τουλάχιστον 4 χαρακτήρων.';
+      if (pin !== confirmPin) return 'Τα δύο πεδία PIN δεν ταιριάζουν.';
+    }
+    return '';
+  }
+
+  async function createFamilyProfile() {
+    if (typeof root.api !== 'function') return;
+    const name = String(byId('fp-name')?.value || '').trim();
+    const role = String(byId('fp-role')?.value || 'restricted').trim();
+    const pin = String(byId('fp-pin')?.value || '').trim();
+    const confirmPin = String(byId('fp-pin-confirm')?.value || '').trim();
+    const adminPin = String(byId('fp-admin-pin')?.value || '').trim();
+    const err = validateNewProfileForm(name, role, pin, confirmPin);
+    if (err) { root.showNotice?.('err', err); return; }
+    const r = await root.api('/api/profiles/action', {
+      action: 'create',
+      id: slugProfileId(name),
+      display_name: name,
+      role,
+      pin,
+      admin_pin: adminPin,
+    });
+    if (r.error) { root.showNotice?.('err', r.error); return; }
+    for (const id of ['fp-name', 'fp-pin', 'fp-pin-confirm', 'fp-admin-pin']) {
+      if (byId(id)) byId(id).value = '';
+    }
+    root.showNotice?.('ok', `Δημιουργήθηκε το προφίλ: ${name}`);
+    await loadFamilyProfiles();
+  }
+
   function boot() {
     initNavIcons();
     selectSettingsPane(activeSettingsPane);
@@ -417,6 +457,7 @@
     searchSessionsFullText,
     loadFamilyProfiles,
     switchFamilyProfile,
+    createFamilyProfile,
     loadEmailDrafts,
     sendEmailDraft,
     deleteEmailDraft,

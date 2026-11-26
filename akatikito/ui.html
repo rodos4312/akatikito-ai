@@ -512,6 +512,17 @@
                 <button class="btn" style="width:auto" onclick="StudioUI.loadFamilyProfiles()">⟳</button>
               </div>
               <span id="family-profile-status" class="hint">Ένα προφίλ (προεπιλογή) — τα υπάρχοντα δεδομένα μένουν αυτούσια.</span>
+              <details id="family-profile-create-box" style="margin-top:6px">
+                <summary data-i18n="lbl_new_profile">＋ Νέο προφίλ</summary>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px">
+                  <input id="fp-name" placeholder="Όνομα προφίλ">
+                  <select id="fp-role"><option value="admin" data-i18n="lbl_role_adult">Ενήλικας</option><option value="restricted" data-i18n="lbl_role_child">Παιδί</option></select>
+                  <input id="fp-pin" type="password" placeholder="PIN (υποχρεωτικό για ενήλικα)">
+                  <input id="fp-pin-confirm" type="password" placeholder="Επιβεβαίωση PIN">
+                  <input id="fp-admin-pin" type="password" data-i18n-placeholder="lbl_admin_pin" placeholder="PIN κυρίου προφίλ">
+                  <button id="fp-create-btn" class="btn primary" data-i18n="btn_create_profile" onclick="StudioUI.createFamilyProfile()">Δημιουργία</button>
+                </div>
+              </details>
             </div>
           </div>
 
