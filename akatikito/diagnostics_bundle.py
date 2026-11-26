@@ -6,7 +6,9 @@ and OS usernames in file paths. Never transmits anything over the network.
 from __future__ import annotations
 
 import json
+import platform
 import re
+import urllib.parse
 from pathlib import Path
 
 from .redact import redact as redact_text
@@ -15,6 +17,8 @@ from .secret_store import redact_secrets
 _WIN_USER_RE = re.compile(r"([A-Za-z]:\\{1,2}Users\\{1,2})[^\\/\r\n\"']+")
 _WIN_USER_FWD_RE = re.compile(r"([A-Za-z]:/Users/)[^\\/\r\n\"']+")
 _UNIX_USER_RE = re.compile(r"(/(?:Users|home)/)[^/\r\n\"']+")
+_EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
+GITHUB_ISSUE_NEW_URL = "https://github.com/rodos4312/akatikito-ai/issues/new"
 
 
 def scrub_user_paths(text: str) -> str:
@@ -27,12 +31,13 @@ def scrub_user_paths(text: str) -> str:
 
 
 def sanitize_bundle_text(text: str, known_secrets: tuple[str, ...] = ()) -> str:
-    """Apply secret redaction (pattern + exact known secrets) and OS username path scrubbing."""
+    """Apply secret redaction (pattern + exact known secrets), email scrubbing, and OS username path scrubbing."""
     out = redact_text(str(text or ""))
     out = redact_secrets(out, known_secrets)
     for sec in known_secrets:
         if sec and len(sec) >= 4 and sec in out:
             out = out.replace(sec, "***")
+    out = _EMAIL_RE.sub("<email>", out)
     return scrub_user_paths(out)
 
 
@@ -135,6 +140,24 @@ def build_bundle_files(
     }
 
 
+def build_github_issue_url(version: str = "", os_label: str = "") -> str:
+    """Build a pre-filled GitHub new-issue URL containing ONLY app version and OS (zero personal data)."""
+    from .diagnostics import APP_VERSION
+
+    ver = str(version or APP_VERSION).strip()[:32]
+    os_txt = str(os_label or f"{platform.system()} {platform.release()}").strip()[:48]
+    body = (
+        f"**Έκδοση / Version:** Akatikito v{ver}\n"
+        f"**Σύστημα / OS:** {os_txt}\n\n"
+        "## Τι συνέβη / What happened\n"
+        "(Περίγραψε σύντομα τι προσπάθησες να κάνεις και τι εμφανίστηκε.)\n\n"
+        "## Πακέτο διαγνωστικών / Diagnostics ZIP (προαιρετικό)\n"
+        "(Αν αποθήκευσες το καθαρισμένο zip διαγνωστικών, μπορείς να το σύρεις εδώ.)\n"
+    )
+    qs = urllib.parse.urlencode({"title": f"[Bug] Akatikito v{ver}: ", "body": body})
+    return f"{GITHUB_ISSUE_NEW_URL}?{qs}"
+
+
 def preview_diagnostics_bundle(state, *, data_dir: Path | None = None) -> dict:
     """Return file manifest and safe previews for user inspection before saving the ZIP."""
     from .diagnostics import _collect_known_secrets, _render_summary_md, health_report
@@ -144,6 +167,7 @@ def preview_diagnostics_bundle(state, *, data_dir: Path | None = None) -> dict:
     files = build_bundle_files(state, report, _render_summary_md(report), known, data_dir=data_dir)
     return {
         "auto_upload": False,
+        "issue_url": build_github_issue_url(),
         "files": [
             {"name": name, "bytes": len(body.encode("utf-8")), "preview": body[:400]}
             for name, body in files.items()

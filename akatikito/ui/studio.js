@@ -437,6 +437,56 @@
     await loadFamilyProfiles();
   }
 
+  async function openIssueReport(errorContext = '') {
+    if (typeof root.api !== 'function') return;
+    const prev = await root.api('/api/diagnostics/preview');
+    if (prev.error) { root.showNotice?.('err', prev.error); return; }
+    let dlg = byId('issue-report-dialog');
+    if (!dlg) {
+      dlg = document.createElement('div');
+      dlg.id = 'issue-report-dialog';
+      dlg.setAttribute('role', 'dialog');
+      dlg.style.cssText = 'position:fixed;inset:0;z-index:1100;background:#000b;display:flex;align-items:center;justify-content:center;padding:18px';
+      document.body.appendChild(dlg);
+    }
+    const card = document.createElement('div');
+    card.style.cssText = 'background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:18px;width:min(620px,100%);max-height:88vh;overflow:auto;display:flex;flex-direction:column;gap:10px';
+    const title = document.createElement('h3');
+    title.textContent = '🐛 Αναφορά προβλήματος (προεπισκόπηση — τίποτα δεν στέλνεται αυτόματα)';
+    const note = document.createElement('textarea');
+    note.id = 'issue-report-note';
+    note.rows = 3;
+    note.placeholder = 'Περίγραψε τι έγινε (προαιρετικό)…';
+    if (errorContext) note.value = String(errorContext).slice(0, 300);
+    const list = document.createElement('pre');
+    list.style.cssText = 'max-height:240px;overflow:auto;font-size:11.5px;white-space:pre-wrap;background:var(--bg);padding:8px;border-radius:8px;border:1px solid var(--border)';
+    list.textContent = (prev.files || []).map((f) => `=== ${f.name} (${f.bytes} B) ===\n${f.preview}`).join('\n\n');
+    const actions = document.createElement('div');
+    actions.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap';
+    const saveBtn = document.createElement('button');
+    saveBtn.className = 'btn primary';
+    saveBtn.style.width = 'auto';
+    saveBtn.textContent = '💾 Αποθήκευση zip';
+    saveBtn.onclick = async () => {
+      const r = await root.api('/api/diagnostics/export', {});
+      root.showNotice?.(r.error ? 'err' : 'ok', r.error || ('Αποθηκεύτηκε: ' + (r.path || 'zip')));
+    };
+    const ghBtn = document.createElement('button');
+    ghBtn.className = 'btn';
+    ghBtn.style.width = 'auto';
+    ghBtn.textContent = '🐙 Άνοιγμα GitHub issue';
+    ghBtn.onclick = () => { if (prev.issue_url && typeof root.open === 'function') root.open(prev.issue_url, '_blank', 'noopener'); };
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'btn';
+    closeBtn.style.width = 'auto';
+    closeBtn.textContent = 'Κλείσιμο';
+    closeBtn.onclick = () => { dlg.style.display = 'none'; };
+    actions.append(saveBtn, ghBtn, closeBtn);
+    card.append(title, note, list, actions);
+    dlg.replaceChildren(card);
+    dlg.style.display = 'flex';
+  }
+
   function boot() {
     initNavIcons();
     selectSettingsPane(activeSettingsPane);
@@ -464,6 +514,7 @@
     renderBackgroundStatus,
     toggleBackgroundService,
     stopBackgroundService,
+    openIssueReport,
     isSidebarCollapsed: () => sidebarCollapsed,
     activeSettingsPane: () => activeSettingsPane,
   };

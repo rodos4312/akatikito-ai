@@ -167,3 +167,11 @@ class ExtrasStateMixin:
         from .onboarding_helpers import detect_local_ai
 
         return detect_local_ai(endpoints=endpoints)
+
+    def diagnostics_preview(self) -> dict:
+        from .diagnostics_bundle import preview_diagnostics_bundle
+
+        try:
+            return preview_diagnostics_bundle(self, data_dir=self._email_dir())
+        except (OSError, ValueError) as exc:
+            return {"error": str(exc), "auto_upload": False, "files": []}

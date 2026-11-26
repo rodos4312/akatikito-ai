@@ -620,7 +620,11 @@ function showNotice(kind, text) {
   const button = document.createElement("button"); button.className = "btn";
   button.style.cssText = "width:auto;padding:2px 8px;font-size:11px";
   button.textContent = "Αντιγραφή"; button.onclick = () => copyText(text);
-  box.append(span, button); el.replaceChildren(box);
+  box.append(span, button);
+  if (kind === "err" && typeof StudioUI !== "undefined" && StudioUI.openIssueReport) {
+    const rep = document.createElement("button"); rep.className = "btn"; rep.style.cssText = "width:auto;padding:2px 8px;font-size:11px"; rep.textContent = "🐛 Αναφορά προβλήματος"; rep.onclick = () => StudioUI.openIssueReport(text); box.append(rep);
+  }
+  el.replaceChildren(box);
   if (kind !== "err") noticeTimer = setTimeout(() => el.replaceChildren(), 8000);
 }
 

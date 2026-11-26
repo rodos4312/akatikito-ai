@@ -133,6 +133,7 @@ POST_ROUTES = {
     "/api/email/action": lambda s, d: s.email_draft_action(d),
     "/api/background/stop": lambda s, _d: s.background_service_stop(),
     "/api/onboarding/detect-local": lambda s, _d: s.detect_local_ai(),
+    "/api/diagnostics/preview": lambda s, _d: s.diagnostics_preview(),
 }
 
 
@@ -258,6 +259,8 @@ def make_handler(state: AppState) -> type:
                 self._send(state.email_drafts_view())
             elif path == "/api/background/status":
                 self._send(state.background_service_status())
+            elif path == "/api/diagnostics/preview":
+                self._send(state.diagnostics_preview())
             else:
                 self._send({"error": "άγνωστη διαδρομή"}, 404)
 
