@@ -701,6 +701,10 @@ function filterSessionsList(query) {
   if (typeof StudioUI !== 'undefined' && StudioUI.searchSessionsFullText) StudioUI.searchSessionsFullText(query);
 }
 function filterSkillsCards(query) {
+  if (typeof ChatUX !== 'undefined' && ChatUX.filterSkillsMasterDetail) {
+    ChatUX.filterSkillsMasterDetail(query);
+    return;
+  }
   const box = document.getElementById('skills-content');
   if (!box || !box.children) return;
   const q = String(query || '').trim().toLowerCase();

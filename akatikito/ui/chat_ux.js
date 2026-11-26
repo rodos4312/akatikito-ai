@@ -372,6 +372,228 @@
 
   _bindListeners();
 
+  // ---------- 2-column Master-Detail Skills UI ----------
+  let _skillsState = { panel: null, catalog: [], proposals: [], selected: '', query: '' };
+
+  function _skillSourceLabel(src) {
+    const map = { builtin: 'ενσωματωμένο', user: 'δικό σου / AI (global)', project: 'project', 'legacy-project': 'project' };
+    return map[src] || 'τοπικό';
+  }
+
+  function _skillStepsText(row) {
+    const bi = row.source === 'builtin' && typeof i18nText === 'function' ? i18nText('sk_bi_steps_' + row.name, '') : '';
+    let txt = bi || (Array.isArray(row.steps) ? row.steps.map((s, i) => `${i + 1}. ${s}`).join('\n') : '');
+    if (Array.isArray(row.notes) && row.notes.length) {
+      txt += '\n\nΣημειώσεις:\n' + row.notes.map((n) => '- ' + n).join('\n');
+    }
+    if (row.template) txt += '\n\nΠρότυπο:\n' + row.template;
+    return txt.trim();
+  }
+
+  function _skillMarkdownPreview(row) {
+    const lines = ['---', 'name: ' + row.name];
+    if (row.category) lines.push('category: ' + row.category);
+    if (row.description) lines.push('description: ' + row.description);
+    lines.push('---', '', _skillStepsText(row) || '(χωρίς καταγεγραμμένα βήματα)');
+    return lines.join('\n');
+  }
+
+  function _makeSkillDetailCard(row) {
+    const card = document.createElement('div');
+    card.className = 'skills-detail-card';
+    if (!row) {
+      const empty = document.createElement('p');
+      empty.className = 'hint';
+      empty.textContent = 'Διάλεξε ένα skill από τη λίστα αριστερά για να δεις τις λεπτομέρειες.';
+      card.appendChild(empty);
+      return card;
+    }
+    const title = document.createElement('div');
+    title.className = 'skills-detail-title';
+    title.textContent = '/' + row.name;
+    card.appendChild(title);
+
+    const desc = document.createElement('div');
+    desc.className = 'skills-detail-desc';
+    desc.textContent = row.source === 'builtin' && typeof i18nText === 'function'
+      ? i18nText('sk_bi_desc_' + row.name, row.description || '')
+      : (row.description || '');
+    card.appendChild(desc);
+
+    const meta = document.createElement('div');
+    meta.className = 'skills-meta-row';
+    const pills = [_skillSourceLabel(row.source)];
+    if (row.category) pills.push(row.category);
+    if (row.uses) pills.push('χρήσεις: ' + row.uses);
+    if (row.telemetry) pills.push(`✓${row.telemetry.successes || 0} / ✗${row.telemetry.failures || 0}`);
+    if (Array.isArray(row.triggers) && row.triggers.length) pills.push('triggers: ' + row.triggers.join(', '));
+    for (const p of pills) {
+      const sp = document.createElement('span');
+      sp.className = 'skills-pill';
+      sp.textContent = p;
+      meta.appendChild(sp);
+    }
+    card.appendChild(meta);
+
+    const stepsBox = document.createElement('pre');
+    stepsBox.className = 'skills-detail-steps';
+    const stepsText = _skillStepsText(row);
+    stepsBox.textContent = stepsText || 'Χωρίς αναλυτικά βήματα.';
+    let showingMd = false;
+    card.appendChild(stepsBox);
+
+    const acts = document.createElement('div');
+    acts.className = 'skills-detail-actions';
+    const runBtn = document.createElement('button');
+    runBtn.type = 'button';
+    runBtn.className = 'btn primary';
+    runBtn.style.width = 'auto';
+    runBtn.textContent = '▶ Χρήση στο Chat';
+    runBtn.onclick = () => { if (typeof runSkillInChat === 'function') runSkillInChat(row.name); };
+    acts.appendChild(runBtn);
+
+    const mdBtn = document.createElement('button');
+    mdBtn.type = 'button';
+    mdBtn.className = 'btn';
+    mdBtn.style.width = 'auto';
+    mdBtn.textContent = '📄 SKILL.md';
+    mdBtn.onclick = () => {
+      showingMd = !showingMd;
+      stepsBox.textContent = showingMd ? _skillMarkdownPreview(row) : (stepsText || 'Χωρίς αναλυτικά βήματα.');
+      mdBtn.textContent = showingMd ? '📋 Βήματα' : '📄 SKILL.md';
+    };
+    acts.appendChild(mdBtn);
+
+    if (row.source !== 'builtin') {
+      const edBtn = document.createElement('button');
+      edBtn.type = 'button';
+      edBtn.className = 'btn';
+      edBtn.style.width = 'auto';
+      edBtn.textContent = '✏️ Επεξεργασία';
+      edBtn.onclick = () => { if (typeof editOwnerSkill === 'function') editOwnerSkill(row); };
+      const delBtn = document.createElement('button');
+      delBtn.type = 'button';
+      delBtn.className = 'btn';
+      delBtn.style.width = 'auto';
+      delBtn.textContent = '🗑 Διαγραφή';
+      delBtn.onclick = () => { if (typeof deleteOwnerSkill === 'function') deleteOwnerSkill(row.name); };
+      acts.append(edBtn, delBtn);
+    }
+    card.appendChild(acts);
+    return card;
+  }
+
+  function _appendSkillNavGroup(listCol, heading, rows) {
+    if (!rows.length) return;
+    const hdr = document.createElement('div');
+    hdr.className = 'skills-group-hdr';
+    hdr.textContent = heading + ' (' + rows.length + ')';
+    listCol.appendChild(hdr);
+    for (const row of rows) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'skill-nav-item' + (row.name === _skillsState.selected ? ' active' : '');
+      const nm = document.createElement('span');
+      nm.textContent = '/' + row.name;
+      btn.appendChild(nm);
+      if (row.category) {
+        const ct = document.createElement('span');
+        ct.className = 'skill-nav-cat';
+        ct.textContent = row.category;
+        btn.appendChild(ct);
+      }
+      btn.onclick = () => { _skillsState.selected = row.name; _paintSkillsMasterDetail(); };
+      listCol.appendChild(btn);
+    }
+  }
+
+  function _buildProposalsSection(proposals) {
+    if (!proposals.length) return null;
+    const wrap = document.createElement('div');
+    wrap.className = 'skills-proposals-box';
+    const hdr = document.createElement('div');
+    hdr.className = 'skills-proposals-hdr';
+    hdr.textContent = 'Προτάσεις συνταγών — πρώτα διάβασε όλα τα βήματα (' + proposals.length + ')';
+    wrap.appendChild(hdr);
+    for (const row of proposals) {
+      const box = document.createElement('div');
+      box.className = 'step';
+      const title = document.createElement('div');
+      title.style.fontWeight = '600';
+      title.textContent = '/' + row.name + (row.category ? ' [' + row.category + ']' : '') + ' · ' + (row.description || '');
+      const pre = document.createElement('pre');
+      pre.className = 'skills-detail-steps';
+      pre.textContent = String(row.body || '').replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n/, '');
+      const bar = document.createElement('div');
+      bar.className = 'skills-detail-actions';
+      const okBtn = document.createElement('button');
+      okBtn.type = 'button'; okBtn.className = 'btn primary'; okBtn.style.width = 'auto';
+      okBtn.textContent = 'Έγκριση συνταγής';
+      okBtn.onclick = () => { if (typeof learningAction === 'function') learningAction('skill_approve', row.id, undefined, row.signature); };
+      const noBtn = document.createElement('button');
+      noBtn.type = 'button'; noBtn.className = 'btn'; noBtn.style.width = 'auto';
+      noBtn.textContent = 'Απόρριψη';
+      noBtn.onclick = () => { if (typeof learningAction === 'function') learningAction('skill_reject', row.id, undefined, row.signature); };
+      bar.append(okBtn, noBtn);
+      box.append(title, pre, bar);
+      wrap.appendChild(box);
+    }
+    return wrap;
+  }
+
+  function _paintSkillsMasterDetail() {
+    const panel = _skillsState.panel;
+    if (!panel) return;
+    panel.replaceChildren();
+    const q = _skillsState.query;
+    const filtered = _skillsState.catalog.filter((r) => {
+      if (!q) return true;
+      const hay = [r.name, r.description, r.category, ...(r.triggers || [])].join(' ').toLowerCase();
+      return hay.includes(q);
+    });
+    if (!filtered.some((r) => r.name === _skillsState.selected)) {
+      _skillsState.selected = filtered.length ? filtered[0].name : '';
+    }
+    const split = document.createElement('div');
+    split.className = 'skills-split';
+    const listCol = document.createElement('div');
+    listCol.className = 'skills-list-col';
+    const custom = filtered.filter((r) => r.source !== 'builtin');
+    const builtin = filtered.filter((r) => r.source === 'builtin');
+    _appendSkillNavGroup(listCol, 'Δικά σου & AI', custom);
+    _appendSkillNavGroup(listCol, 'Ενσωματωμένα', builtin);
+    if (!filtered.length) {
+      const none = document.createElement('p');
+      none.className = 'hint';
+      none.style.padding = '8px';
+      none.textContent = 'Δεν βρέθηκαν skills.';
+      listCol.appendChild(none);
+    }
+    const activeRow = filtered.find((r) => r.name === _skillsState.selected) || null;
+    split.append(listCol, _makeSkillDetailCard(activeRow));
+    panel.appendChild(split);
+    const propsEl = _buildProposalsSection(_skillsState.proposals);
+    if (propsEl) panel.appendChild(propsEl);
+  }
+
+  function renderSkillsMasterDetail(panel, skills) {
+    if (!panel || !skills) return;
+    const searchEl = typeof document !== 'undefined' ? document.getElementById('skill-search') : null;
+    _skillsState = {
+      panel,
+      catalog: Array.isArray(skills.catalog) ? skills.catalog : [],
+      proposals: Array.isArray(skills.proposals) ? skills.proposals : [],
+      selected: _skillsState.selected || '',
+      query: searchEl ? String(searchEl.value || '').trim().toLowerCase() : _skillsState.query,
+    };
+    _paintSkillsMasterDetail();
+  }
+
+  function filterSkillsMasterDetail(query) {
+    _skillsState.query = String(query || '').trim().toLowerCase();
+    _paintSkillsMasterDetail();
+  }
+
   root.ChatUX = {
     LARGE_PASTE_THRESHOLD,
     getSelectedText: _getSelectedText,
@@ -382,5 +604,7 @@
     showContextMenu,
     hideContextMenu,
     maybeAttachLargePaste,
+    renderSkillsMasterDetail,
+    filterSkillsMasterDetail,
   };
 })(typeof globalThis !== 'undefined' ? globalThis : window);

@@ -134,6 +134,7 @@ async function learningAction(action,id,text,review){
   if(result.note)showNotice('ok',result.note);
   await loadLearning(learningOffset);
 }
+function _enhanceSkillsView(panel,skills){if(typeof ChatUX!=='undefined'&&ChatUX.renderSkillsMasterDetail)ChatUX.renderSkillsMasterDetail(panel,skills);}
 async function loadLearning(offset=0){
   const result=await api('/api/learning',{offset});
   let panel=document.getElementById('learning-content');panel.replaceChildren();
@@ -212,6 +213,7 @@ async function loadLearning(offset=0){
   }
   heading(i18nText('sk_builtin_hdr', '📦 Ενσωματωμένα Skills') + ' · ' + builtinSkills.length);
   for(const row of builtinSkills) renderSkillCard(row);
+  _enhanceSkillsView(panel,skills);
   panel=document.getElementById('learning-content');
   heading('Ιστορικό αναθεωρήσεων: '+(profile.revision_count||0));
   for(const row of(profile.history||[])){
