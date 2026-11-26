@@ -18,11 +18,11 @@ from .events import Events
 from .model import OpenAIModel, ModelStopped
 from .streaming import DeltaBatcher
 from .execution import arguments as call_arguments, read_resource
-from .repair import RepairState, is_test_command, verification_blocker
+from .repair import RepairState, verification_blocker
 from .tool_spill import spill_large_output
 from .task_state import TaskState
 from .intent import implementation_requested, read_only, normal
-from .tools import TOOL_SPECS, dispatch, validate_arguments
+from .tools import TOOL_SPECS, dispatch
 from .workspace import Workspace, detect_verify
 from . import agent_prompts as _prompts
 from .agent_prompts import SYSTEM_PROMPT
@@ -240,128 +240,9 @@ class Akatikito:
         return None
 
     def _execute_call(self, call: dict, turn_tools: set[str]) -> tuple[str, bool]:
-        name = call["name"]
-        if self._stop or getattr(self,"_owner_denied",False):
-            return "ΑΠΟΡΡΙΨΗ: ο χρήστης σταμάτησε ή δεν ενέκρινε την εκτέλεση.", False
-        blocked = self._tool_guard_error(name, turn_tools, allow_mode_change=True)
-        if blocked:
-            return blocked, False
-        try:
-            args = call_arguments(call)
-            invalid = validate_arguments(name, args)
-            if invalid:
-                return f"ΣΦΑΛΜΑ: {invalid}", False
-            if name in ('propose_memory','propose_skill','patch_skill'):
-                from .profile import topic_key
-                proposals=getattr(self,'_learning_proposals',set())
-                kind_group = 'skill' if name in ('propose_skill','patch_skill') else 'memory'
-                key=(kind_group,topic_key(args.get('topic') or args.get('name') or ''))
-                if key in proposals or sum(k[0]==kind_group for k in proposals)>=(1 if kind_group=='skill' else 3):
-                    return self.activity.block('Η πρόταση καταγράφηκε ήδη ή έφτασε το όριο αυτού του αιτήματος.'),False
-            blocked = self.activity.before(name,args)
-            if blocked:return blocked,False
-            if name == 'run_subtask':return self._run_subtask(**args),False
-            if name == 'run_subtasks':return self._run_subtasks(**args),False
-            if name == "complete_task":
-                return self._accept_completion(args), False
-            if name == "set_mode":
-                target = args.get("mode") or args.get("name") or ""
-                ok = target in modes.MODES and set(modes.allowed_tools(target)) <= turn_tools
-                if self.repair.pending and target not in ("code", "debug"):
-                    ok = False
-                if ok:
-                    self._set_mode(target, reason="πρόταση μοντέλου")
-                    return f"Λειτουργία: {modes.label(self.mode)}", False
-                return "ΑΠΟΡΡΙΨΗ: η λειτουργία υπερβαίνει την εργασία ή αφήνει εκκρεμή διόρθωση tests.", False
-            if name == "recall_context":
-                page = self.context.request_recall(**args)
-                if page.get("blocked"):
-                    return self.activity.block(page["text"]),False
-                return self.context.recall_text(page),False
-            if name == "record_diagnosis":
-                result = self.repair.diagnose(**args)
-                if result.startswith("ΔΙΑΓΝΩΣΗ"):
-                    self.events.emit("repair", phase="diagnosis", text=args["cause"], paths=args["paths"])
-                return result, False
-            targets = ([item.get('path','') for item in args.get('files',[])]
-                       if isinstance(args.get('files'),list) else [args.get('path','')])
-            if self.mode == "architect" and name in ("write_file", "edit_file"):
-                if any(self.ws.resolve(path) != self.ws.root / "PLAN.md" for path in targets):
-                    return "ΑΠΟΡΡΙΨΗ: ο Αρχιτέκτονας γράφει μόνο το PLAN.md.", False
-            if self.mode == 'assistant' and name in ('write_file','edit_file','convert_data_file'):
-                check_targets = ([args.get('output_path', '')] if name == 'convert_data_file' else targets)
-                for target in check_targets:
-                    if not target:
-                        continue
-                    path=self.ws.resolve(target)
-                    if path.suffix.lower() not in ('.md','.txt','.csv','.json') or any(part.startswith('.') for part in path.relative_to(self.ws.root).parts):
-                        return 'ΑΠΟΡΡΙΨΗ: ο Βοηθός γράφει μόνο απλά έγγραφα στον φάκελο project.',False
-            if self.mode == 'assistant' and name in ('create_word_document','create_excel_sheet','create_pdf_document'):
-                for target in targets:
-                    if not target:
-                        continue
-                    path=self.ws.resolve(target)
-                    if any(part.startswith('.') for part in path.relative_to(self.ws.root).parts):
-                        return 'ΑΠΟΡΡΙΨΗ: ο Βοηθός δεν γράφει σε κρυφούς φακέλους/αρχεία.',False
-            command = (args.get("command") or "").strip()
-            checking = name == "run_command" and bool(command) and (command == self.config.verify_command.strip() or is_test_command(command))
-            if self.repair.pending and name == "run_command":
-                required = self.repair.failure.get("command") or self.config.verify_command
-                if not checking or command != required:
-                    return "ΑΠΟΡΡΙΨΗ: όσο εκκρεμεί αποτυχία, διάβασε με τα εργαλεία ανάγνωσης και τρέξε μόνο τον καθορισμένο έλεγχο.", False
-                if not self.repair.can_verify():
-                    return "ΑΠΟΡΡΙΨΗ: ο ίδιος έλεγχος ήδη απέτυχε. Τεκμηρίωσε τη διάγνωση και κάνε διόρθωση πριν τον επανέλεγχο.", False
-            from .project_profiles import ProjectProfiles
-            from .injection_guard import guard_untrusted_text
-            from .audit_log import AuditLog
+        from . import agent_dispatch as _dispatch
 
-            proj_profile = getattr(self.ws, "project_profile", None) or ProjectProfiles().get(self.ws.root)
-            profile_denial = ProjectProfiles.check_tool(proj_profile, name)
-            if profile_denial:
-                try:
-                    AuditLog(self.ws.root).record("tool_denied", tool=name, mode=self.mode, status="denied", summary=profile_denial)
-                except Exception:
-                    pass
-                return profile_denial, False
-
-            self.ws.organization_scope = "full" if (self.mode in ("code", "debug") and proj_profile == "developer") else "documents"
-            if name == "run_command" and self._shared_command_lock is not None:
-                with self._shared_command_lock:
-                    result = dispatch(self.ws, name, args)
-            else:
-                result = self.mcp.call(name,args,self) if getattr(self,'mcp',None) and name in self.mcp.entries else dispatch(self.ws, name, args)
-            if name in ("web_search", "web_fetch", "browser_fetch", "web_news", "youtube_transcript", "read_document") or name.startswith("mcp_"):
-                result = guard_untrusted_text(result, source=name)
-            if name in ('propose_memory','propose_skill','patch_skill') and not result.startswith(('ΣΦΑΛΜΑ','ΑΠΟΡΡΙΨΗ','ΑΠΟΤΡΟΠΗ','ΕΝΤΟΠΙΣΤΗΚΕ ΠΑΡΟΜΟΙΟ SKILL')):
-                proposals.add(key)
-                self._learning_proposals=proposals
-            if "[OWNER_DENIED]" in result:self._owner_denied=True
-            checking = checking and result.startswith("returncode=")
-            if checking:
-                self._last_verify_command = command
-            if name == "read_file" and not args.get("outline") and not result.startswith(("ΣΦΑΛΜΑ", "ΑΠΟΡΡΙΨΗ", "ΑΠΟΤΡΟΠΗ")):
-                self.repair.note_read(args["path"])
-            from .execution import mutation_paths
-            changed = mutation_paths(name, args, result)
-            try:
-                for path in changed:
-                    self.repair.note_change(path)
-            except Exception as exc:
-                from .editing import EditResult
-                result=EditResult("ΣΦΑΛΜΑ ΜΕΤΑ ΤΗΝ ΕΓΓΡΑΦΗ: τα αρχεία γράφτηκαν αλλά η καταγραφή απέτυχε: "+
-                                  str(exc),changed,True,getattr(result,'recovery_paths',()))
-            if getattr(result,'recovery_required',False):
-                self._filesystem_failure=str(result)
-            try:
-                status_tag = "denied" if str(result).startswith("ΑΠΟΡΡΙΨΗ") else ("error" if str(result).startswith("ΣΦΑΛΜΑ") else "ok")
-                AuditLog(self.ws.root).record("tool_call", tool=name, mode=self.mode, status=status_tag, paths=changed, summary=str(result)[:220])
-            except Exception:
-                pass
-            return result, checking
-        except PermissionError as exc:
-            return f"ΑΠΟΡΡΙΨΗ: {exc}",False
-        except Exception as exc:
-            return f"ΣΦΑΛΜΑ: {type(exc).__name__}: {exc}", False
+        return _dispatch.execute_call(self, call, turn_tools, dispatch)
 
     def _execute_calls(self, calls, turn_tools, step):
         """Consecutive independent reads overlap; all side effects remain serial barriers."""

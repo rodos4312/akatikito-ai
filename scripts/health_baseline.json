@@ -2,7 +2,6 @@
   "complexity": {
     "akatikito/activity.py::ActivityGuard.record": 27,
     "akatikito/agent.py::Akatikito._chat": 137,
-    "akatikito/agent.py::Akatikito._execute_call": 90,
     "akatikito/agent.py::Akatikito._execute_calls": 24,
     "akatikito/agent.py::Akatikito.chat": 21,
     "akatikito/agent_prompts.py::accept_completion": 23,

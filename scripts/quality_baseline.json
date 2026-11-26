@@ -25,7 +25,7 @@
   },
   "BLE001": {
     "akatikito/agenda.py": 2,
-    "akatikito/agent.py": 11,
+    "akatikito/agent.py": 7,
     "akatikito/agent_subtasks.py": 4,
     "akatikito/app_api.py": 12,
     "akatikito/app_api_files.py": 12,
@@ -137,7 +137,7 @@
     "tests/test_parallel_subtasks.py": 1
   },
   "S110": {
-    "akatikito/agent.py": 3,
+    "akatikito/agent.py": 1,
     "akatikito/app_api.py": 5,
     "akatikito/app_api_files.py": 1,
     "akatikito/app_api_ops.py": 7,
