@@ -88,12 +88,17 @@ def list_files(ws: Workspace, path: str = ".", recursive: bool = False, max_entr
 
 
 def read_file(ws: Workspace, path: str, start: int = 1, end: int | None = None,
-              anchor_line: int | None = None, outline: bool = False) -> str:
+              anchor_line: int | None = None, outline: bool = False, full: bool = False) -> str:
+    from .smart_read import is_wide_read_request, missing_file_message, render_wide_read
+
     target = ws.resolve(path)
     if not target.is_file():
-        return f"ΣΦΑΛΜΑ: δεν βρήκα αρχείο '{path}'. Έλεγξε τη διαδρομή."
+        return missing_file_message(ws, path)
     if outline:
         return SOURCE_INDEX.outline(target, ws.relative(target), limit=MAX_OUTPUT)
+    if is_wide_read_request(start, end, anchor_line, full, MAX_READ_LINES):
+        lines = target.read_text(encoding="utf-8", errors="replace").splitlines()
+        return render_wide_read(ws.relative(target), lines, start, end) if lines else f"Αρχείο {ws.relative(target)} είναι κενό."
     first, last, data, mode = SOURCE_INDEX.span(target, {"start":start,"end":end,"anchor_line":anchor_line})
     lines = data["lines"];total = len(lines)
     if total == 0:
@@ -334,7 +339,7 @@ TOOL_SPECS = [
         "type": "function",
         "function": {
             "name": "read_file",
-            "description": "Read current source with line numbers. Small files: read the whole file. Python: outline=true shows function/class names and ranges; prefer anchor_line from a search/outline to read the COMPLETE enclosing function, not tiny overlapping slices. Use start/end for exact ranges. Request independent relevant files together in multiple tool calls.",
+            "description": "Read current source with line numbers. Set full=true (or wide start/end) to read up to 1,500 lines / 80KB in ONE step (cleanly trimmed on complete lines). For very large files, use outline=true or read_symbol/anchor_line. Request independent files together in parallel tool calls.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -343,6 +348,7 @@ TOOL_SPECS = [
                     "end": {"type": "integer", "description": "Last line (default end of file)"},
                     "anchor_line": {"type":"integer","description":"Read the complete Python function/class containing this 1-based line; prefer this over guessing short ranges."},
                     "outline": {"type":"boolean","description":"Return a current Python function/class map with line ranges; bodies are NOT included."},
+                    "full": {"type":"boolean","description":"Read up to 1,500 lines / 80KB in one call, cleanly cut at complete line boundaries."},
                 },
                 "required": ["path"],
             },
