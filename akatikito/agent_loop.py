@@ -373,13 +373,75 @@ def _post_batch_decision(agent, step: int, dirty: bool, can_repair: bool, feedba
     return None, dirty
 
 
+def _merge_usage_totals(total_usage: dict, delta: dict | None) -> None:
+    for k, v in (delta or {}).items():
+        if isinstance(v, (int, float)) and isinstance(total_usage.get(k, 0), (int, float)):
+            total_usage[k] = total_usage.get(k, 0) + v
+
+
+def _continue_truncated_text(agent, reply: dict, usage: dict, step: int) -> tuple[dict, dict]:
+    """Guard against repetition loops and seamlessly stitch pure-text length continuations."""
+    from .model import ModelError
+    from .repetition_guard import (
+        REPETITION_ABORT_MESSAGE,
+        RUNAWAY_STOP_MIN_CHARS,
+        is_repetition_dominated,
+        stitch_continuation,
+    )
+
+    if reply.get("tool_calls"):
+        return reply, usage
+    text = str(reply.get("content") or "")
+    truncated = bool(reply.get("truncated_text"))
+    if (truncated or len(text) >= RUNAWAY_STOP_MIN_CHARS) and is_repetition_dominated(text):
+        agent.events.emit("recovery", recovery_kind="repetition_abort", text=REPETITION_ABORT_MESSAGE)
+        cleaned = {**reply, "content": REPETITION_ABORT_MESSAGE}
+        cleaned.pop("truncated_text", None)
+        return cleaned, usage
+    if not truncated or agent._stop:
+        return reply, usage
+
+    parts = [text]
+    total_usage = dict(usage or {})
+    probe_messages = list(agent.messages)
+    nudge = (
+        "[ΣΥΝΕΧΕΙΑ ΑΠΑΝΤΗΣΗΣ] Η προηγούμενη απάντηση κόπηκε στο όριο εξόδου (length). "
+        "Συνέχισε ακριβώς από εκεί που σταμάτησες χωρίς να επαναλάβεις προηγούμενο κείμενο."
+    )
+    for _ in range(2):
+        probe_messages = probe_messages + [
+            {"role": "assistant", "content": parts[-1]},
+            {"role": "user", "content": nudge},
+        ]
+        try:
+            cont, cont_usage = agent._model_reply(probe_messages, [], step)
+        except ModelError:
+            break
+        _merge_usage_totals(total_usage, cont_usage)
+        chunk = str(cont.get("content") or "")
+        if chunk and is_repetition_dominated(chunk):
+            agent.events.emit("recovery", recovery_kind="repetition_abort", text=REPETITION_ABORT_MESSAGE)
+            break
+        if chunk:
+            parts.append(chunk)
+        if not cont.get("truncated_text"):
+            break
+
+    out = {**reply, "content": stitch_continuation(parts)}
+    out.pop("truncated_text", None)
+    if len(parts) > 1:
+        agent.events.emit("recovery", recovery_kind="text_continuation", parts=len(parts), text="Η απάντηση συνεχίστηκε αυτόματα.")
+    return out, total_usage
+
+
 def _call_model_with_recovery(agent, request, tools, step: int, attempted: set[str]):
     from .model import ModelError
     from .turn_recovery import attempt_turn_recovery
 
     while True:
         try:
-            return agent._model_reply(request, tools, step)
+            reply, usage = agent._model_reply(request, tools, step)
+            return _continue_truncated_text(agent, reply, usage, step)
         except ModelError as exc:
             recovered, _detail = attempt_turn_recovery(agent, exc, attempted)
             if not recovered:

@@ -160,7 +160,12 @@ class StreamReply:
                     raise StreamAssemblyError('Ασυνεπή opaque metadata στη ροή reasoning.')
 
     def reply(self):
-        if self.finish not in ('stop', 'tool_calls'):
+        pure_text_truncated = (
+            self.finish == 'length'
+            and not self.calls
+            and bool(''.join(self.content).strip())
+        )
+        if self.finish not in ('stop', 'tool_calls') and not pure_text_truncated:
             raise StreamAssemblyError('Η ροή δεν ολοκληρώθηκε κανονικά' + (f' ({self.finish})' if self.finish else '') + '.')
         calls = [self.calls[index] for index in sorted(self.calls)]
         ids = set()
@@ -177,6 +182,9 @@ class StreamReply:
         if self.finish == 'tool_calls' and not calls:
             raise StreamAssemblyError('Η ροή τελείωσε χωρίς τις δηλωμένες εντολές εργαλείων.')
         reply = {'content': ''.join(self.content), 'reasoning': ''.join(self.reasoning).strip(), 'tool_calls': calls}
+        if pure_text_truncated:
+            reply['truncated_text'] = True
+            reply['finish_reason'] = 'length'
         if self.has_reasoning:
             reply['reasoning_content'] = ''.join(self.reasoning)
         if self.details:
