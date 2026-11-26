@@ -155,6 +155,118 @@ def _extent(node, raw, lang):
     return start.start_point.row + 1, node.end_point.row + (1 if node.end_point.column else 0), start.start_byte, node.end_byte
 
 
+def _parse_best_tree(raw: bytes, suffix: str, empty: dict):
+    try:
+        attempts = []
+        failures = []
+        for language in LANGUAGES[suffix]:
+            try:
+                tree = _parse(raw, language)
+                if tree is not None:
+                    attempts.append((language, tree))
+            except (ImportError, OSError, ValueError, AttributeError, TypeError) as exc:
+                failures.append(exc)
+        if not attempts:
+            if failures:
+                raise failures[0]
+            return None, None, None, failures, {
+                **empty,
+                "cacheable": False,
+                "notice": "Η δομή δεν αναλύθηκε: ο parser έφτασε το χρονικό όριο. Χρησιμοποίησε start/end· δεν επιβεβαιώθηκε πλήρης συνάρτηση.",
+            }
+        prefer_php = (
+            "php"
+            if any(child.type == "php_tag" for lang, tree in attempts if lang == "php" for child in tree.root_node.named_children)
+            else "php_only"
+        )
+        language, tree = min(attempts, key=lambda item: (item[1].root_node.has_error, 0 if item[0] == prefer_php else 1))
+        lang = "php" if language == "php_only" else "typescript" if language == "tsx" else language
+        return language, lang, tree, failures, None
+    except (ImportError, OSError, ValueError, AttributeError, TypeError) as exc:
+        return None, None, None, [], {
+            **empty,
+            "cacheable": False,
+            "missing_parser": True,
+            "notice": "Η δομή δεν αναλύθηκε: λείπει ή απέτυχε ο τοπικός parser (" + type(exc).__name__ + "). Έλεγξε requirements-features.txt.",
+        }
+
+
+def _extract_node_entries(node, raw: bytes, lang: str, refs: set):
+    kind = node.type
+    body = node.child_by_field_name("body")
+    extent_node = node
+    is_type = kind in TYPES.get(lang, set())
+    is_function = kind in FUNCTIONS.get(lang, set())
+    name = _name(node, raw, lang) if is_type or is_function else ""
+    scope_name = name if is_type or is_function else ""
+    entries = []
+    if lang in SCRIPT_LANGS:
+        name, tag, extent_node, scope_name, body = describe(node, raw, lang)
+        if name and tag:
+            entries.append((name, tag))
+        if lang in JS_LANGS:
+            ref = references(node, raw)
+            if ref:
+                refs.add(ref)
+    elif name:
+        entries.append((name, "type" if is_type else "function" if body is not None else "declaration"))
+    if lang in ("c", "cpp") and kind in ("declaration", "field_declaration"):
+        for declarator in node.children_by_field_name("declarator"):
+            prototype, callable_ = _declarator(declarator, raw)
+            if prototype and callable_:
+                entries.append((prototype, "declaration"))
+    return entries, extent_node, scope_name, body
+
+
+def _record_node_entries(entries, node, extent_node, body, raw, lang, scope, seen, result) -> None:
+    if not entries or node.has_error or node.is_missing or extent_node.has_error:
+        return
+    first, last, start, end = _extent(extent_node, raw, lang)
+    header_end = body.start_byte if body is not None else node.end_byte
+    header = " ".join(raw[start : min(header_end, start + 1000)].decode("utf-8", errors="replace").split())[:160]
+    for entry, tag in entries:
+        qualified = ".".join((*scope, entry))
+        key = (start, end, qualified)
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append({"first": first, "last": max(first, last), "name": qualified, "header": header, "kind": tag, "start": start, "end": end})
+
+
+def _walk_tree_symbols(tree, raw: bytes, language: str, lang: str, failures: list) -> dict:
+    cacheable = True
+    result, seen, refs = [], set(), set()
+    pending = [(tree.root_node, ())]
+    count = 0
+    deadline = time.monotonic() + WALK_SECONDS
+    notice = "Μερική δομή: ο parser εντόπισε σφάλματα σύνταξης. Οι αβέβαιες δηλώσεις παραλείπονται." if tree.root_node.has_error else ""
+    if failures:
+        notice = ("Μερική διαθεσιμότητα parsers. Χρησιμοποιήθηκε " + language + ". " + notice).strip()
+    while pending:
+        if count >= MAX_NODES or len(result) >= MAX_SYMBOLS or len(refs) >= MAX_SYMBOLS or time.monotonic() > deadline:
+            cacheable = False
+            notice = "Μερική δομή: εξαντλήθηκε το όριο ανάλυσης. Το πλήρες κείμενο παραμένει διαθέσιμο με start/end."
+            break
+        node, scope = pending.pop()
+        count += 1
+        entries, extent_node, scope_name, body = _extract_node_entries(node, raw, lang, refs)
+        _record_node_entries(entries, node, extent_node, body, raw, lang, scope, seen, result)
+        child_scope = (*scope, scope_name) if scope_name and len(scope) < 8 else scope
+        if len(pending) + node.named_child_count > MAX_NODES:
+            cacheable = False
+            notice = "Μερική δομή: πάρα πολλοί κόμβοι. Χρησιμοποίησε start/end για τον υπόλοιπο κώδικα."
+            break
+        for child in reversed(node.named_children):
+            pending.append((child, child_scope))
+    return {
+        "symbols": sorted(result, key=lambda row: (row["first"], row["last"], row["name"])),
+        "notice": notice,
+        "backend": "tree-sitter " + language,
+        "cacheable": cacheable,
+        "refs": sorted(refs),
+    }
+
+
 def symbols(text, suffix):
     """Return trustworthy complete nodes plus a visible partial/unavailable notice."""
     from .markup_navigation import FRAMEWORK_SUFFIXES, XML_SUFFIXES, css, framework, xml
@@ -176,103 +288,10 @@ def symbols(text, suffix):
         return {**empty, "notice": "Η δομή δεν αναλύθηκε: όριο 2 MiB. Το κείμενο παραμένει διαθέσιμο με start/end."}
     if suffix == ".go" and raw and not raw.endswith(b"\n"):
         raw += b"\n"
-    try:
-        attempts = []
-        failures = []
-        for language in LANGUAGES[suffix]:
-            try:
-                tree = _parse(raw, language)
-                if tree is not None:
-                    attempts.append((language, tree))
-            except (ImportError, OSError, ValueError, AttributeError, TypeError) as exc:
-                failures.append(exc)
-        if not attempts:
-            if failures:
-                raise failures[0]
-            return {
-                **empty,
-                "cacheable": False,
-                "notice": "Η δομή δεν αναλύθηκε: ο parser έφτασε το χρονικό όριο. Χρησιμοποίησε start/end· δεν επιβεβαιώθηκε πλήρης συνάρτηση.",
-            }
-        prefer_php = (
-            "php"
-            if any(child.type == "php_tag" for lang, tree in attempts if lang == "php" for child in tree.root_node.named_children)
-            else "php_only"
-        )
-        language, tree = min(attempts, key=lambda item: (item[1].root_node.has_error, 0 if item[0] == prefer_php else 1))
-        lang = "php" if language == "php_only" else "typescript" if language == "tsx" else language
-    except (ImportError, OSError, ValueError, AttributeError, TypeError) as exc:
-        return {
-            **empty,
-            "cacheable": False,
-            "missing_parser": True,
-            "notice": "Η δομή δεν αναλύθηκε: λείπει ή απέτυχε ο τοπικός parser (" + type(exc).__name__ + "). Έλεγξε requirements-features.txt.",
-        }
-    cacheable = True
-    result = []
-    seen = set()
-    refs = set()
-    pending = [(tree.root_node, ())]
-    count = 0
-    deadline = time.monotonic() + WALK_SECONDS
-    notice = "Μερική δομή: ο parser εντόπισε σφάλματα σύνταξης. Οι αβέβαιες δηλώσεις παραλείπονται." if tree.root_node.has_error else ""
-    if failures:
-        notice = ("Μερική διαθεσιμότητα parsers. Χρησιμοποιήθηκε " + language + ". " + notice).strip()
-    while pending:
-        if count >= MAX_NODES or len(result) >= MAX_SYMBOLS or len(refs) >= MAX_SYMBOLS or time.monotonic() > deadline:
-            cacheable = False
-            notice = "Μερική δομή: εξαντλήθηκε το όριο ανάλυσης. Το πλήρες κείμενο παραμένει διαθέσιμο με start/end."
-            break
-        node, scope = pending.pop()
-        count += 1
-        kind = node.type
-        body = node.child_by_field_name("body")
-        extent_node = node
-        is_type = kind in TYPES.get(lang, set())
-        is_function = kind in FUNCTIONS.get(lang, set())
-        name = _name(node, raw, lang) if is_type or is_function else ""
-        scope_name = name if is_type or is_function else ""
-        entries = []
-        if lang in SCRIPT_LANGS:
-            name, tag, extent_node, scope_name, body = describe(node, raw, lang)
-            if name and tag:
-                entries.append((name, tag))
-            if lang in JS_LANGS:
-                ref = references(node, raw)
-                if ref:
-                    refs.add(ref)
-        elif name:
-            entries.append((name, "type" if is_type else "function" if body is not None else "declaration"))
-        if lang in ("c", "cpp") and kind in ("declaration", "field_declaration"):
-            for declarator in node.children_by_field_name("declarator"):
-                prototype, callable_ = _declarator(declarator, raw)
-                if prototype and callable_:
-                    entries.append((prototype, "declaration"))
-        if entries and not node.has_error and not node.is_missing and not extent_node.has_error:
-            first, last, start, end = _extent(extent_node, raw, lang)
-            header_end = body.start_byte if body is not None else node.end_byte
-            header = " ".join(raw[start : min(header_end, start + 1000)].decode("utf-8", errors="replace").split())[:160]
-            for entry, tag in entries:
-                qualified = ".".join((*scope, entry))
-                key = (start, end, qualified)
-                if key in seen:
-                    continue
-                seen.add(key)
-                result.append({"first": first, "last": max(first, last), "name": qualified, "header": header, "kind": tag, "start": start, "end": end})
-        child_scope = (*scope, scope_name) if scope_name and len(scope) < 8 else scope
-        if len(pending) + node.named_child_count > MAX_NODES:
-            cacheable = False
-            notice = "Μερική δομή: πάρα πολλοί κόμβοι. Χρησιμοποίησε start/end για τον υπόλοιπο κώδικα."
-            break
-        for child in reversed(node.named_children):
-            pending.append((child, child_scope))
-    return {
-        "symbols": sorted(result, key=lambda row: (row["first"], row["last"], row["name"])),
-        "notice": notice,
-        "backend": "tree-sitter " + language,
-        "cacheable": cacheable,
-        "refs": sorted(refs),
-    }
+    language, lang, tree, failures, error_result = _parse_best_tree(raw, suffix, empty)
+    if error_result is not None:
+        return error_result
+    return _walk_tree_symbols(tree, raw, language, lang, failures)
 
 
 def source_suffix(path):

@@ -150,66 +150,87 @@ def _shift_indentation(text: str, delta: int) -> str:
     return "".join(out)
 
 
+def _uniform_indent_delta(source_lines: list[str], needle: list[str], start_idx: int) -> int | None:
+    deltas = set()
+    for j, n_line in enumerate(needle):
+        if not n_line.strip():
+            continue
+        s_line = source_lines[start_idx + j]
+        if s_line.startswith("\t") or n_line.startswith("\t"):
+            return None
+        deltas.add((len(s_line) - len(s_line.lstrip(" "))) - (len(n_line) - len(n_line.lstrip(" "))))
+    return next(iter(deltas)) if len(deltas) == 1 else None
+
+
+def _find_indent_matches(normalized: str, source_lines: list[str], needle: list[str], offsets: list[int], search: str):
+    if not (len(source_lines) <= 10000 and len(needle) <= 200 and needle and any(len(ln.strip()) >= 6 for ln in needle)):
+        return []
+    matches = []
+    for i in range(len(source_lines) - len(needle) + 1):
+        if not all(source_lines[i + j].strip() == needle[j].strip() for j in range(len(needle))):
+            continue
+        delta = _uniform_indent_delta(source_lines, needle, i)
+        if delta is not None:
+            end = offsets[i + len(needle)]
+            if not search.endswith("\n") and normalized[end - 1 : end] == "\n":
+                end -= 1
+            matches.append((offsets[i], end, delta))
+    return matches
+
+
+def _find_edit_matches(normalized: str, source_lines: list[str], needle: list[str], offsets: list[int], search: str):
+    starts = [m.start() for m in re.finditer("(?=" + re.escape(search) + ")", normalized)]
+    matches = [(s, s + len(search), 0) for s in starts]
+    if not matches:
+        for i in range(len(source_lines) - len(needle) + 1):
+            if all(source_lines[i + j].rstrip() == needle[j].rstrip() for j in range(len(needle))):
+                end = offsets[i + len(needle)]
+                if not search.endswith("\n") and normalized[end - 1 : end] == "\n":
+                    end -= 1
+                matches.append((offsets[i], end, 0))
+    if not matches:
+        matches = _find_indent_matches(normalized, source_lines, needle, offsets, search)
+    return matches
+
+
 def apply_edits(original, edits):
-    normalized,positions=_normalized(original)
-    spans=[]
-    for number,entry in enumerate(edits,1):
-        search,_=_normalized(entry["search"])
-        starts=[m.start() for m in re.finditer("(?="+re.escape(search)+")",normalized)]
-        matches=[(s,s+len(search),0) for s in starts]
-        source_lines=normalized.splitlines(keepends=True);needle=search.splitlines();offsets=[0]
-        for line in source_lines:offsets.append(offsets[-1]+len(line))
-        if not matches:
-            for i in range(len(source_lines)-len(needle)+1):
-                if all(source_lines[i+j].rstrip()==needle[j].rstrip() for j in range(len(needle))):
-                    end=offsets[i+len(needle)]
-                    if not search.endswith("\n") and normalized[end-1:end]=="\n":end-=1
-                    matches.append((offsets[i],end,0))
-        # Step 3: Indentation-normalized fallback when relative indentation is uniform
-        if not matches and len(source_lines) <= 10000 and len(needle) <= 200 and needle and any(len(l.strip()) >= 6 for l in needle):
-            for i in range(len(source_lines)-len(needle)+1):
-                if not all(source_lines[i+j].strip()==needle[j].strip() for j in range(len(needle))):
-                    continue
-                deltas = set()
-                valid_indent = True
-                for j in range(len(needle)):
-                    s_line = source_lines[i+j]
-                    n_line = needle[j]
-                    if not n_line.strip():
-                        continue
-                    if s_line.startswith("\t") or n_line.startswith("\t"):
-                        valid_indent = False
-                        break
-                    s_lead = len(s_line) - len(s_line.lstrip(" "))
-                    n_lead = len(n_line) - len(n_line.lstrip(" "))
-                    deltas.add(s_lead - n_lead)
-                if valid_indent and len(deltas) == 1:
-                    delta = next(iter(deltas))
-                    end = offsets[i+len(needle)]
-                    if not search.endswith("\n") and normalized[end-1:end]=="\n":end-=1
-                    matches.append((offsets[i],end,delta))
-        hint=entry.get("start_line")
+    normalized, positions = _normalized(original)
+    source_lines = normalized.splitlines(keepends=True)
+    offsets = [0]
+    for line in source_lines:
+        offsets.append(offsets[-1] + len(line))
+    spans = []
+    for number, entry in enumerate(edits, 1):
+        search, _ = _normalized(entry["search"])
+        needle = search.splitlines()
+        matches = _find_edit_matches(normalized, source_lines, needle, offsets, search)
+        hint = entry.get("start_line")
         if hint is not None:
-            matches=[(s,e,d) for s,e,d in matches if normalized.count("\n",0,s)+1==hint]
+            matches = [(s, e, d) for s, e, d in matches if normalized.count("\n", 0, s) + 1 == hint]
         if not matches:
             closest = _closest_match_hint(source_lines, needle) if hint is None else ""
-            raise EditError(f"Block #{number}: το SEARCH δεν βρέθηκε"+(f" στη γραμμή {hint}" if hint else "")+". Διάβασε τον τρέχοντα κώδικα."+closest)
-        if len(matches)>1:
+            raise EditError(
+                f"Block #{number}: το SEARCH δεν βρέθηκε"
+                + (f" στη γραμμή {hint}" if hint else "")
+                + ". Διάβασε τον τρέχοντα κώδικα."
+                + closest
+            )
+        if len(matches) > 1:
             raise EditError(f"Block #{number}: το SEARCH βρέθηκε {len(matches)} φορές. Δώσε μοναδικό search ή start_line της αρχικής έκδοσης.")
         m_start, m_end, indent_delta = matches[0]
-        start,end=(positions[m_start], positions[m_end])
-        nearby=re.search(r"\r\n|\r|\n",original[start:]) or re.search(r"\r\n|\r|\n",original)
-        newline=nearby.group() if nearby else "\n"
-        replacement,_=_normalized(entry["replace"])
+        start, end = positions[m_start], positions[m_end]
+        nearby = re.search(r"\r\n|\r|\n", original[start:]) or re.search(r"\r\n|\r|\n", original)
+        newline = nearby.group() if nearby else "\n"
+        replacement, _ = _normalized(entry["replace"])
         if indent_delta != 0:
             replacement = _shift_indentation(replacement, indent_delta)
-        spans.append((start,end,replacement.replace("\n",newline)))
-    ordered=sorted(spans,key=lambda span:span[0])
-    if any(current[0]<previous[1] for previous,current in zip(ordered,ordered[1:])):
+        spans.append((start, end, replacement.replace("\n", newline)))
+    ordered = sorted(spans, key=lambda span: span[0])
+    if any(current[0] < previous[1] for previous, current in zip(ordered, ordered[1:])):
         raise EditError("Επικαλυπτόμενες αλλαγές. Όλα τα search/start_line αναφέρονται στην αρχική έκδοση.")
-    updated=original
-    for start,end,replacement in reversed(ordered):
-        updated=updated[:start]+replacement+updated[end:]
+    updated = original
+    for start, end, replacement in reversed(ordered):
+        updated = updated[:start] + replacement + updated[end:]
     return updated
 
 
@@ -311,15 +332,18 @@ def commit(ws, target: Path, original: bytes | None, updated: bytes):
         if temporary is not None:temporary.unlink(missing_ok=True)
 
 
-def commit_batch(ws, changes):
-    """Validate first, retain recovery bytes, and report any incomplete rollback."""
-    from .local_store import checked
+def _decode_guard_text(target: Path, raw: bytes | None) -> str:
     import io
     import tokenize
 
-    changes = [(Path(target), old, new) for target, old, new in changes if old != new]
-    if not changes:
-        return ()
+    raw = raw or b""
+    if target.suffix.lower() in (".py", ".pyw"):
+        encoding = tokenize.detect_encoding(io.BytesIO(raw).readline)[0]
+        return raw.decode(encoding)
+    return raw.decode("utf-8-sig", errors="replace")
+
+
+def _validate_batch_changes(ws, changes, checked) -> None:
     seen = set()
     for target, original, updated in changes:
         try:
@@ -333,19 +357,13 @@ def commit_batch(ws, changes):
         parts = tuple(p.casefold() for p in relative.parts)
         if ".git" in parts or parts[:2] in ((".agent", "checkpoints"), (".agent", "context")):
             raise EditError(f"{relative}: προστατευμένα εσωτερικά δεδομένα. Δεν εφαρμόστηκε τίποτα.")
-        if not isinstance(updated, bytes) or original is not None and not isinstance(original, bytes):
+        if not isinstance(updated, bytes) or (original is not None and not isinstance(original, bytes)):
             raise EditError(f"{relative}: απαιτούνται ακριβή bytes. Δεν εφαρμόστηκε τίποτα.")
         try:
             check_syntax(target, updated)
             guard = getattr(ws, "write_guard", None)
             if guard:
-                def text(raw):
-                    raw = raw or b""
-                    if target.suffix.lower() in (".py", ".pyw"):
-                        encoding = tokenize.detect_encoding(io.BytesIO(raw).readline)[0]
-                        return raw.decode(encoding)
-                    return raw.decode("utf-8-sig", errors="replace")
-                guard(target, text(original), text(updated))
+                guard(target, _decode_guard_text(target, original), _decode_guard_text(target, updated))
         except (ValueError, UnicodeError, SyntaxError) as exc:
             raise EditError(f"{relative}: {exc} Δεν εφαρμόστηκε τίποτα.") from exc
     review = getattr(ws, "review_write", None)
@@ -353,93 +371,123 @@ def commit_batch(ws, changes):
         if review is not None and not review(target, original, updated):
             raise EditError(f"[OWNER_DENIED] {ws.relative(target)}: η αλλαγή δεν εγκρίθηκε. Δεν εφαρμόστηκε τίποτα.")
 
+
+def _stage_temp_bytes(target: Path, raw: bytes, kind: str) -> Path:
+    path = None
+    try:
+        with tempfile.NamedTemporaryFile(dir=target.parent, prefix="." + target.name + "-" + kind + "-",
+                                         suffix=".tmp", delete=False) as stream:
+            path = Path(stream.name)
+            stream.write(raw)
+            stream.flush()
+            os.fsync(stream.fileno())
+        return path
+    except BaseException:
+        if path is not None:
+            try:
+                path.unlink(missing_ok=True)
+            except OSError:
+                return path
+        raise
+
+
+def _rollback_batch(ws, attempted, recovery, backups, failed_label, failure, current_fn) -> None:
+    rollback_errors = []
+    for target, original, updated in reversed(attempted):
+        try:
+            value = current_fn(target)
+            if value == original:
+                continue
+            if value != updated:
+                raise OSError("άλλαξε από άλλη διεργασία· δεν αντικαταστάθηκε")
+            if original is None:
+                target.unlink()
+            else:
+                os.replace(recovery[target], target)
+            if current_fn(target) != original:
+                raise OSError("η επαναφορά δεν επαληθεύτηκε")
+        except (OSError, ValueError) as exc:
+            rollback_errors.append(f"{ws.relative(target)}: {exc}")
+    remaining = []
+    for target, original, _ in attempted:
+        try:
+            if current_fn(target) != original:
+                remaining.append(ws.relative(target))
+        except (OSError, ValueError):
+            remaining.append(ws.relative(target))
+    if remaining:
+        details = "; ".join(rollback_errors)
+        copies = tuple(f"{name}: {ws.root / '.agent_backups' / backup}" for name, backup in backups.items() if backup)
+        message = (
+            "ΑΤΕΛΗΣ ΕΠΑΝΑΦΟΡΑ: " + failed_label + ": " + str(failure)
+            + ". Αλλαγμένα ή μη επαληθευμένα αρχεία: " + ", ".join(remaining)
+            + ". Αιτίες: " + details + ". Αντίγραφα ασφαλείας: " + "; ".join(copies)
+        )
+        raise EditError(message, changed_paths=remaining, rollback_errors=rollback_errors or remaining,
+                        recovery_paths=copies) from failure
+    raise EditError(f"{failed_label}: {failure}. Δεν εφαρμόστηκε τίποτα· η επαναφορά επαληθεύτηκε.") from failure
+
+
+def _cleanup_batch_artifacts(staged: dict, recovery: dict, created_dirs: list[Path]) -> None:
+    for path in (*staged.values(), *recovery.values()):
+        try:
+            path.unlink(missing_ok=True)
+        except OSError:
+            continue
+    for directory in reversed(created_dirs):
+        try:
+            directory.rmdir()
+        except OSError:
+            continue
+
+
+def commit_batch(ws, changes):
+    """Validate first, retain recovery bytes, and report any incomplete rollback."""
+    from .local_store import checked
+
+    changes = [(Path(target), old, new) for target, old, new in changes if old != new]
+    if not changes:
+        return ()
+    _validate_batch_changes(ws, changes, checked)
     staged, recovery, attempted, created_dirs, backups = {}, {}, [], [], {}
+
     def current(target):
         checked(target)
         return target.read_bytes() if target.exists() else None
-    def stage(target, raw, kind):
-        path = None
-        try:
-            with tempfile.NamedTemporaryFile(dir=target.parent, prefix="."+target.name+"-"+kind+"-",
-                                             suffix=".tmp", delete=False) as stream:
-                path = Path(stream.name)
-                stream.write(raw); stream.flush(); os.fsync(stream.fileno())
-            return path
-        except BaseException:
-            if path is not None:
-                try:path.unlink(missing_ok=True)
-                except OSError:pass
-            raise
+
+    active_target = changes[0][0]
     try:
         for target, original, updated in changes:
-            missing = [d for d in reversed(target.parents)
-                       if d != ws.root and ws.root in d.parents and not d.exists()]
+            active_target = target
+            missing = [d for d in reversed(target.parents) if d != ws.root and ws.root in d.parents and not d.exists()]
             checked(target)
             target.parent.mkdir(parents=True, exist_ok=True)
             created_dirs.extend(d for d in missing if d not in created_dirs)
-            staged[target] = stage(target, updated, "edit")
+            staged[target] = _stage_temp_bytes(target, updated, "edit")
             if original is not None:
-                recovery[target] = stage(target, original, "restore")
+                recovery[target] = _stage_temp_bytes(target, original, "restore")
             if current(target) != original:
                 raise EditError(f"{ws.relative(target)}: άλλαξε μετά την ανάγνωση.")
         # All backups must succeed before the first source file is replaced.
         for target, original, _ in changes:
+            active_target = target
             if current(target) != original:
                 raise EditError(f"{ws.relative(target)}: άλλαξε κατά την προετοιμασία.")
             if original is not None:
                 backups[ws.relative(target)] = ws.backup(target)
         for target, original, updated in changes:
+            active_target = target
             if current(target) != original:
                 raise EditError(f"{ws.relative(target)}: άλλαξε πριν την εγγραφή.")
-            attempted.append((target,original,updated))
+            attempted.append((target, original, updated))
             if original is None:
-                if os.name == "nt":
-                    os.rename(staged[target], target)
-                else:
-                    os.link(staged[target], target)
+                os.rename(staged[target], target) if os.name == "nt" else os.link(staged[target], target)
             else:
                 os.replace(staged[target], target)
         return tuple(ws.relative(target) for target, _, _ in changes)
-    except Exception as failure:
-        failed_label=ws.relative(target)
-        rollback_errors = []
-        for target, original, updated in reversed(attempted):
-            try:
-                value = current(target)
-                if value == original:
-                    continue
-                if value != updated:
-                    raise OSError("άλλαξε από άλλη διεργασία· δεν αντικαταστάθηκε")
-                if original is None:
-                    target.unlink()
-                else:
-                    os.replace(recovery[target], target)
-                if current(target) != original:
-                    raise OSError("η επαναφορά δεν επαληθεύτηκε")
-            except (OSError, ValueError) as exc:
-                rollback_errors.append(f"{ws.relative(target)}: {exc}")
-        remaining = []
-        for target, original, _ in attempted:
-            try:
-                if current(target) != original:
-                    remaining.append(ws.relative(target))
-            except (OSError, ValueError):
-                remaining.append(ws.relative(target))
-        if remaining:
-            details = "; ".join(rollback_errors)
-            copies = tuple(f"{name}: {ws.root / '.agent_backups' / backup}" for name, backup in backups.items() if backup)
-            message = ("ΑΤΕΛΗΣ ΕΠΑΝΑΦΟΡΑ: " + failed_label + ": " + str(failure) +
-                       ". Αλλαγμένα ή μη επαληθευμένα αρχεία: " + ", ".join(remaining) +
-                       ". Αιτίες: " + details + ". Αντίγραφα ασφαλείας: " + "; ".join(copies))
-            raise EditError(message, changed_paths=remaining, rollback_errors=rollback_errors or remaining,
-                            recovery_paths=copies) from failure
-        raise EditError(f"{failed_label}: {failure}. Δεν εφαρμόστηκε τίποτα· η επαναφορά επαληθεύτηκε.") from failure
+    except Exception as failure:  # quality: allow BLE001 — atomic rollback must run on any write/OS/guard failure
+        _rollback_batch(ws, attempted, recovery, backups, ws.relative(active_target), failure, current)
     finally:
-        for path in (*staged.values(), *recovery.values()):
-            try:path.unlink(missing_ok=True)
-            except OSError:pass
-        for directory in reversed(created_dirs):
-            try:directory.rmdir()
-            except OSError:pass
+        _cleanup_batch_artifacts(staged, recovery, created_dirs)
 
 
