@@ -172,44 +172,54 @@ class AppState(OpsStateMixin, FilesStateMixin, SessionsUpgradeStateMixin, Memory
         return url, key
 
     def set_preferences(self, data):
-        if self.busy:return {'error':'Περίμενε να ολοκληρωθεί η εργασία.'}
-        for key in ('autonomous','cautious_edits','checkpoints','advanced_view','supports_vision'):
-            if key in data and type(data[key]) is not bool:return {'error':'Χρειάζεται boolean προτίμηση.'}
-        for name in ('autonomous','cautious_edits','checkpoints','advanced_view'):
+        if self.busy:
+            return {'error': 'Περίμενε να ολοκληρωθεί η εργασία.'}
+        for step in (
+            self._apply_bool_prefs,
+            self._apply_routing_and_model_prefs,
+            self._apply_budget_and_prices_prefs,
+            self._apply_vision_prefs,
+            self._apply_ui_and_advanced_prefs,
+        ):
+            err = step(data)
+            if err:
+                return {'error': err}
+        if self.agent and 'checkpoints' in data:
+            from .checkpoints import Checkpoints
+            self.agent.config.checkpoints = self.settings.checkpoints
+            self.agent.checkpoint_store = Checkpoints(self.agent.ws.root) if self.settings.checkpoints else None
+        self.settings.save()
+        return self.status()
+
+    def _apply_bool_prefs(self, data: dict) -> str | None:
+        for key in ('autonomous', 'cautious_edits', 'checkpoints', 'advanced_view', 'supports_vision'):
+            if key in data and type(data[key]) is not bool:
+                return 'Χρειάζεται boolean προτίμηση.'
+        for name in ('autonomous', 'cautious_edits', 'checkpoints', 'advanced_view'):
             if name in data:
-                if type(data[name]) is not bool:return {'error':'Χρειάζεται boolean προτίμηση.'}
-                setattr(self.settings,name,data[name])
-        if 'fast_provider' in data:
-            val = str(data.get('fast_provider') or '').strip()
-            self.settings.fast_provider = val
-            if self.agent is not None:
-                self.agent.config.fast_provider = val
-                fu, fk = self._resolve_routing_creds(val)
-                self.agent.config.fast_base_url = fu
-                self.agent.config.fast_api_key = fk
-        if 'fast_model' in data:
-            val = str(data.get('fast_model') or '').strip()
-            self.settings.fast_model = val
-            if self.agent is not None:
-                self.agent.config.fast_model = val
-        if 'smart_provider' in data:
-            val = str(data.get('smart_provider') or '').strip()
-            self.settings.smart_provider = val
-            if self.agent is not None:
-                self.agent.config.smart_provider = val
-                su, sk = self._resolve_routing_creds(val)
-                self.agent.config.smart_base_url = su
-                self.agent.config.smart_api_key = sk
-        if 'smart_model' in data:
-            val = str(data.get('smart_model') or '').strip()
-            self.settings.smart_model = val
-            if self.agent is not None:
-                self.agent.config.smart_model = val
-        if 'auto_mode' in data and type(data['auto_mode']) is bool:
-            if self.agent is not None:
-                self.agent.config.auto_mode = data['auto_mode']
-                if data['auto_mode']:
-                    self.agent._manual_mode = False
+                setattr(self.settings, name, data[name])
+        return None
+
+    def _apply_routing_and_model_prefs(self, data: dict) -> str | None:
+        for prefix in ('fast', 'smart', 'fallback'):
+            prov_key, mod_key = f'{prefix}_provider', f'{prefix}_model'
+            if prov_key in data:
+                val = str(data.get(prov_key) or '').strip()
+                setattr(self.settings, prov_key, val)
+                if self.agent is not None:
+                    setattr(self.agent.config, prov_key, val)
+                    url, key = self._resolve_routing_creds(val)
+                    setattr(self.agent.config, f'{prefix}_base_url', url)
+                    setattr(self.agent.config, f'{prefix}_api_key', key)
+            if mod_key in data:
+                val = str(data.get(mod_key) or '').strip()
+                setattr(self.settings, mod_key, val)
+                if self.agent is not None:
+                    setattr(self.agent.config, mod_key, val)
+        if 'auto_mode' in data and type(data['auto_mode']) is bool and self.agent is not None:
+            self.agent.config.auto_mode = data['auto_mode']
+            if data['auto_mode']:
+                self.agent._manual_mode = False
         if 'model' in data:
             val = str(data.get('model') or '').strip()
             if val:
@@ -219,34 +229,41 @@ class AppState(OpsStateMixin, FilesStateMixin, SessionsUpgradeStateMixin, Memory
                     self.agent._default_model_name = val
                     if hasattr(self.agent.model, 'model'):
                         self.agent.model.model = val
-        if 'daily_budget' in data or 'prices' in data:
-            import math
-            try:
-                budget=float(data.get('daily_budget',self.settings.daily_budget))
-                if not math.isfinite(budget) or budget<0:raise ValueError('Μη έγκυρο όριο.')
-                prices=data.get('prices')
-                if prices is not None:
-                    if not self.agent or not isinstance(prices,dict) or set(prices)!=set(('input','cached','output')):raise ValueError('Χρειάζονται τρεις τιμές ανά εκατομμύριο tokens.')
-                    prices={k:float(v) for k,v in prices.items()}
-                    if any(not math.isfinite(v) or v<0 for v in prices.values()):raise ValueError('Μη έγκυρες τιμές.')
-                    key=self.settings.provider+'|'+self.agent.config.base_url+'|'+self.agent.config.model
-                    self.settings.model_prices[key]=prices
-                self.settings.daily_budget=budget
-            except (TypeError,ValueError) as exc:return {'error':str(exc)}
-        if 'supports_vision' in data:
-            if not self.agent or type(data['supports_vision']) is not bool:return {'error':'Συνδέσου και όρισε boolean υποστήριξη εικόνων.'}
-            name=endpoint_identity(self.agent.config.base_url)+'|'+self.agent.config.model
-            self.settings.vision_models=[x for x in self.settings.vision_models if x!=name]+([name] if data['supports_vision'] else [])
-            self.agent.config.supports_vision=data['supports_vision']
-        err = self._apply_ui_and_advanced_prefs(data)
-        if err:
-            return {'error': err}
-        if self.agent and 'checkpoints' in data:
-            from .checkpoints import Checkpoints
-            self.agent.config.checkpoints=self.settings.checkpoints
-            self.agent.checkpoint_store=Checkpoints(self.agent.ws.root) if self.settings.checkpoints else None
-        self.settings.save()
-        return self.status()
+        return None
+
+    def _apply_budget_and_prices_prefs(self, data: dict) -> str | None:
+        if 'daily_budget' not in data and 'prices' not in data:
+            return None
+        import math
+        try:
+            budget = float(data.get('daily_budget', self.settings.daily_budget))
+            if not math.isfinite(budget) or budget < 0:
+                raise ValueError('Μη έγκυρο όριο.')
+            prices = data.get('prices')
+            if prices is not None:
+                if not self.agent or not isinstance(prices, dict) or set(prices) != {'input', 'cached', 'output'}:
+                    raise ValueError('Χρειάζονται τρεις τιμές ανά εκατομμύριο tokens.')
+                parsed = {k: float(v) for k, v in prices.items()}
+                if any(not math.isfinite(v) or v < 0 for v in parsed.values()):
+                    raise ValueError('Μη έγκυρες τιμές.')
+                key = f"{self.settings.provider}|{self.agent.config.base_url}|{self.agent.config.model}"
+                self.settings.model_prices[key] = parsed
+            self.settings.daily_budget = budget
+        except (TypeError, ValueError) as exc:
+            return str(exc)
+        return None
+
+    def _apply_vision_prefs(self, data: dict) -> str | None:
+        if 'supports_vision' not in data:
+            return None
+        if not self.agent or type(data['supports_vision']) is not bool:
+            return 'Συνδέσου και όρισε boolean υποστήριξη εικόνων.'
+        name = endpoint_identity(self.agent.config.base_url) + '|' + self.agent.config.model
+        self.settings.vision_models = [x for x in self.settings.vision_models if x != name] + (
+            [name] if data['supports_vision'] else []
+        )
+        self.agent.config.supports_vision = data['supports_vision']
+        return None
 
     def _apply_ui_and_advanced_prefs(self, data: dict) -> str | None:
         if 'ui_language' in data:
@@ -274,24 +291,8 @@ class AppState(OpsStateMixin, FilesStateMixin, SessionsUpgradeStateMixin, Memory
             if type(data['sidebar_collapsed']) is not bool:
                 return 'Χρειάζεται boolean για τη σύμπτυξη μενού.'
             self.settings.sidebar_collapsed = data['sidebar_collapsed']
-        self._apply_fallback_prefs(data)
         from . import advanced
         return advanced.apply_preferences(self.settings, self.agent, data)
-
-    def _apply_fallback_prefs(self, data: dict) -> None:
-        if 'fallback_provider' in data:
-            val = str(data.get('fallback_provider') or '').strip()
-            self.settings.fallback_provider = val
-            if self.agent is not None:
-                self.agent.config.fallback_provider = val
-                fbu, fbk = self._resolve_routing_creds(val)
-                self.agent.config.fallback_base_url = fbu
-                self.agent.config.fallback_api_key = fbk
-        if 'fallback_model' in data:
-            val = str(data.get('fallback_model') or '').strip()
-            self.settings.fallback_model = val
-            if self.agent is not None:
-                self.agent.config.fallback_model = val
 
     def upload_attachment(self,data):
         if self.busy or not self.agent:return {'error':'Συνδέσου και περίμενε να τελειώσει η εργασία.'}

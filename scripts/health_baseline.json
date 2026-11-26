@@ -11,7 +11,6 @@
     "akatikito/agent_subtasks.py::run_subtasks": 43,
     "akatikito/app_api.py::AppState.connect": 37,
     "akatikito/app_api.py::AppState.emit_event": 25,
-    "akatikito/app_api.py::AppState.set_preferences": 52,
     "akatikito/app_api.py::AppState.status": 23,
     "akatikito/app_api_files.py::FilesStateMixin.files_organize": 25,
     "akatikito/app_api_ops.py::OpsStateMixin._drain_auto_tasks": 21,
