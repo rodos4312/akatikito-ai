@@ -39,5 +39,6 @@ Checked automatically against `Settings` by `scripts/release_check.py` (Q11 docs
 | `global_hotkey` | `"Alt+Space"` | Windows global shortcut to focus/toggle the desktop window. |
 | `background_mode` | `False` | Enables 24/7 headless background service for scheduled tasks & channels (L2). |
 | `background_autostart` | `False` | Registers Akatikito background service in Windows user Startup (HKCU Run) (L2). |
+| `notes_folder` | `""` | Optional Obsidian/Markdown notes vault folder (empty = disabled) (L5). |
 | `onboarding_complete` | `False` | Marks first-run onboarding wizard completion. |
 | `warning` | `""` | Transient non-persisted warning banner when loading a corrupted file. |

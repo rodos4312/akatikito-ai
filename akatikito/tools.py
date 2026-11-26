@@ -486,7 +486,8 @@ TOOL_SPECS = [
 ]
 
 from .features import SPECS as FEATURE_SPECS, HANDLERS as FEATURE_HANDLERS
-TOOL_SPECS += NETWORK_SPECS + [COMPLETION_SPEC] + FEATURE_SPECS
+from .notes_vault import NOTES_HANDLERS, NOTES_SPECS
+TOOL_SPECS += NETWORK_SPECS + [COMPLETION_SPEC] + FEATURE_SPECS + NOTES_SPECS
 
 SPEC_BY_NAME = {entry.get("function", {}).get("name"): entry.get("function", {}).get("parameters") for entry in TOOL_SPECS}
 
@@ -568,6 +569,7 @@ _HANDLERS = {
 
 _HANDLERS.update(NETWORK_HANDLERS)
 _HANDLERS.update(FEATURE_HANDLERS)
+_HANDLERS.update(NOTES_HANDLERS)
 
 
 def dispatch(ws: Workspace, name: str, arguments: str | dict | None) -> str:

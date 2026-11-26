@@ -31,6 +31,7 @@ class Akatikito:
             self.config.verify_command = detect_verify(root)
         self.ws = Workspace(root)
         self.ws.config = self.config
+        self.ws.notes_folder = str(getattr(self.config, "notes_folder", "") or "").strip()
         self.ws.search_stopped = lambda: self._stop
         self.context = ContextWindow(self.ws, self.config.context_max_chars, self.config.context_recent_groups, self.config.context_economy)
         self.activity = ActivityGuard(self.ws)
@@ -221,6 +222,8 @@ class Akatikito:
         blocked = getattr(self, '_blocked_advanced_tools', None)
         if blocked:
             tools = tools - blocked
+        if not str(getattr(self.config, 'notes_folder', '') or '').strip():
+            tools = tools - {'search_notes', 'propose_note_edit'}
         ceiling=getattr(self,'capability_ceiling',None)
         return tools if ceiling is None else tools & ceiling
 

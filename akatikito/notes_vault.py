@@ -220,3 +220,80 @@ class NotesVault:
         tmp.write_text(updated, encoding="utf-8")
         os.replace(tmp, path)
         return {"ok": True, "path": rel, "bytes": len(updated.encode("utf-8"))}
+
+
+def _vault_from_ws(ws) -> NotesVault:
+    folder = str(getattr(ws, "notes_folder", "") or "").strip()
+    if not folder:
+        raise PermissionError("Ο φάκελος σημειώσεων (notes_folder) δεν είναι ενεργοποιημένος στις Ρυθμίσεις.")
+    return NotesVault(folder)
+
+
+def tool_search_notes(ws, query: str, limit: int = 8) -> str:
+    vault = _vault_from_ws(ws)
+    hits = vault.search(query, limit=max(1, min(int(limit or 8), 20)))
+    if not hits:
+        return "Δεν βρέθηκαν σχετικές σημειώσεις στον φάκελο σημειώσεων."
+    lines = [f"Βρέθηκαν {len(hits)} σημειώσεις:"]
+    for row in hits:
+        tags = f" [{' '.join('#' + t for t in row['tags'])}]" if row["tags"] else ""
+        lines.append(f"- {row['path']} ({row['title']}){tags}: {row['snippet']}")
+    return "\n".join(lines)
+
+
+def tool_propose_note_edit(ws, path: str, content: str) -> str:
+    vault = _vault_from_ws(ws)
+    target, rel = vault._resolve_note(path)
+    confirm = getattr(ws, "confirm_write", None)
+    if target.exists():
+        preview = vault.preview_edit(rel, content)
+        if not preview["changed"]:
+            return f"Καμία αλλαγή στη σημείωση {rel}."
+        if callable(confirm) and not confirm(f"notes:{rel}", preview["diff"]):
+            return f"ΑΠΟΡΡΙΨΗ: ο χρήστης δεν ενέκρινε την αλλαγή της σημείωσης {rel}."
+        vault.apply_edit(rel, content, approved_hash=preview["preview_hash"])
+        return f"ΕΓΙΝΕ: ενημερώθηκε η σημείωση {rel}."
+    diff = f"--- /dev/null\n+++ b/{rel}\n+" + "\n+".join(str(content or "").splitlines()[:40])
+    if callable(confirm) and not confirm(f"notes:{rel}", diff):
+        return f"ΑΠΟΡΡΙΨΗ: ο χρήστης δεν ενέκρινε τη δημιουργία της σημείωσης {rel}."
+    vault.create_note(rel, content)
+    return f"ΕΓΙΝΕ: δημιουργήθηκε η σημείωση {rel}."
+
+
+NOTES_SPECS: list[dict] = [
+    {
+        "type": "function",
+        "function": {
+            "name": "search_notes",
+            "description": "Search the owner's configured Obsidian/Markdown notes folder (read-only).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Search keywords"},
+                    "limit": {"type": "integer", "description": "Maximum results (default 8)"},
+                },
+                "required": ["query"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "propose_note_edit",
+            "description": "Create or update a Markdown note strictly inside the owner's notes folder (with preview & approval).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "description": "Relative .md path inside the notes folder"},
+                    "content": {"type": "string", "description": "Full Markdown note content"},
+                },
+                "required": ["path", "content"],
+            },
+        },
+    },
+]
+
+NOTES_HANDLERS = {
+    "search_notes": tool_search_notes,
+    "propose_note_edit": tool_propose_note_edit,
+}

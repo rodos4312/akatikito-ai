@@ -291,12 +291,31 @@ class AppState(OpsStateMixin, FilesStateMixin, SessionsUpgradeStateMixin, Memory
             if type(data['sidebar_collapsed']) is not bool:
                 return 'Χρειάζεται boolean για τη σύμπτυξη μενού.'
             self.settings.sidebar_collapsed = data['sidebar_collapsed']
+        nf_err = self._apply_notes_folder_pref(data)
+        if nf_err:
+            return nf_err
         from . import advanced
         err = advanced.apply_preferences(self.settings, self.agent, data)
         if not err and self.agent is not None and 'advanced_features' in data and not data.get('apply_now', True):
             note = self.agent.defer_setting_change('advanced_features', apply_now=False)
             self.notice = note.get('notice', '')
         return err
+
+    def _apply_notes_folder_pref(self, data: dict) -> str | None:
+        if 'notes_folder' not in data:
+            return None
+        raw_nf = str(data.get('notes_folder') or '').strip()
+        if raw_nf:
+            nf_path = Path(raw_nf).expanduser().resolve()
+            if not nf_path.is_dir():
+                return 'Ο φάκελος σημειώσεων δεν υπάρχει.'
+            self.settings.notes_folder = str(nf_path)
+        else:
+            self.settings.notes_folder = ''
+        if self.agent is not None:
+            self.agent.config.notes_folder = self.settings.notes_folder
+            self.agent.ws.notes_folder = self.settings.notes_folder
+        return None
 
     def upload_attachment(self,data):
         if self.busy or not self.agent:return {'error':'Συνδέσου και περίμενε να τελειώσει η εργασία.'}
@@ -375,6 +394,7 @@ class AppState(OpsStateMixin, FilesStateMixin, SessionsUpgradeStateMixin, Memory
                 verify_command=(verify or "").strip(),
                 checkpoints=self.settings.checkpoints,
                 ui_language=self.settings.ui_language,
+                notes_folder=self.settings.notes_folder,
             )
             try:
                 new_agent = Akatikito(root=project, config=config)
@@ -504,6 +524,7 @@ class AppState(OpsStateMixin, FilesStateMixin, SessionsUpgradeStateMixin, Memory
                 'ui_theme': self.settings.ui_theme,
                 'ui_font_size': self.settings.ui_font_size,
                 'sidebar_collapsed': self.settings.sidebar_collapsed,
+                'notes_folder': self.settings.notes_folder,
             },
             'advanced_catalog': __import__('akatikito.advanced', fromlist=['catalog']).catalog(self.settings),
         }

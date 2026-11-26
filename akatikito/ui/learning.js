@@ -115,6 +115,7 @@ function renderApprovals(list) {
     panel.appendChild(box);
   }
 }
+async function saveNotesFolder(){const el=document.getElementById('notes-folder');if(!el)return;const r=await api('/api/preferences',{notes_folder:(el.value||'').trim()});if(r.error){showNotice('err',r.error);return;}showNotice('ok','✅ Ο φάκελος σημειώσεων αποθηκεύτηκε.');}
 async function saveBudget(){const body={daily_budget:Number(document.getElementById('daily-budget').value)};const values=['input','cached','output'].map(k=>document.getElementById('price-'+k).value);if(values.every(x=>x!==''))body.prices=Object.fromEntries(['input','cached','output'].map((k,i)=>[k,Number(values[i])]));const r=await api('/api/preferences',body);if(r.error)showNotice('err',r.error);}
 async function savePreferences() {
   const result = await api('/api/preferences',{autonomous:document.getElementById('autonomous').checked,cautious_edits:document.getElementById('cautious-edits').checked,supports_vision:document.getElementById('supports-vision').checked,advanced_view:document.getElementById('advanced-view').checked,checkpoints:document.getElementById('checkpoints').checked});

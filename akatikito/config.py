@@ -58,6 +58,7 @@ class Config:
     # Retry ρυθμίσεις για κλήσεις μοντέλου
     model_retry_attempts: int = 3
     model_retry_delay: float = 1.0
+    notes_folder: str = ""
     model_retry_backoff: float = 2.0
 
     # Αυτόματη επιλογή λειτουργίας (ask / architect / code / debug) από την εργασία
