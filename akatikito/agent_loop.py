@@ -170,6 +170,9 @@ def _prepare_step_request(agent, step: int):
         agent.context.native_context_tokens = native
     # Never reuse old permissions for the sake of a cache hit.
     agent.messages[0] = {"role": "system", "content": agent.policy_prompt()}
+    from .turn_recovery import close_interrupted_tool_sequence
+    if close_interrupted_tool_sequence(agent.messages):
+        agent.context.reset_transport()
     agent._drain_steer()
     agent._observe_request_state()
     request = agent.context.prepare(agent.messages, agent.repair, agent.activity, continuous=continuous)
@@ -349,9 +352,26 @@ def _post_batch_decision(agent, step: int, dirty: bool, can_repair: bool, feedba
     return None, dirty
 
 
+def _call_model_with_recovery(agent, request, tools, step: int, attempted: set[str]):
+    from .model import ModelError
+    from .turn_recovery import attempt_turn_recovery
+
+    while True:
+        try:
+            return agent._model_reply(request, tools, step)
+        except ModelError as exc:
+            recovered, _detail = attempt_turn_recovery(agent, exc, attempted)
+            if not recovered:
+                raise
+            request, tools, early = _prepare_step_request(agent, step)
+            if early is not None:
+                return {"content": early, "tool_calls": []}, {}
+
+
 def run_chat_turn(agent, text: str, internal: bool = False) -> str:
     effective, can_repair = _begin_turn(agent, text, internal)
     dirty = False
+    recovery_attempted: set[str] = set()
     for step in range(1, agent.config.max_steps + 1):
         if agent._filesystem_failure:
             agent.events.emit("checkpoint")
@@ -362,7 +382,7 @@ def run_chat_turn(agent, text: str, internal: bool = False) -> str:
         request, tools, early = _prepare_step_request(agent, step)
         if early is not None:
             return early
-        reply, usage = agent._model_reply(request, tools, step)
+        reply, usage = _call_model_with_recovery(agent, request, tools, step, recovery_attempted)
         calls, content, stopped = _record_model_reply(agent, reply, usage, step)
         if stopped:
             return agent._stopped_report()

@@ -254,7 +254,7 @@
   }
 
   function appendTrailStep(chatEl, kind, data) {
-    if (!chatEl || !['reasoning', 'thinking', 'tool_call', 'tool_result', 'repair', 'verify', 'compacted', 'stopped', 'limit', 'give_up', 'checkpoint_error', 'fatal'].includes(kind)) {
+    if (!chatEl || !['reasoning', 'thinking', 'tool_call', 'tool_result', 'repair', 'verify', 'compacted', 'recovery', 'stopped', 'limit', 'give_up', 'checkpoint_error', 'fatal'].includes(kind)) {
       return false;
     }
     const pin = typeof root.isChatNearBottom === 'function' ? root.isChatNearBottom() : true;
@@ -295,6 +295,8 @@
       const a = Math.round(Number(data?.after_chars || 0) / 100) / 10;
       const pct = Number(data?.saved_pct || 0);
       addTrailRow(trail, 'ok', '🗜', `<b>Συμπίεση context</b> (${escHtml(data?.reason === 'auto' ? 'αυτόματη' : 'χειροκίνητη')}) · ${b}k → ${a}k chars (-${pct}%)`);
+    } else if (kind === 'recovery') {
+      addTrailRow(trail, 'ok', '🩺', `<b>Αυτόματη ανάκαμψη</b> — ${escHtml(data?.text || '')}`);
     } else {
       const msg = kind === 'stopped' ? 'Σταμάτησα όπως ζήτησες'
         : kind === 'limit' ? 'Έφτασα το όριο βημάτων'
