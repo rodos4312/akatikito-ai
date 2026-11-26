@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import os
 import re
 import sys
 from pathlib import Path
@@ -40,13 +41,13 @@ def _is_allowed(line: str, code: str) -> bool:
 
 def _iter_repo_files(root: Path) -> list[Path]:
     found: list[Path] = []
-    for p in sorted(root.rglob("*")):
-        if not p.is_file():
-            continue
-        rel_parts = p.relative_to(root).parts
-        if any(part in SKIP_DIRS for part in rel_parts):
-            continue
-        found.append(p)
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = sorted(d for d in dirnames if d not in SKIP_DIRS)
+        base = Path(dirpath)
+        for fname in sorted(filenames):
+            p = base / fname
+            if p.is_file():
+                found.append(p)
     return found
 
 

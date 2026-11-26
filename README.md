@@ -4,8 +4,8 @@
 
 # Akatikito — Local-First Desktop & Android AI Agent
 
-[![Release](https://img.shields.io/badge/Release-v2.5.0-22c55e)](https://github.com/rodos4312/akatikito-ai/releases/tag/v2.5.0)
-[![Android APK](https://img.shields.io/badge/Android%20APK-v1.8.0%20arm64-3ddc84)](https://github.com/rodos4312/akatikito-ai/releases/tag/v2.5.0)
+[![Release](https://img.shields.io/badge/Release-v2.6.0-22c55e)](https://github.com/rodos4312/akatikito-ai/releases/tag/v2.6.0)
+[![Android APK](https://img.shields.io/badge/Android%20APK-v1.9.0%20arm64-3ddc84)](https://github.com/rodos4312/akatikito-ai/releases/tag/v2.6.0)
 [![Website](https://img.shields.io/badge/Website-GitHub%20Pages-38bdf8)](https://rodos4312.github.io/akatikito-ai/)
 [![Languages](https://img.shields.io/badge/UI%20Languages-EL%20%7C%20EN%20%7C%20RU%20%7C%20DE%20%7C%20ES%20%7C%20FR-blue)](#multi-language-interface)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -17,12 +17,12 @@
 - **Ελληνικός οδηγός (5 βήματα με εικόνες):** [docs/GETTING-STARTED.el.md](docs/GETTING-STARTED.el.md)
 - **English guide (5 steps with images):** [docs/GETTING-STARTED.en.md](docs/GETTING-STARTED.en.md)
 
-1. Download **`Akatikito-v2.5.0-portable.zip`** from [Releases](https://github.com/rodos4312/akatikito-ai/releases) *(Python 3.11 + all packages included)*.
+1. Download **`Akatikito-v2.6.0-portable.zip`** from [Releases](https://github.com/rodos4312/akatikito-ai/releases) *(Python 3.11 + all packages included)*.
 2. Right-click → **Extract All**.
 3. Double-click **`AkatikitoApp.cmd`** *(if Windows SmartScreen appears, click **More info → Run anyway**)*.
 4. Choose **AI account** or **Local AI (Ollama / LM Studio)** and ask your first question.
 
-![Akatikito Desktop v2.5.0](docs/screenshots/desktop-home.png)
+![Akatikito Desktop v2.6.0](docs/screenshots/desktop-home.png)
 
 ---
 
@@ -45,9 +45,9 @@
 
 ---
 
-## Android Companion & Standalone App (`v1.7.0`)
+## Android Companion & Standalone App (`v1.9.0`)
 
-A release-signed Android APK (`Akatikito-Mobile-arm64.apk`) is available on the **[Releases](https://github.com/rodos4312/akatikito-ai/releases/tag/v2.5.0)** page:
+A release-signed Android APK (`Akatikito-Mobile-arm64.apk`) is available on the **[Releases](https://github.com/rodos4312/akatikito-ai/releases/tag/v2.6.0)** page:
 
 - **Standalone mode**: Includes an embedded Python 3.11 runtime (Chaquopy) so the agent can run directly on the phone with your own API key — including chat, agenda, skills, memory, local workspace files, native Android voice input, and text-to-speech.
 - **Optional PC pairing**: Enable **Mobile Companion** in desktop Settings and scan the QR code from the phone. Supports both Tailscale (recommended for encrypted remote access over 4G/5G) and local Wi-Fi, with bidirectional PC ↔ phone file transfer restricted to approved project folders.
@@ -98,4 +98,4 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the full technical blueprint and [ROA
 Το **Akatikito** είναι ένας τοπικός AI βοηθός και coding agent για Windows, με προαιρετική εφαρμογή Android. Τρέχει σε δικό του παράθυρο χωρίς κονσόλα, υποστηρίζει 6 γλώσσες διεπαφής, επιλογή διαφορετικού παρόχου/μοντέλου για απλές και δύσκολες εργασίες, εργαλεία εγγράφων (Word, Excel, PDF, εικόνες, ZIP, τοπική αναζήτηση FTS5), ενσωματωμένα & εισαγόμενα `SKILL.md`, MCP hub, κανάλια (Telegram, Discord, Email, Slack) και κρυπτογράφηση κλειδιών με Windows DPAPI.
 
 - **Windows:** Τρέξε το `Install.cmd` και άνοιξε το **Akatikito** από τη συντόμευση της Επιφάνειας Εργασίας ή του Μενού Έναρξη.
-- **Android:** Κατέβασε το `Akatikito-Mobile-arm64.apk` από τα **[Releases](https://github.com/rodos4312/akatikito-ai/releases/tag/v2.5.0)** — δουλεύει είτε αυτόνομα στο κινητό είτε συνδεδεμένο με το PC μέσω QR (Tailscale ή Wi-Fi).
+- **Android:** Κατέβασε το `Akatikito-Mobile-arm64.apk` από τα **[Releases](https://github.com/rodos4312/akatikito-ai/releases/tag/v2.6.0)** — δουλεύει είτε αυτόνομα στο κινητό είτε συνδεδεμένο με το PC μέσω QR (Tailscale ή Wi-Fi).

@@ -8,7 +8,7 @@
 ---
 
 ## 1. Κατέβασμα
-Κατέβασε το τελευταίο αρχείο **`Akatikito-v2.5.0-portable.zip`** από τη σελίδα [GitHub Releases](https://github.com/rodos4312/akatikito-ai/releases).
+Κατέβασε το τελευταίο αρχείο **`Akatikito-v2.6.0-portable.zip`** από τη σελίδα [GitHub Releases](https://github.com/rodos4312/akatikito-ai/releases).
 Περιέχει ήδη τη δική του ενσωματωμένη Python 3.11 και όλα τα απαραίτητα πακέτα.
 
 ## 2. Αποσυμπίεση
