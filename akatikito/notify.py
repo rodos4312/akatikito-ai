@@ -59,7 +59,7 @@ def toast(title: str, message: str) -> bool:
     env["AKATIKITO_MSG"] = str(message)[:900]
     env["AKATIKITO_APP"] = _APP_ID
     try:
-        subprocess.Popen(
+        subprocess.Popen(  # quality: allow FG-DETACHED — fire-and-forget Windows toast notification
             [shell, "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", _TOAST_SCRIPT],
             env=env,
             stdin=subprocess.DEVNULL,

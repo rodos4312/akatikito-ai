@@ -57,7 +57,7 @@ class GatewayControl:
             temp=writable_dir(*candidates)
             for name in ('TEMP','TMP','TMPDIR'):env[name]=str(temp)
             flags=(subprocess.CREATE_NO_WINDOW|subprocess.DETACHED_PROCESS) if os.name=='nt' else 0
-            subprocess.Popen([sys.executable,'-B','-m','akatikito.gateway'],cwd=app_root,env=env,
+            subprocess.Popen([sys.executable,'-B','-m','akatikito.gateway'],cwd=app_root,env=env,  # quality: allow FG-DETACHED — intentional background gateway daemon
                 stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,
                 creationflags=flags,start_new_session=os.name!='nt',close_fds=True)
             deadline=time.monotonic()+5

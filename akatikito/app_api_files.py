@@ -245,7 +245,7 @@ class FilesStateMixin:
                 raise ValueError('Το αρχείο δεν βρέθηκε στο project.')
             if reveal:
                 if os.name == 'nt':
-                    subprocess.Popen(['explorer.exe', '/select,', str(target)])
+                    subprocess.Popen(['explorer.exe', '/select,', str(target)])  # quality: allow FG-DETACHED — launches Windows Explorer UI
                 return {'ok': True, 'path': ws.relative(target), 'action': 'reveal'}
             if not target.is_file():
                 raise ValueError('Μπορείς να ανοίξεις μόνο κανονικό αρχείο.')
