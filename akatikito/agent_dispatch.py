@@ -30,7 +30,8 @@ def _safe_audit(root, event_type: str, **kwargs) -> bool:
 
 def _handle_set_mode(agent, args: dict, turn_tools: set[str]) -> str:
     target = args.get("mode") or args.get("name") or ""
-    ok = target in modes.MODES and set(modes.allowed_tools(target)) <= turn_tools
+    req_tools = agent._filter_disabled_tools(set(modes.allowed_tools(target))) if target in modes.MODES else set()
+    ok = target in modes.MODES and req_tools <= turn_tools
     if agent.repair.pending and target not in ("code", "debug"):
         ok = False
     if ok:

@@ -216,14 +216,18 @@ class Akatikito:
 
     # ------------------------------------------------------------------ βρόχος
 
-    def allowed_tools(self, mode=None):
-        mode=mode or self.mode
-        tools=set(modes.allowed_tools(mode)) | set(self.mcp.names(mode) if getattr(self,'mcp',None) else [])
+    def _filter_disabled_tools(self, tools: set[str]) -> set[str]:
         blocked = getattr(self, '_blocked_advanced_tools', None)
         if blocked:
             tools = tools - blocked
         if not str(getattr(self.config, 'notes_folder', '') or '').strip():
             tools = tools - {'search_notes', 'propose_note_edit'}
+        return tools
+
+    def allowed_tools(self, mode=None):
+        mode=mode or self.mode
+        tools=set(modes.allowed_tools(mode)) | set(self.mcp.names(mode) if getattr(self,'mcp',None) else [])
+        tools = self._filter_disabled_tools(tools)
         ceiling=getattr(self,'capability_ceiling',None)
         return tools if ceiling is None else tools & ceiling
 

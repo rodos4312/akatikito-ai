@@ -585,6 +585,14 @@ class OpsStateMixin:
         from . import settings as _settings
         return Path(_settings.DEFAULT_PATH)
 
+    def _save_settings(self, cfg=None) -> None:
+        target = cfg if cfg is not None else self.settings
+        paths = self.active_profile_paths()
+        if paths is not None:
+            target.save(paths.settings_file)
+        else:
+            target.save()
+
     def _apply_active_profile(self, paths) -> None:
         from . import settings as _settings
         from .usage_ledger import UsageLedger

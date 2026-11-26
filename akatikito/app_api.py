@@ -120,7 +120,7 @@ class AppState(OpsStateMixin, FilesStateMixin, SessionsUpgradeStateMixin, Memory
 
     def _remember_commands(self, values):
         self.settings.allowed_commands = values
-        self.settings.save(self._settings_path())
+        self._save_settings()
 
     def _bind_permissions(self, agent):
         agent.mcp=self.mcp
@@ -193,7 +193,7 @@ class AppState(OpsStateMixin, FilesStateMixin, SessionsUpgradeStateMixin, Memory
             from .checkpoints import Checkpoints
             self.agent.config.checkpoints = self.settings.checkpoints
             self.agent.checkpoint_store = Checkpoints(self.agent.ws.root) if self.settings.checkpoints else None
-        self.settings.save(self._settings_path())
+        self._save_settings()
         return self.status()
 
     def _apply_bool_prefs(self, data: dict) -> str | None:
@@ -403,7 +403,7 @@ class AppState(OpsStateMixin, FilesStateMixin, SessionsUpgradeStateMixin, Memory
                 updated.set_key(provider, key)
                 updated.key_origins[provider] = destination
             updated.onboarding_complete = True
-            try:updated.save(self._settings_path())
+            try:self._save_settings(updated)
             except (OSError,ValueError):
                 return {'error':'Δεν αποθηκεύτηκαν οι ρυθμίσεις. Ο οδηγός δεν ολοκληρώθηκε· η προηγούμενη σύνδεση διατηρήθηκε.'}
             self.settings=updated
@@ -713,7 +713,7 @@ class AppState(OpsStateMixin, FilesStateMixin, SessionsUpgradeStateMixin, Memory
         language=data.get('language',self.settings.voice_language)
         if self.busy or self.voice.busy():return {'error':'Περίμενε να ολοκληρωθεί η εργασία.'}
         if model not in MODELS or language not in LANGUAGES:return {'error':'Μη έγκυρη ρύθμιση φωνής.'}
-        self.settings.voice_model=model;self.settings.voice_language=language;self.settings.save(self._settings_path())
+        self.settings.voice_model=model;self.settings.voice_language=language;self._save_settings()
         return self.voice_status()
 
     def start_voice(self,data,prepare=False):

@@ -149,7 +149,8 @@ def run_subtask(parent, task, mode, max_steps=8, declared_files=None, child_id=N
         if len(parent.subtasks) >= min(4, parent.config.subtask_limit):
             return "ΑΠΟΡΡΙΨΗ: όριο υποεργασιών ανά μήνυμα."
     ceiling = parent.allowed_tools() & parent._turn_tools
-    if not (set(modes.allowed_tools(mode)) - CHILD_FORBIDDEN_TOOLS) <= ceiling:
+    child_needed = parent._filter_disabled_tools(set(modes.allowed_tools(mode))) - CHILD_FORBIDDEN_TOOLS
+    if not child_needed <= ceiling:
         return "ΑΠΟΡΡΙΨΗ: η υποεργασία υπερβαίνει τα δικαιώματα του γονέα."
     if not isinstance(task, str) or not task.strip() or len(task) > 6000:
         return "ΣΦΑΛΜΑ: δώσε σύντομη συγκεκριμένη υποεργασία."
