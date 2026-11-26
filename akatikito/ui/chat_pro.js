@@ -486,6 +486,7 @@
     renderTodos(s.todos);
     renderSubtasks(s.subtasks);
     syncTopbarControls(s);
+    syncMessageQueue(s);
   }
 
   function collapseStreamReasoning(ls) {
@@ -557,6 +558,116 @@
     return r;
   }
 
+  let queuedMsgs = [];
+  let queueContext = '';
+  let queuePaused = false;
+  let queueDraining = false;
+
+  function ensureQueueElements() {
+    const ws = document.getElementById('chat-workspace');
+    const bar = document.getElementById('inputbar');
+    let dock = document.getElementById('queue-dock');
+    if (!dock && ws && bar) {
+      dock = document.createElement('div'); dock.id = 'queue-dock';
+      if (typeof ws.insertBefore === 'function') ws.insertBefore(dock, bar);
+      else ws.appendChild(dock);
+    }
+    let btn = document.getElementById('queue-btn');
+    const sendBtn = document.getElementById('sendbtn');
+    if (!btn && bar) {
+      btn = document.createElement('button'); btn.id = 'queue-btn'; btn.type = 'button';
+      btn.className = 'btn'; btn.textContent = '⏳ Ουρά';
+      btn.title = 'Πρόσθεσε το μήνυμα στην ουρά για εκτέλεση μόλις τελειώσει η τρέχουσα εργασία';
+      btn.onclick = () => enqueueFromPrompt();
+      if (sendBtn && typeof bar.insertBefore === 'function') bar.insertBefore(btn, sendBtn);
+      else bar.appendChild(btn);
+    }
+    return { dock, btn };
+  }
+
+  function renderQueueDock() {
+    const { dock } = ensureQueueElements();
+    if (!dock) return;
+    dock.replaceChildren();
+    dock.classList.toggle('show', queuedMsgs.length > 0);
+    if (!queuedMsgs.length) return;
+    const head = document.createElement('div'); head.className = 'queue-head';
+    const ttl = document.createElement('span');
+    ttl.textContent = `⏳ Σε αναμονή (${queuedMsgs.length})` + (queuePaused ? ' · σε παύση' : '');
+    const acts = document.createElement('span'); acts.className = 'queue-head-actions';
+    if (queuePaused) {
+      const resBtn = document.createElement('button'); resBtn.className = 'btn'; resBtn.textContent = '▶ Συνέχεια';
+      resBtn.onclick = () => { queuePaused = false; renderQueueDock(); drainNextQueued(); };
+      acts.appendChild(resBtn);
+    }
+    const clr = document.createElement('button'); clr.className = 'btn'; clr.textContent = 'Καθαρισμός';
+    clr.onclick = () => { queuedMsgs = []; queuePaused = false; renderQueueDock(); };
+    acts.appendChild(clr);
+    head.append(ttl, acts);
+    dock.appendChild(head);
+    queuedMsgs.forEach((msg, idx) => {
+      const row = document.createElement('div'); row.className = 'queue-row';
+      const txt = document.createElement('span'); txt.className = 'queue-text';
+      txt.textContent = `${idx + 1}. ${msg}`;
+      const editBtn = document.createElement('button'); editBtn.className = 'btn'; editBtn.textContent = '✏️';
+      editBtn.title = 'Επεξεργασία στο πεδίο γραφής';
+      editBtn.onclick = () => {
+        const el = document.getElementById('prompt');
+        queuedMsgs.splice(idx, 1);
+        if (el) { el.value = msg; el.focus?.(); root.grow?.(el); }
+        renderQueueDock();
+      };
+      const delBtn = document.createElement('button'); delBtn.className = 'btn'; delBtn.textContent = '✕';
+      delBtn.title = 'Αφαίρεση από την ουρά';
+      delBtn.onclick = () => { queuedMsgs.splice(idx, 1); renderQueueDock(); };
+      row.append(txt, editBtn, delBtn);
+      dock.appendChild(row);
+    });
+  }
+
+  function enqueueFromPrompt(explicitText) {
+    const el = document.getElementById('prompt');
+    const text = String(explicitText !== undefined ? explicitText : (el?.value || '')).trim();
+    if (!text) return false;
+    if (queuedMsgs.length >= 10) { root.showNotice?.('err', 'Η ουρά έχει το όριο των 10 μηνυμάτων.'); return false; }
+    queueContext = `${root.currentProject || ''}|${root.currentSession || ''}`;
+    queuedMsgs.push(text);
+    if (explicitText === undefined && el) { el.value = ''; root.grow?.(el); }
+    renderQueueDock();
+    root.showNotice?.('ok', `⏳ Προστέθηκε στην ουρά (#${queuedMsgs.length}).`);
+    return true;
+  }
+
+  async function drainNextQueued() {
+    if (queueDraining || queuePaused || !queuedMsgs.length) return false;
+    const el = document.getElementById('prompt');
+    if (!el || typeof root.send !== 'function') return false;
+    queueDraining = true;
+    try {
+      const next = queuedMsgs.shift();
+      renderQueueDock();
+      el.value = next;
+      root.grow?.(el);
+      await root.send();
+      return true;
+    } finally {
+      queueDraining = false;
+    }
+  }
+
+  function syncMessageQueue(s) {
+    const { btn } = ensureQueueElements();
+    if (btn) btn.style.display = s.busy ? 'inline-flex' : 'none';
+    const ctxKey = `${s.project || ''}|${s.session_id || ''}`;
+    if (queueContext && ctxKey !== queueContext && queuedMsgs.length) {
+      queuedMsgs = []; queuePaused = false; renderQueueDock();
+    }
+    if (s.error && queuedMsgs.length) { queuePaused = true; renderQueueDock(); return; }
+    if (!s.busy && s.connected && queuedMsgs.length && !queuePaused && !queueDraining) {
+      drainNextQueued();
+    }
+  }
+
   root.ChatPro = {
     highlightCode,
     renderMarkdown,
@@ -573,6 +684,10 @@
     formatUserText,
     updateAtMenu,
     runCompact,
+    enqueueFromPrompt,
+    syncMessageQueue,
+    pauseQueue: () => { queuePaused = true; renderQueueDock(); },
+    getQueue: () => [...queuedMsgs],
     _setFileCacheForTest: (proj, entries) => { fileCache = { project: proj, entries, loading: false }; },
     resetTrail: () => { stopSpinner(); activeTrail = null; },
   };

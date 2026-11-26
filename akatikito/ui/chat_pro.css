@@ -624,3 +624,58 @@ body[data-theme="light"] {
   font-size: 0.9em;
 }
 
+/* ---------- Category 6: Chat Message Queue Dock ---------- */
+#queue-dock {
+  margin: 0 max(20px, calc((100% - 1180px) / 2)) 6px;
+  background: var(--trail-bg);
+  border: 1px solid var(--accent-border, rgba(89, 167, 255, 0.32));
+  border-radius: 11px;
+  padding: 7px 12px;
+  display: none;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 12px;
+}
+#queue-dock.show { display: flex; }
+.queue-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--accent);
+  font-weight: 600;
+}
+.queue-head-actions { margin-left: auto; display: inline-flex; gap: 5px; }
+.queue-head-actions .btn, .queue-row .btn {
+  width: auto;
+  padding: 2px 7px;
+  font-size: 11px;
+  border-radius: 6px;
+}
+.queue-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+  padding: 3px 6px;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.02);
+}
+.queue-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--dim);
+}
+#queue-btn {
+  width: auto;
+  min-height: 42px;
+  padding: 0 12px;
+  border-radius: 11px;
+  font-size: 12.5px;
+  display: none;
+  flex: 0 0 auto;
+}
+
+
