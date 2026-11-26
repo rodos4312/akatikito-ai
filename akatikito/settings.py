@@ -116,6 +116,79 @@ class Settings:
 
     # --- αρχείο ---------------------------------------------------------
 
+    @staticmethod
+    def _load_ui_fields(settings: "Settings", data: dict) -> None:
+        from .i18n import SUPPORTED_LANGUAGES, normalize_lang
+
+        settings.voice_model = data.get("voice_model") if data.get("voice_model") in ("base", "small") else "base"
+        settings.voice_language = (
+            data.get("voice_language") if data.get("voice_language") in ("el", "en", "ru", "de", "es", "fr", "auto") else "el"
+        )
+        settings.ui_language = normalize_lang(data.get("ui_language")) if data.get("ui_language") in SUPPORTED_LANGUAGES else "el"
+        settings.ui_theme = data.get("ui_theme") if data.get("ui_theme") in ("dark", "light") else "dark"
+        try:
+            settings.ui_font_size = max(12, min(20, int(data.get("ui_font_size", 14))))
+        except (TypeError, ValueError):
+            settings.ui_font_size = 14
+        rp = data.get("recent_projects")
+        if isinstance(rp, list):
+            seen: set[str] = set()
+            clean_rp: list[str] = []
+            for item in rp:
+                if isinstance(item, str) and item.strip():
+                    k = item.strip().casefold()
+                    if k not in seen:
+                        seen.add(k)
+                        clean_rp.append(item.strip())
+            settings.recent_projects = clean_rp[:10]
+
+    @staticmethod
+    def _load_provider_fields(settings: "Settings", data: dict) -> None:
+        settings.provider = str(data.get("provider") or settings.provider)
+        settings.base_url = str(data.get("base_url") or "")
+        settings.model = str(data.get("model") or "")
+        try:
+            settings.max_steps = int(data.get("max_steps") or settings.max_steps)
+        except (TypeError, ValueError):
+            settings.max_steps = 50
+        settings.verify_command = str(data.get("verify_command") or "")
+        settings.project = str(data.get("project") or "")
+        models = data.get("models") or {}
+        if isinstance(models, dict):
+            settings.models = {str(k): str(v) for k, v in models.items() if v}
+        if settings.model:
+            settings.models[settings.provider] = settings.model
+        settings.onboarding_complete = (
+            data.get("onboarding_complete", bool(settings.project and (settings.model or settings.models.get(settings.provider)))) is True
+        )
+        raw_vis = data.get("vision_models")
+        settings.vision_models = [str(x) for x in raw_vis if isinstance(x, str)] if isinstance(raw_vis, list) else []
+
+    @staticmethod
+    def _load_security_fields(settings: "Settings", data: dict) -> None:
+        from .advanced import sanitize_feature_list
+
+        settings.advanced_view = data.get("advanced_view") is True
+        settings.advanced_features = sanitize_feature_list(data.get("advanced_features", []))
+        try:
+            settings.daily_budget = max(0, float(data.get("daily_budget", 0)))
+        except (TypeError, ValueError):
+            settings.daily_budget = 0
+        settings.model_prices = data.get("model_prices", {}) if isinstance(data.get("model_prices"), dict) else {}
+        settings.autonomous = data.get("autonomous") is True
+        _load_routing_fields(settings, data)
+        settings.cautious_edits = data.get("cautious_edits") is True
+        settings.checkpoints = data.get("checkpoints", True) is True
+        settings.global_hotkey = str(data.get("global_hotkey", "Alt+Space") or "").strip()
+        raw_cmds = data.get("allowed_commands")
+        settings.allowed_commands = [str(x) for x in raw_cmds if isinstance(x, str)] if isinstance(raw_cmds, list) else []
+        origins = data.get("key_origins") or {}
+        if isinstance(origins, dict):
+            settings.key_origins = {str(k): str(v) for k, v in origins.items() if v}
+        keys = data.get("keys") or {}
+        if isinstance(keys, dict):
+            settings.keys = {str(k): str(v) for k, v in keys.items() if v}
+
     @classmethod
     def load(cls, path: str | Path | None = None) -> "Settings":
         target = Path(path) if path else DEFAULT_PATH
@@ -134,59 +207,9 @@ class Settings:
         if not isinstance(data, dict):
             settings.warning = "Το αρχείο ρυθμίσεων δεν είχε τη σωστή μορφή."
             return settings
-
-        from .i18n import SUPPORTED_LANGUAGES, normalize_lang
-        settings.voice_model=data.get('voice_model') if data.get('voice_model') in ('base','small') else 'base'
-        settings.voice_language=data.get('voice_language') if data.get('voice_language') in ('el','en','ru','de','es','fr','auto') else 'el'
-        settings.ui_language=normalize_lang(data.get('ui_language')) if data.get('ui_language') in SUPPORTED_LANGUAGES else 'el'
-        settings.ui_theme=data.get('ui_theme') if data.get('ui_theme') in ('dark','light') else 'dark'
-        try: settings.ui_font_size=max(12,min(20,int(data.get('ui_font_size',14))))
-        except (TypeError,ValueError): settings.ui_font_size=14
-        rp = data.get('recent_projects')
-        if isinstance(rp, list):
-            seen = set()
-            clean_rp = []
-            for item in rp:
-                if isinstance(item, str) and item.strip():
-                    k = item.strip().casefold()
-                    if k not in seen:
-                        seen.add(k)
-                        clean_rp.append(item.strip())
-            settings.recent_projects = clean_rp[:10]
-        settings.provider = str(data.get("provider") or settings.provider)
-        settings.base_url = str(data.get("base_url") or "")
-        settings.model = str(data.get("model") or "")
-        try:
-            settings.max_steps = int(data.get("max_steps") or settings.max_steps)
-        except (TypeError, ValueError):
-            settings.max_steps = 50
-        settings.verify_command = str(data.get("verify_command") or "")
-        settings.project = str(data.get("project") or "")
-        models = data.get("models") or {}
-        if isinstance(models, dict):
-            settings.models = {str(k): str(v) for k, v in models.items() if v}
-        if settings.model:
-            settings.models[settings.provider] = settings.model
-        settings.onboarding_complete=data.get('onboarding_complete',bool(settings.project and
-            (settings.model or settings.models.get(settings.provider)))) is True
-        settings.vision_models = [str(x) for x in data.get('vision_models',[]) if isinstance(x,str)] if isinstance(data.get('vision_models'),list) else []
-        settings.advanced_view = data.get('advanced_view') is True
-        from .advanced import sanitize_feature_list
-        settings.advanced_features = sanitize_feature_list(data.get('advanced_features', []))
-        try: settings.daily_budget=max(0,float(data.get('daily_budget',0)))
-        except (TypeError,ValueError): settings.daily_budget=0
-        settings.model_prices=data.get('model_prices',{}) if isinstance(data.get('model_prices'),dict) else {}
-        settings.autonomous = data.get('autonomous') is True
-        _load_routing_fields(settings, data)
-        settings.cautious_edits = data.get('cautious_edits') is True
-        settings.checkpoints = data.get('checkpoints',True) is True
-        settings.global_hotkey = str(data.get('global_hotkey', 'Alt+Space') or '').strip()
-        settings.allowed_commands = [str(x) for x in data.get('allowed_commands',[]) if isinstance(x,str)] if isinstance(data.get('allowed_commands'),list) else []
-        origins = data.get('key_origins') or {}
-        if isinstance(origins,dict): settings.key_origins = {str(k):str(v) for k,v in origins.items() if v}
-        keys = data.get("keys") or {}
-        if isinstance(keys, dict):
-            settings.keys = {str(k): str(v) for k, v in keys.items() if v}
+        cls._load_ui_fields(settings, data)
+        cls._load_provider_fields(settings, data)
+        cls._load_security_fields(settings, data)
         return settings
 
     def save(self, path: str | Path | None = None) -> Path:

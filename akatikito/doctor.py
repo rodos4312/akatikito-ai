@@ -567,6 +567,92 @@ class Doctor:
             "checked_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
         }
 
+    def _fix_json_integrity(self) -> tuple[list[str], str]:
+        touched: list[str] = []
+        fixed: list[str] = []
+        for label, path, default in self._json_targets():
+            if not path.is_file():
+                continue
+            try:
+                json.loads(path.read_text(encoding="utf-8"))
+                continue
+            except (OSError, ValueError):
+                pass
+            ts = time.strftime("%Y%m%d-%H%M%S")
+            broken_copy = path.with_name(f"{path.stem}.broken.{ts}{path.suffix}")
+            shutil.copy2(path, broken_copy)
+            touched.append(str(broken_copy))
+            backup = _find_latest_valid_json_backup(path)
+            if backup is not None:
+                shutil.copy2(backup, path)
+                fixed.append(f"{label} (από backup {backup.name})")
+            else:
+                path.write_text(json.dumps(default, ensure_ascii=False, indent=2), encoding="utf-8")
+                fixed.append(f"{label} (καθαρή προεπιλογή)")
+            touched.append(str(path))
+        summary = f"Επαναφέρθηκαν JSON: {', '.join(fixed)}" if fixed else "Δεν βρέθηκαν χαλασμένα JSON."
+        return touched, summary
+
+    def _fix_mobile_sessions(self) -> tuple[list[str], str]:
+        path = self.data_dir / "mobile_bridge.json"
+        if not path.is_file():
+            return [], "Δεν υπάρχει mobile_bridge.json."
+        _backup_file(path, "bak")
+        data = json.loads(path.read_text(encoding="utf-8"))
+        sessions = data.get("sessions", {}) if isinstance(data, dict) else {}
+        now = time.time()
+        clean = {}
+        if isinstance(sessions, dict):
+            for k, created in sessions.items():
+                ks = str(k or "").strip().lower()
+                try:
+                    ts = float(created)
+                except (TypeError, ValueError):
+                    continue
+                if _SHA256_RE.match(ks) and (now - ts) < SESSION_TTL_SECONDS and ts <= now + 86400:
+                    clean[ks] = ts
+        data = data if isinstance(data, dict) else {}
+        removed = (len(sessions) - len(clean)) if isinstance(sessions, dict) else 0
+        data["sessions"] = clean
+        path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        return [str(path)], f"Αφαιρέθηκαν {removed} παλιές/άκυρες συνεδρίες κινητού."
+
+    @staticmethod
+    def _unlink_paths(paths: list[Path]) -> list[str]:
+        touched: list[str] = []
+        for p in paths:
+            try:
+                p.unlink(missing_ok=True)
+                touched.append(str(p))
+            except OSError:
+                continue
+        return touched
+
+    def _fix_agent_backups(self) -> tuple[list[str], str]:
+        old_files, old_bytes, _ = self._find_old_backups(30)
+        touched = self._unlink_paths(old_files)
+        deleted_names = {Path(p).name for p in touched}
+        idx_path = self.project_root / ".agent_backups" / "index.jsonl"
+        if deleted_names and idx_path.is_file():
+            try:
+                _backup_file(idx_path, "bak")
+                kept_lines = []
+                for line in idx_path.read_text(encoding="utf-8").splitlines():
+                    if not line.strip():
+                        continue
+                    try:
+                        bname = Path(str(json.loads(line).get("backup", ""))).name
+                        if bname and bname in deleted_names:
+                            continue
+                    except (ValueError, TypeError, AttributeError):
+                        pass
+                    kept_lines.append(line)
+                idx_path.write_text("\n".join(kept_lines) + ("\n" if kept_lines else ""), encoding="utf-8")
+                touched.append(str(idx_path))
+            except OSError:
+                pass
+        return touched, f"Καθαρίστηκαν {len(deleted_names)} παλιά backups >30 ημερών ({round(old_bytes / (1024 * 1024), 2)} MB)."
+
     def apply_fix(self, check_id: str, *, action: str = "") -> dict[str, Any]:
         """Apply a single explicit human-approved safe fix and record it in the AuditLog."""
         cid = str(check_id or "").strip()
@@ -574,113 +660,16 @@ class Doctor:
             return {"ok": False, "error": "Το audit log δεν επισκευάζεται αυτόματα για λόγους ακεραιότητας."}
         if self.is_busy():
             return {"ok": False, "error": "Περίμενε να ολοκληρωθούν πρώτα οι ενεργές εργασίες (agent / mobile / gateway) πριν την επισκευή."}
-
-        touched: list[str] = []
-        summary = ""
-
-        if cid == "json_integrity":
-            fixed = []
-            for label, path, default in self._json_targets():
-                if not path.is_file():
-                    continue
-                try:
-                    json.loads(path.read_text(encoding="utf-8"))
-                    continue
-                except Exception:
-                    pass
-                ts = time.strftime("%Y%m%d-%H%M%S")
-                broken_copy = path.with_name(f"{path.stem}.broken.{ts}{path.suffix}")
-                shutil.copy2(path, broken_copy)
-                touched.append(str(broken_copy))
-                backup = _find_latest_valid_json_backup(path)
-                if backup is not None:
-                    shutil.copy2(backup, path)
-                    fixed.append(f"{label} (από backup {backup.name})")
-                else:
-                    path.write_text(json.dumps(default, ensure_ascii=False, indent=2), encoding="utf-8")
-                    fixed.append(f"{label} (καθαρή προεπιλογή)")
-                touched.append(str(path))
-            summary = f"Επαναφέρθηκαν JSON: {', '.join(fixed)}" if fixed else "Δεν βρέθηκαν χαλασμένα JSON."
-
-        elif cid == "mobile_sessions":
-            path = self.data_dir / "mobile_bridge.json"
-            if path.is_file():
-                _backup_file(path, "bak")
-                data = json.loads(path.read_text(encoding="utf-8"))
-                sessions = data.get("sessions", {}) if isinstance(data, dict) else {}
-                now = time.time()
-                clean = {}
-                if isinstance(sessions, dict):
-                    for k, created in sessions.items():
-                        ks = str(k or "").strip().lower()
-                        try:
-                            ts = float(created)
-                        except (TypeError, ValueError):
-                            continue
-                        if _SHA256_RE.match(ks) and (now - ts) < SESSION_TTL_SECONDS and ts <= now + 86400:
-                            clean[ks] = ts
-                data = data if isinstance(data, dict) else {}
-                removed = (len(sessions) - len(clean)) if isinstance(sessions, dict) else 0
-                data["sessions"] = clean
-                path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-                touched.append(str(path))
-                summary = f"Αφαιρέθηκαν {removed} παλιές/άκυρες συνεδρίες κινητού."
-            else:
-                summary = "Δεν υπάρχει mobile_bridge.json."
-
-        elif cid == "orphan_locks":
-            orphans = self._find_orphan_locks()
-            for p in orphans:
-                try:
-                    p.unlink(missing_ok=True)
-                    touched.append(str(p))
-                except OSError:
-                    pass
-            summary = f"Διαγράφηκαν {len(touched)} ορφανά αρχεία .lock."
-
-        elif cid == "temp_partials":
-            found = self._find_temp_partials()
-            for p in found:
-                try:
-                    p.unlink(missing_ok=True)
-                    touched.append(str(p))
-                except OSError:
-                    pass
-            summary = f"Διαγράφηκαν {len(touched)} προσωρινά αρχεία του Akatikito."
-
-        elif cid == "agent_backups":
-            old_files, old_bytes, _ = self._find_old_backups(30)
-            deleted_names: set[str] = set()
-            for p in old_files:
-                try:
-                    p.unlink(missing_ok=True)
-                    touched.append(str(p))
-                    deleted_names.add(p.name)
-                except OSError:
-                    pass
-            # Prune stale rows from .agent_backups/index.jsonl for deleted files
-            idx_path = self.project_root / ".agent_backups" / "index.jsonl"
-            if deleted_names and idx_path.is_file():
-                try:
-                    _backup_file(idx_path, "bak")
-                    kept_lines = []
-                    for line in idx_path.read_text(encoding="utf-8").splitlines():
-                        if not line.strip():
-                            continue
-                        try:
-                            row = json.loads(line)
-                            bname = Path(str(row.get("backup", ""))).name
-                            if bname and bname in deleted_names:
-                                continue
-                        except Exception:
-                            pass
-                        kept_lines.append(line)
-                    idx_path.write_text("\n".join(kept_lines) + ("\n" if kept_lines else ""), encoding="utf-8")
-                    touched.append(str(idx_path))
-                except OSError:
-                    pass
-            summary = f"Καθαρίστηκαν {len(deleted_names)} παλιά backups >30 ημερών ({round(old_bytes / (1024 * 1024), 2)} MB)."
-
+        local_fixes = {
+            "json_integrity": self._fix_json_integrity,
+            "mobile_sessions": self._fix_mobile_sessions,
+            "orphan_locks": lambda: (t := self._unlink_paths(self._find_orphan_locks()), f"Διαγράφηκαν {len(t)} ορφανά αρχεία .lock."),
+            "temp_partials": lambda: (t := self._unlink_paths(self._find_temp_partials()), f"Διαγράφηκαν {len(t)} προσωρινά αρχεία του Akatikito."),
+            "agent_backups": self._fix_agent_backups,
+        }
+        handler = local_fixes.get(cid)
+        if handler is not None:
+            touched, summary = handler()
         else:
             ext = _ext_checks.apply_extended_fix(self, cid, action, _backup_file)
             if ext is None:
@@ -688,21 +677,12 @@ class Doctor:
             if isinstance(ext, dict):
                 return ext
             touched, summary = ext
-
         audit_logged = True
         try:
-            AuditLog(self.project_root).record(
-                "doctor_fix",
-                tool=cid,
-                status="ok",
-                paths=touched,
-                summary=summary,
-                actor="human",
-            )
+            AuditLog(self.project_root).record("doctor_fix", tool=cid, status="ok", paths=touched, summary=summary, actor="human")
         except Exception:
             audit_logged = False
             summary += " (προσοχή: η επισκευή έγινε, αλλά δεν καταγράφηκε στο audit log)"
-
         return {"ok": True, "check_id": cid, "summary": summary, "paths": touched, "audit_logged": audit_logged}
 
 

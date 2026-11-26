@@ -500,111 +500,113 @@ def run_extended_checks(doc, make_item, *, check_api: bool = False) -> list[dict
     ]
 
 
-def apply_extended_fix(doc, check_id: str, action: str, backup_fn) -> dict[str, Any] | tuple[list[str], str] | None:
-    if check_id == "daily_budget":
-        spath = doc.data_dir / "settings.json"
-        backup_fn(spath, "bak")
-        if doc.state is not None and getattr(doc.state, "settings", None) is not None and doc.data_dir == DEFAULT_PATH.parent.resolve():
-            doc.state.settings.daily_budget = 1.0
-            doc.state.settings.save()
-        else:
-            st = Settings.load(spath)
-            st.daily_budget = 1.0
-            st.save(spath)
-        return [str(spath)], "Ορίστηκε ημερήσιο όριο κόστους 1,00 €."
+def _fix_setting_field(doc, backup_fn, attr: str, value, message: str) -> tuple[list[str], str]:
+    spath = doc.data_dir / "settings.json"
+    backup_fn(spath, "bak")
+    if doc.state is not None and getattr(doc.state, "settings", None) is not None and doc.data_dir == DEFAULT_PATH.parent.resolve():
+        setattr(doc.state.settings, attr, value)
+        doc.state.settings.save()
+    else:
+        st = Settings.load(spath)
+        setattr(st, attr, value)
+        st.save(spath)
+    return [str(spath)], message
 
-    if check_id == "uncertain_jobs":
-        from .scheduler import ScheduledQueue, queue_for
 
-        act = action if action in ("retry", "cancel") else "cancel"
-        qpath = doc._scheduled_path()
-        if not qpath.is_file():
-            return {"ok": False, "error": "Δεν βρέθηκε το scheduled.json."}
-        backup_fn(qpath, "bak")
-        queue = queue_for(doc.state) if (doc.state is not None and doc.data_dir == DEFAULT_PATH.parent.resolve()) else ScheduledQueue(qpath)
-        stuck_ids = [j["id"] for j in queue.view() if j.get("status") == "uncertain"]
-        acted = 0
-        for jid in stuck_ids:
-            try:
-                queue.action(jid, act)
-                acted += 1
-            except Exception:
-                pass
-        return [str(qpath)], f"Εφαρμόστηκε '{act}' σε {acted} uncertain εργασίες."
+def _fix_uncertain_jobs(doc, action: str, backup_fn):
+    from .scheduler import ScheduledQueue, queue_for
 
-    if check_id == "checkpoint_repo":
-        repo = doc.project_root / ".agent" / "checkpoints" / "objects.git"
-        git_bin = shutil.which("git")
-        if not git_bin:
-            return {"ok": False, "error": "Δεν βρέθηκε το git στο σύστημα."}
-        touched: list[str] = []
-        if repo.exists():
-            broken = repo.with_name(f"objects.git.broken.{time.strftime('%Y%m%d-%H%M%S')}")
-            repo.rename(broken)
-            touched.append(str(broken))
-        repo.parent.mkdir(parents=True, exist_ok=True)
-        subprocess.run([git_bin, "init", "--bare", str(repo)], capture_output=True, check=True, timeout=30, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
-        touched.append(str(repo))
-        return touched, "Δημιουργήθηκε νέο καθαρό checkpoint repo."
+    act = action if action in ("retry", "cancel") else "cancel"
+    qpath = doc._scheduled_path()
+    if not qpath.is_file():
+        return {"ok": False, "error": "Δεν βρέθηκε το scheduled.json."}
+    backup_fn(qpath, "bak")
+    queue = queue_for(doc.state) if (doc.state is not None and doc.data_dir == DEFAULT_PATH.parent.resolve()) else ScheduledQueue(qpath)
+    stuck_ids = [j["id"] for j in queue.view() if j.get("status") == "uncertain"]
+    acted = 0
+    for jid in stuck_ids:
+        try:
+            queue.action(jid, act)
+            acted += 1
+        except (OSError, ValueError, KeyError):
+            continue
+    return [str(qpath)], f"Εφαρμόστηκε '{act}' σε {acted} uncertain εργασίες."
 
-    if check_id == "python_packages":
-        req_core = doc.app_root / "requirements.txt"
-        req_feat = doc.app_root / "requirements-features.txt"
-        if not req_core.is_file():
-            return {"ok": False, "error": "Δεν βρέθηκε το requirements.txt."}
-        cmd = [sys.executable, "-m", "pip", "install", "-r", str(req_core)]
-        if req_feat.is_file():
-            cmd.extend(["-r", str(req_feat)])
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=300, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
-        if proc.returncode != 0:
-            return {"ok": False, "error": (proc.stderr or proc.stdout or "pip install failed")[:400]}
-        return [], "Εγκαταστάθηκαν τα απαιτούμενα πακέτα Python (requirements + features)."
 
-    if check_id == "windows_shortcuts":
-        if os.name != "nt":
-            return {"ok": False, "error": "Μόνο για Windows."}
-        script = doc.app_root / "scripts" / "create_shortcuts.py"
-        if not script.is_file():
-            return {"ok": False, "error": "Δεν βρέθηκε το scripts/create_shortcuts.py."}
-        proc = subprocess.run([sys.executable, str(script)], capture_output=True, text=True, timeout=30, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
-        if proc.returncode != 0:
-            return {"ok": False, "error": (proc.stderr or proc.stdout or "create_shortcuts failed")[:400]}
-        touched = []
-        for p in shortcut_paths():
-            try:
-                if p.is_file():
-                    touched.append(str(p))
-            except OSError:
-                pass
-        return touched, "Επαναδημιουργήθηκαν οι συντομεύσεις Windows (pythonw.exe + εικονίδιο)."
+def _fix_checkpoint_repo(doc):
+    repo = doc.project_root / ".agent" / "checkpoints" / "objects.git"
+    git_bin = shutil.which("git")
+    if not git_bin:
+        return {"ok": False, "error": "Δεν βρέθηκε το git στο σύστημα."}
+    touched: list[str] = []
+    if repo.exists():
+        broken = repo.with_name(f"objects.git.broken.{time.strftime('%Y%m%d-%H%M%S')}")
+        repo.rename(broken)
+        touched.append(str(broken))
+    repo.parent.mkdir(parents=True, exist_ok=True)
+    subprocess.run([git_bin, "init", "--bare", str(repo)], capture_output=True, check=True, timeout=30, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    touched.append(str(repo))
+    return touched, "Δημιουργήθηκε νέο καθαρό checkpoint repo."
 
-    if check_id == "doc_index":
-        return _fix_doc_index(doc)
 
-    if check_id == "memory_db":
-        return _fix_memory_db(doc)
+def _fix_python_packages(doc):
+    req_core = doc.app_root / "requirements.txt"
+    req_feat = doc.app_root / "requirements-features.txt"
+    if not req_core.is_file():
+        return {"ok": False, "error": "Δεν βρέθηκε το requirements.txt."}
+    cmd = [sys.executable, "-m", "pip", "install", "-r", str(req_core)]
+    if req_feat.is_file():
+        cmd.extend(["-r", str(req_feat)])
+    proc = subprocess.run(cmd, capture_output=True, text=True, timeout=300, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    if proc.returncode != 0:
+        return {"ok": False, "error": (proc.stderr or proc.stdout or "pip install failed")[:400]}
+    return [], "Εγκαταστάθηκαν τα απαιτούμενα πακέτα Python (requirements + features)."
 
-    if check_id == "staged_attachments":
-        old_files, old_bytes, _, _ = _scan_attachments(doc)
-        touched = []
-        for p in old_files:
-            try:
-                p.unlink(missing_ok=True)
+
+def _fix_windows_shortcuts(doc):
+    if os.name != "nt":
+        return {"ok": False, "error": "Μόνο για Windows."}
+    script = doc.app_root / "scripts" / "create_shortcuts.py"
+    if not script.is_file():
+        return {"ok": False, "error": "Δεν βρέθηκε το scripts/create_shortcuts.py."}
+    proc = subprocess.run([sys.executable, str(script)], capture_output=True, text=True, timeout=30, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    if proc.returncode != 0:
+        return {"ok": False, "error": (proc.stderr or proc.stdout or "create_shortcuts failed")[:400]}
+    touched = []
+    for p in shortcut_paths():
+        try:
+            if p.is_file():
                 touched.append(str(p))
-            except OSError:
-                pass
-        return touched, f"Καθαρίστηκαν {len(touched)} παλιά συνημμένα >30 ημερών ({round(old_bytes / (1024 * 1024), 2)} MB)."
+        except OSError:
+            continue
+    return touched, "Επαναδημιουργήθηκαν οι συντομεύσεις Windows (pythonw.exe + εικονίδιο)."
 
-    if check_id == "desktop_hotkey_tray":
-        spath = doc.data_dir / "settings.json"
-        backup_fn(spath, "bak")
-        if doc.state is not None and getattr(doc.state, "settings", None) is not None and doc.data_dir == DEFAULT_PATH.parent.resolve():
-            doc.state.settings.global_hotkey = "Alt+Space"
-            doc.state.settings.save()
-        else:
-            st = Settings.load(spath)
-            st.global_hotkey = "Alt+Space"
-            st.save(spath)
-        return [str(spath)], "Επαναφέρθηκε η συντόμευση global_hotkey σε «Alt+Space»."
 
-    return None
+def _fix_staged_attachments(doc) -> tuple[list[str], str]:
+    old_files, old_bytes, _, _ = _scan_attachments(doc)
+    touched = []
+    for p in old_files:
+        try:
+            p.unlink(missing_ok=True)
+            touched.append(str(p))
+        except OSError:
+            continue
+    return touched, f"Καθαρίστηκαν {len(touched)} παλιά συνημμένα >30 ημερών ({round(old_bytes / (1024 * 1024), 2)} MB)."
+
+
+_EXTENDED_FIX_HANDLERS = {
+    "daily_budget": lambda d, _a, b: _fix_setting_field(d, b, "daily_budget", 1.0, "Ορίστηκε ημερήσιο όριο κόστους 1,00 €."),
+    "uncertain_jobs": lambda d, a, b: _fix_uncertain_jobs(d, a, b),
+    "checkpoint_repo": lambda d, _a, _b: _fix_checkpoint_repo(d),
+    "python_packages": lambda d, _a, _b: _fix_python_packages(d),
+    "windows_shortcuts": lambda d, _a, _b: _fix_windows_shortcuts(d),
+    "doc_index": lambda d, _a, _b: _fix_doc_index(d),
+    "memory_db": lambda d, _a, _b: _fix_memory_db(d),
+    "staged_attachments": lambda d, _a, _b: _fix_staged_attachments(d),
+    "desktop_hotkey_tray": lambda d, _a, b: _fix_setting_field(d, b, "global_hotkey", "Alt+Space", "Επαναφέρθηκε η συντόμευση global_hotkey σε «Alt+Space»."),
+}
+
+
+def apply_extended_fix(doc, check_id: str, action: str, backup_fn) -> dict[str, Any] | tuple[list[str], str] | None:
+    handler = _EXTENDED_FIX_HANDLERS.get(check_id)
+    return handler(doc, action, backup_fn) if handler is not None else None
