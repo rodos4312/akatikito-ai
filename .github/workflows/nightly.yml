@@ -1,0 +1,48 @@
+name: Nightly Full Verification
+
+on:
+  schedule:
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+
+jobs:
+  nightly:
+    name: Nightly (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt -r requirements-features.txt -r requirements-dev.txt
+
+      - name: Install template parser dependencies
+        working-directory: akatikito/template_parsers
+        run: npm ci --no-audit --no-fund
+
+      - name: Full unified check suite
+        env:
+          PYTHONUTF8: "1"
+        run: python scripts/check.py --ci
+
+      - name: Central Memory 8-language eval benchmark
+        env:
+          PYTHONUTF8: "1"
+        run: python scripts/memory_eval.py
