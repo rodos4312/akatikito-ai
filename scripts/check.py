@@ -128,6 +128,10 @@ def _step_health(ctx: RunContext) -> tuple[int, str]:
     return _run_cmd([ctx.python, "scripts/health_check.py"], ctx.root, timeout=60)
 
 
+def _step_rules(ctx: RunContext) -> tuple[int, str]:
+    return _run_cmd([ctx.python, "scripts/quality_rules.py"], ctx.root, timeout=90)
+
+
 def _ui_js_files(root: Path) -> list[str]:
     files = sorted(p.relative_to(root).as_posix() for p in (root / "akatikito" / "ui").glob("*.js"))
     onb = root / "akatikito" / "onboarding.js"
@@ -189,6 +193,7 @@ STEPS: tuple[Step, ...] = (
     Step("ruff", "ruff (ruff.toml)", _step_ruff, fast=True),
     Step("size", "file size ratchet", _step_size, fast=True),
     Step("health", "complexity and long-line ratchet", _step_health, fast=True),
+    Step("rules", "hidden-error rules ratchet", _step_rules, fast=True),
     Step("js", "UI JavaScript syntax", _step_js, fast=True),
     Step("node", "node UI tests", _step_node, fast=True),
     Step("pytest", "pytest", _step_pytest, fast=False),
