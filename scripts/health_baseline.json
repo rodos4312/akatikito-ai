@@ -59,7 +59,6 @@
     "akatikito/gateway.py::Gateway.process": 31,
     "akatikito/gateway_control.py::GatewayControl.action": 28,
     "akatikito/github_updater.py::apply_github_update": 31,
-    "akatikito/html_navigation.py::analyze": 71,
     "akatikito/markup_navigation.py::css": 21,
     "akatikito/markup_navigation.py::xml": 29,
     "akatikito/mcp_client.py::MCPHub.connect": 23,

@@ -215,6 +215,206 @@ def _local_src(value):
     return "html-script:" + url.path
 
 
+class _HtmlAnalyzer:
+    """Bounded HTML tree walker with embedded JS/CSS symbol injection."""
+
+    def __init__(self, raw, script_symbols, limits):
+        self.raw = raw
+        self.script_symbols = script_symbols
+        self.limits = limits
+        self.deadline = time.monotonic() + MAX_SECONDS
+        self.line_starts = [0] + [i + 1 for i, c in enumerate(raw) if c == 10]
+        self.result = []
+        self.refs = set()
+        self.injections = []
+        self.style_injections = []
+        self.notices = []
+        self.cacheable = True
+        self.counts = Counter()
+        self.visited = 0
+        self.embedded = 0
+        self.base_present = False
+
+    def notice(self, message):
+        if len(self.notices) < 16:
+            self.notices.append(message[:240])
+
+    def row(self, a, b, name, header, kind):
+        return {
+            "first": bisect_right(self.line_starts, a),
+            "last": bisect_right(self.line_starts, max(a, b - 1)),
+            "name": name,
+            "header": header,
+            "kind": kind,
+            "start": a,
+            "end": b,
+        }
+
+    def inject(self, a, b, label, language, mapper=None):
+        if self.embedded >= MAX_INJECTIONS or time.monotonic() > self.deadline:
+            self.cacheable = False
+            self.notice("Μερική δομή: εξαντλήθηκε το όριο embedded scripts/χρόνου.")
+            return False
+        self.embedded += 1
+        code = mapper.data if mapper else self.raw[a:b]
+        analysis = self.script_symbols(code.decode("utf-8"), language)
+        self.cacheable = self.cacheable and analysis["cacheable"]
+        bucket = self.style_injections if language == ".css" else self.injections
+        bucket.append(
+            {"name": label, "language": language, "first": bisect_right(self.line_starts, a), "last": bisect_right(self.line_starts, max(a, b - 1))}
+        )
+        if analysis["notice"]:
+            self.notice(label + ": " + analysis["notice"])
+        for child in analysis["symbols"]:
+            if len(self.result) >= self.limits["symbols"]:
+                self.cacheable = False
+                self.notice("Μερική δομή: όριο συμβόλων HTML/scripts.")
+                break
+            x = a + (mapper.offset(child["start"]) if mapper else child["start"])
+            y = a + (mapper.offset(child["end"], True) if mapper else child["end"])
+            if a <= x < y <= b:
+                self.result.append(self.row(x, y, label + "." + child["name"], child["header"], child["kind"]))
+        self.refs.update(analysis["refs"])
+        return not analysis["notice"]
+
+    def _inject_handlers(self, attribute_nodes, closed, label):
+        if not closed:
+            return
+        for key, (attribute, value) in attribute_nodes.items():
+            if not key.startswith("on") or key[2:] not in EVENTS or value is None or attribute.has_error:
+                continue
+            name = label + "." + key
+            try:
+                mapper = AttributeCode(self.raw[value.start_byte : value.end_byte], self.deadline)
+            except ValueError as exc:
+                self.notice(name + ": " + str(exc))
+                self.cacheable = False
+                continue
+            if self.inject(value.start_byte, value.end_byte, name, ".js", mapper) and len(self.result) < self.limits["symbols"]:
+                self.result.append(self.row(attribute.start_byte, attribute.end_byte, name, key + " (JavaScript)", "handler"))
+
+    def _handle_script(self, node, region, attrs, attrs_known, closed, is_foreign, label, header):
+        if not closed or not attrs_known:
+            return
+        language, mode = _script_type(attrs)
+        if region:
+            suffix_type = " " + str(attrs.get("type"))[:80] if "type" in attrs else ""
+            region["header"] = header + " [" + mode + suffix_type + "]"
+        if "src" in attrs:
+            reference = _local_src(attrs["src"]) if language else None
+            if reference:
+                self.refs.add(reference)
+            return
+        if language is None:
+            return
+        if is_foreign:
+            self.notice(label + ": scripts σε foreign SVG/MathML δεν αναλύθηκαν ως HTML script.")
+            return
+        body = next((c for c in node.named_children if c.type == "raw_text"), None)
+        if body is not None and self.inject(body.start_byte, body.end_byte, label, language):
+            region["kind"] = "script"
+
+    def _handle_style(self, node, region, attrs, attrs_known, closed, label):
+        if not closed or not attrs_known:
+            return
+        if attrs.get("type", "text/css") not in ("", "text/css") or attrs.get("lang", "css") != "css":
+            self.notice(label + ": μη υποστηριζόμενη γλώσσα style· το περιεχόμενο παραμένει κείμενο.")
+            return
+        body = next((c for c in node.named_children if c.type == "raw_text"), None)
+        if body is not None and self.inject(body.start_byte, body.end_byte, label, ".css") and region:
+            region["kind"] = "css"
+
+    def _enqueue_children(self, pending, children, foreign):
+        if len(pending) + len(children) > self.limits["nodes"]:
+            self.cacheable = False
+            self.notice("Μερική δομή HTML: όριο κόμβων· πάρα πολλοί κόμβοι.")
+            return False
+        pending.extend((child, foreign) for child in reversed(children))
+        return True
+
+    def _read_element_attrs(self, start):
+        try:
+            attrs, attribute_nodes = _attributes(start, self.raw, self.deadline)
+            return attrs, attribute_nodes, True
+        except ValueError as exc:
+            self.notice(str(exc))
+            self.cacheable = False
+            return {}, {}, False
+
+    def _element_meta(self, node):
+        start = node if node.type == "self_closing_tag" else next(
+            (c for c in node.named_children if c.type in ("start_tag", "self_closing_tag")), None
+        )
+        tag_node = next((c for c in start.named_children if c.type == "tag_name"), None) if start is not None else None
+        if tag_node is None:
+            return None
+        tag = self.raw[tag_node.start_byte : tag_node.end_byte].decode("utf-8").lower()
+        self.counts[tag] += 1
+        attrs, attribute_nodes, attrs_known = self._read_element_attrs(start)
+        identity = " ".join((attrs.get("id") or "").split())[:80]
+        display_tag = tag[:80] + ("…" if len(tag) > 80 else "")
+        label = display_tag + ("#" + identity if identity else "") + "[" + str(self.counts[tag]) + "]"
+        header = "<" + display_tag + (' id="' + identity + '"' if identity else "") + ">"
+        closed = not node.has_error and not node.is_missing and not start.has_error
+        return tag, attrs, attribute_nodes, attrs_known, label, header, closed
+
+    def _visit_element(self, node, foreign, pending):
+        meta = self._element_meta(node)
+        if meta is None:
+            return True
+        tag, attrs, attribute_nodes, attrs_known, label, header, closed = meta
+        if tag == "base" and ("href" in attrs or not attrs_known):
+            self.base_present = True
+        region = self.row(node.start_byte, node.end_byte, label, header, "html") if closed else None
+        if region:
+            self.result.append(region)
+        is_foreign = foreign or tag in ("svg", "math")
+        self._inject_handlers(attribute_nodes, closed, label)
+        if tag == "script":
+            self._handle_script(node, region, attrs, attrs_known, closed, is_foreign, label, header)
+            return True
+        if tag == "style":
+            self._handle_style(node, region, attrs, attrs_known, closed, label)
+            return True
+        if tag in OPAQUE:
+            return True
+        children = [c for c in node.named_children if c.type not in ("start_tag", "end_tag", "self_closing_tag")]
+        return self._enqueue_children(pending, children, is_foreign)
+
+    def run(self, root):
+        if root.has_error:
+            self.notice("Μερική δομή HTML: υπάρχουν σφάλματα ή ατελείς ετικέτες.")
+        pending = [(root, False)]
+        while pending:
+            if (self.visited >= self.limits["nodes"] or len(self.result) >= self.limits["symbols"]
+                    or len(self.refs) >= self.limits["symbols"] or time.monotonic() > self.deadline):
+                self.cacheable = False
+                self.notice("Μερική δομή HTML: όριο χρόνου/κόμβων/συμβόλων. Χρησιμοποίησε start/end.")
+                break
+            node, foreign = pending.pop()
+            self.visited += 1
+            if node.type not in ("element", "script_element", "style_element", "self_closing_tag"):
+                if node.type not in ("comment", "raw_text", "text", "doctype"):
+                    if not self._enqueue_children(pending, node.named_children, foreign):
+                        break
+                continue
+            if not self._visit_element(node, foreign, pending):
+                break
+        if self.base_present:
+            if self.refs:
+                self.notice("Υπάρχει <base href>: οι σχετικές συνδέσεις scripts/imports δεν επιλύθηκαν με μαντεψιά.")
+            self.refs.clear()
+        return {
+            "symbols": sorted(self.result, key=lambda item: (item["first"], item["last"], item["name"])),
+            "notice": "\n".join(dict.fromkeys(self.notices))[:2400],
+            "backend": "tree-sitter html + embedded parsers",
+            "cacheable": self.cacheable,
+            "refs": sorted(self.refs),
+            "injections": self.injections,
+            "style_injections": self.style_injections,
+        }
+
+
 def analyze(text, suffix, parse, script_symbols, limits):
     raw = text.encode("utf-8")
     empty = {"symbols": [], "notice": "", "backend": "tree-sitter html", "cacheable": True, "refs": [], "injections": []}
@@ -231,167 +431,4 @@ def analyze(text, suffix, parse, script_symbols, limits):
         }
     if tree is None:
         return {**empty, "cacheable": False, "notice": "Χρονικό όριο του HTML parser. Χρησιμοποίησε start/end."}
-    deadline = time.monotonic() + MAX_SECONDS
-    line_starts = [0] + [i + 1 for i, c in enumerate(raw) if c == 10]
-    result = []
-    refs = set()
-    injections = []
-    notices = []
-    cacheable = True
-    counts = Counter()
-    pending = [(tree.root_node, False)]
-    visited = 0
-    embedded = 0
-    base_present = False
-    if tree.root_node.has_error:
-        notices.append("Μερική δομή HTML: υπάρχουν σφάλματα ή ατελείς ετικέτες.")
-
-    def notice(message):
-        if len(notices) < 16:
-            notices.append(message[:240])
-
-    def row(a, b, name, header, kind):
-        return {
-            "first": bisect_right(line_starts, a),
-            "last": bisect_right(line_starts, max(a, b - 1)),
-            "name": name,
-            "header": header,
-            "kind": kind,
-            "start": a,
-            "end": b,
-        }
-
-    def inject(a, b, label, language, mapper=None):
-        nonlocal embedded, cacheable
-        if embedded >= MAX_INJECTIONS or time.monotonic() > deadline:
-            cacheable = False
-            notice("Μερική δομή: εξαντλήθηκε το όριο embedded scripts/χρόνου.")
-            return False
-        embedded += 1
-        code = mapper.data if mapper else raw[a:b]
-        analysis = script_symbols(code.decode("utf-8"), language)
-        cacheable = cacheable and analysis["cacheable"]
-        (empty.setdefault("style_injections", []) if language == ".css" else injections).append(
-            {"name": label, "language": language, "first": bisect_right(line_starts, a), "last": bisect_right(line_starts, max(a, b - 1))}
-        )
-        if analysis["notice"]:
-            notice(label + ": " + analysis["notice"])
-        for child in analysis["symbols"]:
-            if len(result) >= limits["symbols"]:
-                cacheable = False
-                notice("Μερική δομή: όριο συμβόλων HTML/scripts.")
-                break
-            x = a + (mapper.offset(child["start"]) if mapper else child["start"])
-            y = a + (mapper.offset(child["end"], True) if mapper else child["end"])
-            if not a <= x < y <= b:
-                continue
-            result.append(row(x, y, label + "." + child["name"], child["header"], child["kind"]))
-        refs.update(analysis["refs"])
-        return not analysis["notice"]
-
-    while pending:
-        if visited >= limits["nodes"] or len(result) >= limits["symbols"] or len(refs) >= limits["symbols"] or time.monotonic() > deadline:
-            cacheable = False
-            notice("Μερική δομή HTML: όριο χρόνου/κόμβων/συμβόλων. Χρησιμοποίησε start/end.")
-            break
-        node, foreign = pending.pop()
-        visited += 1
-        if node.type not in ("element", "script_element", "style_element", "self_closing_tag"):
-            if node.type not in ("comment", "raw_text", "text", "doctype"):
-                if len(pending) + node.named_child_count > limits["nodes"]:
-                    cacheable = False
-                    notice("Μερική δομή HTML: όριο κόμβων· πάρα πολλοί κόμβοι.")
-                    break
-                pending.extend((child, foreign) for child in reversed(node.named_children))
-            continue
-        start = node if node.type == "self_closing_tag" else next((c for c in node.named_children if c.type in ("start_tag", "self_closing_tag")), None)
-        if start is None:
-            continue
-        tag_node = next((c for c in start.named_children if c.type == "tag_name"), None)
-        if tag_node is None:
-            continue
-        tag = raw[tag_node.start_byte : tag_node.end_byte].decode("utf-8").lower()
-        counts[tag] += 1
-        attrs_known = True
-        try:
-            attrs, attribute_nodes = _attributes(start, raw, deadline)
-        except ValueError as exc:
-            attrs = {}
-            attribute_nodes = {}
-            attrs_known = False
-            notice(str(exc))
-            cacheable = False
-        identity = " ".join((attrs.get("id") or "").split())[:80]
-        display_tag = tag[:80] + ("…" if len(tag) > 80 else "")
-        label = display_tag + ("#" + identity if identity else "") + "[" + str(counts[tag]) + "]"
-        header = "<" + display_tag + (' id="' + identity + '"' if identity else "") + ">"
-        if tag == "base" and ("href" in attrs or not attrs_known):
-            base_present = True
-        closed = not node.has_error and not node.is_missing and not start.has_error
-        region = None
-        if closed:
-            region = row(node.start_byte, node.end_byte, label, header, "html")
-            result.append(region)
-        is_foreign = foreign or tag in ("svg", "math")
-        for key, (attribute, value) in attribute_nodes.items():
-            if not closed or not key.startswith("on") or key[2:] not in EVENTS or value is None or attribute.has_error:
-                continue
-            name = label + "." + key
-            try:
-                mapper = AttributeCode(raw[value.start_byte : value.end_byte], deadline)
-            except ValueError as exc:
-                notice(name + ": " + str(exc))
-                cacheable = False
-                continue
-            if inject(value.start_byte, value.end_byte, name, ".js", mapper) and len(result) < limits["symbols"]:
-                result.append(row(attribute.start_byte, attribute.end_byte, name, key + " (JavaScript)", "handler"))
-        if tag == "script":
-            if not closed or not attrs_known:
-                continue
-            language, mode = _script_type(attrs)
-            if region:
-                region["header"] = header + " [" + mode + (" " + str(attrs.get("type"))[:80] if "type" in attrs else "") + "]"
-            if "src" in attrs:
-                reference = _local_src(attrs["src"]) if language else None
-                if reference:
-                    refs.add(reference)
-                continue
-            if language is None:
-                continue
-            if is_foreign:
-                notice(label + ": scripts σε foreign SVG/MathML δεν αναλύθηκαν ως HTML script.")
-                continue
-            body = next((c for c in node.named_children if c.type == "raw_text"), None)
-            if body is not None and inject(body.start_byte, body.end_byte, label, language):
-                region["kind"] = "script"
-            continue
-        if tag == "style":
-            if not closed or not attrs_known:
-                continue
-            if attrs.get("type", "text/css") not in ("", "text/css") or attrs.get("lang", "css") != "css":
-                notice(label + ": μη υποστηριζόμενη γλώσσα style· το περιεχόμενο παραμένει κείμενο.")
-                continue
-            body = next((c for c in node.named_children if c.type == "raw_text"), None)
-            if body is not None and inject(body.start_byte, body.end_byte, label, ".css") and region:
-                region["kind"] = "css"
-            continue
-        if tag in OPAQUE:
-            continue
-        if len(pending) + node.named_child_count > limits["nodes"]:
-            cacheable = False
-            notice("Μερική δομή HTML: όριο κόμβων· πάρα πολλοί κόμβοι.")
-            break
-        pending.extend((child, is_foreign) for child in reversed(node.named_children) if child.type not in ("start_tag", "end_tag", "self_closing_tag"))
-    if base_present:
-        if refs:
-            notice("Υπάρχει <base href>: οι σχετικές συνδέσεις scripts/imports δεν επιλύθηκαν με μαντεψιά.")
-        refs.clear()
-    return {
-        "symbols": sorted(result, key=lambda item: (item["first"], item["last"], item["name"])),
-        "notice": "\n".join(dict.fromkeys(notices))[:2400],
-        "backend": "tree-sitter html + embedded parsers",
-        "cacheable": cacheable,
-        "refs": sorted(refs),
-        "injections": injections,
-        "style_injections": empty.get("style_injections", []),
-    }
+    return _HtmlAnalyzer(raw, script_symbols, limits).run(tree.root_node)
