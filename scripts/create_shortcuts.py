@@ -57,8 +57,9 @@ def create_windows_shortcuts(root: Path = ROOT, icon_path: Path = ICON_PATH, des
     """Create Start Menu (and optional Desktop) shortcuts pointing directly to pythonw.exe (zero console)."""
     if os.name != "nt":
         return []
+    bundled_pythonw = root / "python" / "pythonw.exe"
     pythonw = root / ".venv" / "Scripts" / "pythonw.exe"
-    target_exe = pythonw if pythonw.is_file() else Path(sys.executable)
+    target_exe = bundled_pythonw if bundled_pythonw.is_file() else (pythonw if pythonw.is_file() else Path(sys.executable))
     if not icon_path.is_file():
         generate_icon(icon_path)
 

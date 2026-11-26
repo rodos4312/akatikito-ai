@@ -55,7 +55,60 @@ def _log_startup_error(text: str) -> Path | None:
         return None
 
 
-def main() -> int:
+def _run_headless_check() -> int:
+    import json
+    import urllib.request
+
+    state = AppState()
+    url, server = start_server(state)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        req = urllib.request.Request(url + "/api/status", headers={"X-Akatikito-Token": server.auth_token})
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            payload = json.loads(resp.read().decode("utf-8"))
+        print(f"OK: headless-check {APP_NAME} v{payload.get('version', '')}")
+        return 0
+    finally:
+        server.shutdown()
+        server.server_close()
+        state.close()
+
+
+def _handle_cli_flags(argv: list[str] | None) -> int | None:
+    cli_args = list(sys.argv[1:] if argv is None else argv)
+    if "--version" in cli_args:
+        from akatikito.diagnostics import APP_VERSION
+
+        print(f"{APP_NAME} v{APP_VERSION}")
+        return 0
+    if "--headless-check" in cli_args:
+        _prepare_streams()
+        return _run_headless_check()
+    return None
+
+
+def _cleanup_runtime(tray, hotkey, state, server, server_thread) -> None:
+    for obj, method in ((tray, "stop"), (hotkey, "stop"), (state, "close")):
+        if obj is not None:
+            try:
+                getattr(obj, method)()
+            except Exception:
+                pass
+    if server is not None:
+        try:
+            server.shutdown()
+            server.server_close()
+        except Exception:
+            pass
+    if server_thread is not None:
+        server_thread.join(timeout=2)
+
+
+def main(argv: list[str] | None = None) -> int:
+    early = _handle_cli_flags(argv)
+    if early is not None:
+        return early
     windowless = _prepare_streams()
     state = None
     server = None
@@ -147,29 +200,7 @@ def main() -> int:
             print(tb, file=sys.stderr)
         return 1
     finally:
-        if tray is not None:
-            try:
-                tray.stop()
-            except Exception:
-                pass
-        if hotkey is not None:
-            try:
-                hotkey.stop()
-            except Exception:
-                pass
-        if state is not None:
-            try:
-                state.close()
-            except Exception:
-                pass
-        if server is not None:
-            try:
-                server.shutdown()
-                server.server_close()
-            except Exception:
-                pass
-        if server_thread is not None:
-            server_thread.join(timeout=2)
+        _cleanup_runtime(tray, hotkey, state, server, server_thread)
     return 0
 
 

@@ -62,8 +62,14 @@ def shortcut_paths() -> list[Path]:
     appdata = os.environ.get("APPDATA")
     if appdata:
         paths.append(Path(appdata) / "Microsoft" / "Windows" / "Start Menu" / "Programs" / "Akatikito.lnk")
-    userprofile = os.environ.get("USERPROFILE") or str(Path.home())
-    paths.append(Path(userprofile) / "Desktop" / "Akatikito.lnk")
+    userprofile = os.environ.get("USERPROFILE")
+    if not userprofile:
+        try:
+            userprofile = str(Path.home())
+        except RuntimeError:
+            userprofile = ""
+    if userprofile:
+        paths.append(Path(userprofile) / "Desktop" / "Akatikito.lnk")
     return paths
 
 
