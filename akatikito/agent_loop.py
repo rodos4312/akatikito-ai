@@ -377,10 +377,42 @@ def _call_model_with_recovery(agent, request, tools, step: int, attempted: set[s
                 return {"content": early, "tool_calls": []}, {}
 
 
+def _maybe_step_budget_nudge(agent, step: int, nudged: set[str]) -> None:
+    """Inject concise internal pacing hints at 65% and 85% of max_steps so turns finish cleanly."""
+    limit = int(getattr(agent.config, "max_steps", 0) or 0)
+    if limit < 10 or agent.mode not in ("code", "debug"):
+        return
+    warn_at = max(6, int(limit * 0.65))
+    wrap_at = max(warn_at + 2, int(limit * 0.85))
+    if step >= wrap_at and "wrap" not in nudged:
+        nudged.add("wrap")
+        agent.messages.append({
+            "role": "user",
+            "content": (
+                f"[ΤΕΛΙΚΗ ΕΥΘΕΙΑ: βήμα {step}/{limit}] Ολοκλήρωσε τώρα: κάνε μόνο την απαραίτητη "
+                "τελική αλλαγή, τρέξε 1 τελικό έλεγχο και δώσε καθαρή απάντηση στον χρήστη. "
+                "Μην ξεκινάς νέο fine-tuning."
+            ),
+            "_origin": "internal",
+        })
+    elif step >= warn_at and "pace" not in nudged:
+        nudged.add("pace")
+        agent.messages.append({
+            "role": "user",
+            "content": (
+                f"[ΡΥΘΜΟΣ ΒΗΜΑΤΩΝ: βήμα {step}/{limit}] Ομαδοποίησε τις υπόλοιπες αλλαγές "
+                "σε 1-2 edits και απέφυγε επαναληπτικά micro-edits ή πολλαπλά run_command — "
+                "μόλις περάσει ο έλεγχος, κλείσε με την τελική απάντηση."
+            ),
+            "_origin": "internal",
+        })
+
+
 def run_chat_turn(agent, text: str, internal: bool = False) -> str:
     effective, can_repair = _begin_turn(agent, text, internal)
     dirty = False
     recovery_attempted: set[str] = set()
+    budget_nudged: set[str] = set()
     for step in range(1, agent.config.max_steps + 1):
         if agent._filesystem_failure:
             agent.events.emit("checkpoint")
@@ -388,6 +420,7 @@ def run_chat_turn(agent, text: str, internal: bool = False) -> str:
         if agent._stop:
             agent.events.emit("stopped", step=step)
             return agent._stopped_report()
+        _maybe_step_budget_nudge(agent, step, budget_nudged)
         request, tools, early = _prepare_step_request(agent, step)
         if early is not None:
             return early
