@@ -566,13 +566,22 @@ class Skills:
             )
             if len(body.encode("utf-8")) > MAX_BODY:
                 raise ValueError("Η συνταγή ξεπερνά τα 40000 bytes.")
+            from .skills_guard import format_block_message, scan_skill_text
+
+            scan = scan_skill_text(name, body)
+            if scan.verdict == "dangerous":
+                raise ValueError(format_block_message(scan))
             target, scope = self._resolve_propose_target(
                 current, data, name, scope, workflow_id, direct_learn
             )
-            return self._record_skill_proposal(
+            res = self._record_skill_proposal(
                 data, name, description, body, scope, target, current,
                 workflow_id, category, triggers, required_tools, auto_refined_from
             )
+            if scan.verdict == "caution" and data["proposals"]:
+                data["proposals"][-1]["security_warnings"] = [f.description for f in scan.findings[:5]]
+                self._save(data)
+            return res
 
     def patch(self, name: str, add_steps: list[str] | None = None,
               replace_step: dict | None = None, add_notes: list[str] | None = None,
@@ -752,5 +761,12 @@ class Skills:
 
     def import_markdown(self, raw_markdown: str, scope: str = "user") -> dict:
         from .skills_format import import_skill_markdown
+        from .skills_guard import format_block_message, scan_skill_text
 
-        return import_skill_markdown(self, raw_markdown, scope=scope)
+        scan = scan_skill_text("imported-skill", str(raw_markdown or ""))
+        if scan.verdict == "dangerous":
+            raise ValueError(format_block_message(scan))
+        res = import_skill_markdown(self, raw_markdown, scope=scope)
+        if scan.verdict == "caution" and isinstance(res, dict):
+            res["security_warnings"] = [f.description for f in scan.findings[:5]]
+        return res
