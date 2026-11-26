@@ -40,8 +40,27 @@ FEATURES: dict[str, Feature] = {
         Feature(
             "git",
             "Εργαλεία Git",
-            "Έλεγχος κατάστασης και διαφορών (git_status_diff) μέσα στο project.",
+            "Έλεγχος κατάστασης, διαφορών, commit και draft PR με υποχρεωτικούς ελέγχους (μόνο σε φακέλους Ανάπτυξης).",
             tools=("git_status_diff",),
+            warning="Ενεργοποιεί εργαλεία Git (status, diff, commit με έλεγχο). Ποτέ force-push ή --no-verify.",
+        ),
+        Feature(
+            "cli",
+            "Terminal (akatikito CLI)",
+            "Εντολές από PowerShell/cmd μέσω του ίδιου τοπικού API, με τα ίδια όρια κόστους και εγκρίσεις.",
+            warning="Επιτρέπει στο akatikito CLI να στέλνει αιτήματα στο τοπικό API με τοπικό token.",
+        ),
+        Feature(
+            "acp",
+            "Σύνδεση με editor (ACP)",
+            "Σύνδεση με VS Code / Zed μέσω stdio ACP πάνω στο ίδιο τοπικό API, με diff πριν από κάθε αλλαγή.",
+            warning="Επιτρέπει σε εξωτερικό editor να στέλνει ανοιχτά αρχεία και επιλογές μέσω ACP.",
+        ),
+        Feature(
+            "plugin_sdk",
+            "Δικά μου plugins και skills (SDK)",
+            "Φάκελος ανάπτυξης, σκελετοί plugins (`akatikito plugin new`) και τοπική υπογραφή.",
+            warning="Επιτρέπει φόρτωση μη υπογεγραμμένων plugins ΜΟΝΟ από τον φάκελο ανάπτυξης (με κόκκινη ένδειξη).",
         ),
     )
 }
