@@ -158,7 +158,6 @@
     <button class="btn" id="files-toggle" data-i18n="btn_files" style="width:auto;padding:5px 10px" onclick="toggleFiles()" aria-controls="files-panel" aria-expanded="true" title="Εμφάνιση/Απόκρυψη μπάρας αρχείων · Ctrl+B">📄 Αρχεία</button>
   </div>
   <div id="app-notice" role="status" aria-live="polite"></div>
-  <div id="permission-panel" aria-live="polite"></div>
 
   <!-- ΚΕΝΤΡΙΚΗ ΟΘΟΝΗ ΔΙΑΧΕΙΡΙΣΗΣ (Ανοίγει σε όλο το πλάτος όταν επιλέγεις καρτέλα εκτός Συνομιλιών) -->
   <section id="management" style="display:none" aria-label="Διαχείριση">
@@ -668,7 +667,7 @@
 
   <!-- ΧΩΡΟΣ ΣΥΝΟΜΙΛΙΑΣ -->
   <div id="chat-workspace">
-    <div id="attachment-panel"></div><div id="reminder-panel"></div><div id="subtask-panel"></div><div id="task-panel"></div>
+    <div id="reminder-panel"></div><div id="subtask-panel"></div><div id="task-panel"></div>
     <div id="voice-panel" style="padding:0 16px"><span id="voice-message" class="hint" role="status" aria-live="polite"></span><pre id="voice-result" style="white-space:pre-wrap;max-height:110px;overflow:auto"></pre><button id="voice-insert" class="btn" style="width:auto;display:none" onclick="insertPendingVoice()">Προσθήκη στο πρόχειρο</button></div>
     <div id="quick-cards" aria-label="Γρήγορες ενέργειες">
       <button class="qcard" id="qcard-1" onclick="useQuickPrompt(i18nText('q1_prompt'))"><strong data-i18n="q1_title">🌐 Αναζήτηση στο Internet</strong><span data-i18n="q1_sub">Ζωντανή έρευνα στο Web (DuckDuckGo & Wikipedia) χωρίς URL</span></button>
@@ -677,6 +676,8 @@
       <button class="qcard" id="qcard-4" onclick="useQuickPrompt(i18nText('q4_prompt'))"><strong data-i18n="q4_title">⏰ Οργάνωση & Ατζέντα</strong><span data-i18n="q4_sub">Υπενθυμίσεις με τοπική ειδοποίηση Windows</span></button>
     </div>
     <div id="chat"></div>
+    <div id="permission-panel" aria-live="polite"></div>
+    <div id="attachment-panel"></div>
     <div id="slash-menu" role="listbox" aria-label="Slash Commands"></div>
     <div id="inputbar">
       <button class="btn" style="width:auto;flex:0 0 auto" title="Προσθήκη αρχείου ή εικόνας" aria-label="Προσθήκη συνημμένου" onclick="chooseAttachments()">📎</button>
