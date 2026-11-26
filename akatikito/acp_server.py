@@ -161,12 +161,17 @@ def main(argv: list[str] | None = None) -> int:
 
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding="utf-8")
     parser = argparse.ArgumentParser(description="Akatikito Editor ACP stdio server")
     parser.add_argument("--settings", default="", help="Path to settings.json")
     parser.add_argument("--api-url", default="", help="Local Akatikito API URL")
     parser.add_argument("--token", default="", help="Local Akatikito API token")
     args = parser.parse_args(argv)
     cfg = Settings.load(Path(args.settings) if args.settings else DEFAULT_PATH)
+    if not advanced.enabled(cfg, "acp"):
+        print("Η λειτουργία «Σύνδεση με editor (ACP)» είναι κλειστή στο Ρυθμίσεις → Advanced.", file=sys.stderr)
+        return 2
     server = AcpServer(cfg, api_url=args.api_url, api_token=args.token)
     server.serve_stream(sys.stdin, sys.stdout)
     return 0
