@@ -183,26 +183,19 @@ def _render_summary_md(report: dict) -> str:
     return "\n".join(lines) + "\n"
 
 
-def export_diagnostics_zip(state, dest_path: Path | None = None, allow_dialog: bool = True) -> dict:
+def export_diagnostics_zip(state, dest_path: Path | None = None, allow_dialog: bool = True, data_dir: Path | None = None) -> dict:
     """Create a sanitized .zip diagnostics bundle via Save dialog (desktop) or .agent/exports/."""
+    from .diagnostics_bundle import build_bundle_files
     from .workspace import Workspace
 
     report = health_report(state)
     known_secrets = _collect_known_secrets(state)
-    raw_json = redact_secrets(json.dumps(report, ensure_ascii=False, indent=2), known_secrets)
-    summary_md = redact_secrets(_render_summary_md(report), known_secrets)
-
-    # Hard safety assertion: never emit any known secret into the bundle
-    for sec in known_secrets:
-        if sec and sec in raw_json:
-            raw_json = raw_json.replace(sec, "***")
-        if sec and sec in summary_md:
-            summary_md = summary_md.replace(sec, "***")
+    files = build_bundle_files(state, report, _render_summary_md(report), known_secrets, data_dir=data_dir)
 
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as zf:
-        zf.writestr("diagnostics.json", raw_json.encode("utf-8"))
-        zf.writestr("SUMMARY.md", summary_md.encode("utf-8"))
+        for arcname, content in files.items():
+            zf.writestr(arcname, content.encode("utf-8"))
     zip_bytes = buf.getvalue()
 
     root = state._files_root() if (state is not None and hasattr(state, "_files_root")) else Path.cwd()
