@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Any
 
 from .audit_log import AuditLog
+from . import doctor_checks_v26 as _v26_checks
 from .hotkey import parse_hotkey
 from .model import PROVIDERS
 from .settings import DEFAULT_PATH, Settings, unmask_secret
@@ -503,6 +504,9 @@ def run_extended_checks(doc, make_item, *, check_api: bool = False) -> list[dict
         check_memory_db(doc, make_item),
         check_staged_attachments(doc, make_item),
         check_desktop_hotkey_tray(doc, make_item),
+        _v26_checks.check_skills_security(doc, make_item),
+        _v26_checks.check_context_archive(doc, make_item),
+        _v26_checks.check_ui_assets(doc, make_item),
     ]
 
 
@@ -609,6 +613,7 @@ _EXTENDED_FIX_HANDLERS = {
     "doc_index": lambda d, _a, _b: _fix_doc_index(d),
     "memory_db": lambda d, _a, _b: _fix_memory_db(d),
     "staged_attachments": lambda d, _a, _b: _fix_staged_attachments(d),
+    "context_archive": lambda d, _a, _b: _v26_checks.fix_context_archive(d),
     "desktop_hotkey_tray": lambda d, _a, b: _fix_setting_field(d, b, "global_hotkey", "Alt+Space", "Επαναφέρθηκε η συντόμευση global_hotkey σε «Alt+Space»."),
 }
 

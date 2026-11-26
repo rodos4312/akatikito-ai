@@ -222,6 +222,7 @@ class Doctor:
             ("mcp.json", self.data_dir / "mcp.json", {}),
             ("mobile_bridge.json", self.data_dir / "mobile_bridge.json", {"auto_start": False, "sessions": {}}),
             ("usage.json", self.data_dir / "usage.json", {"days": {}, "sessions": {}}),
+            ("skill_proposals.json", self.data_dir / "skill_proposals.json", {"version": 1, "proposals": [], "history": [], "workflows": [], "uses": {}}),
             ("data/agenda.json", self.data_dir / "agenda.json", []),
             (".agent/agenda.json", self.project_root / ".agent" / "agenda.json", []),
         ]
@@ -545,7 +546,7 @@ class Doctor:
     # ------------------------------------------------------------------ public API
 
     def diagnose(self, *, check_api: bool = False) -> dict[str, Any]:
-        """Run all 18 read-only diagnostic checks."""
+        """Run all 22 read-only diagnostic checks."""
         checks = [
             self._check_json_integrity(), self._check_mobile_sessions(), self._check_mobile_port(),
             self._check_orphan_locks(), self._check_temp_partials(), self._check_agent_backups(),

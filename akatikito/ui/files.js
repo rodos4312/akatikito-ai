@@ -555,7 +555,7 @@ async function runDoctor(checkApi) {
   box.replaceChildren();
   const loading = document.createElement('span');
   loading.className = 'hint';
-  loading.textContent = checkApi ? '🩺 Έλεγχος 18 σημείων + δοκιμή API key…' : '🩺 Εκτέλεση διάγνωσης (μόνο ανάγνωση)…';
+  loading.textContent = checkApi ? '🩺 Έλεγχος 22 σημείων + δοκιμή API key…' : '🩺 Εκτέλεση διάγνωσης (μόνο ανάγνωση)…';
   box.appendChild(loading);
   try {
     const r = await api('/api/doctor/diagnose', {check_api: !!checkApi});
