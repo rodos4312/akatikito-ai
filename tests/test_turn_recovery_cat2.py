@@ -127,3 +127,28 @@ def test_one_shot_recovery_strips_rejected_image_and_never_loops(tmp_path):
     agent3 = Akatikito(str(tmp_path), Config(auto_mode=False), AlwaysOverflowModel())
     with pytest.raises(ModelError):
         agent3.chat("hi")
+
+
+def test_one_shot_recovery_on_output_length_truncation(tmp_path):
+    calls = {"n": 0}
+
+    class TruncatedOnceModel:
+        def chat(self, messages, tools=None, cache_key=None):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise ModelError(
+                    "Η ροή διακόπηκε πριν ολοκληρωθεί: StreamAssemblyError: "
+                    "Η ροή δεν ολοκληρώθηκε κανονικά (length)."
+                )
+            assert any("ΟΡΙΟ ΕΞΟΔΟΥ (length)" in str(m.get("content", "")) for m in messages)
+            return {"content": "Συνεχίζω σε μικρότερα βήματα.", "tool_calls": []}, {"prompt_tokens": 30, "completion_tokens": 12}
+
+    agent = Akatikito(str(tmp_path), Config(auto_mode=False), TruncatedOnceModel())
+    ans = agent.chat("Φτιάξε μεγάλο παιχνίδι HTML")
+    assert "μικρότερα βήματα" in ans
+    assert calls["n"] == 2
+    assert any(ev.kind == "recovery" and ev.data.get("recovery_kind") == "output_truncated" for ev in agent.events.log)
+
+    # Socket ReadError mid-stream must NOT be retried (preserves streaming contract)
+    assert classify_recoverable_error(ModelError("Η ροή διακόπηκε πριν ολοκληρωθεί: ReadError: broken pipe")) is None
+

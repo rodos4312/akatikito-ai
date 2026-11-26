@@ -27,6 +27,11 @@ _ORPHAN_TOOL_RE = re.compile(
     r"preceding message with .?tool_calls.?|missing tool(?:_call)? result|orphan.*tool",
     re.I,
 )
+_OUTPUT_TRUNCATED_RE = re.compile(
+    r"δεν ολοκληρώθηκε κανονικά\s*\(length\)|finish_reason['\":=\s]+length|"
+    r"ελλιπή JSON ορίσματα εργαλείου|max_tokens",
+    re.I,
+)
 
 
 def close_interrupted_tool_sequence(messages: list[dict]) -> int:
@@ -115,11 +120,29 @@ def classify_recoverable_error(exc: BaseException) -> str | None:
         text += f" | {type(cause).__name__}: {cause}"
     if _ORPHAN_TOOL_RE.search(text):
         return "orphan_tool_sequence"
+    if _OUTPUT_TRUNCATED_RE.search(text):
+        return "output_truncated"
     if _CONTEXT_OVERFLOW_RE.search(text):
         return "context_overflow"
     if _IMAGE_REJECTED_RE.search(text):
         return "image_rejected"
     return None
+
+
+def _recover_output_truncated(agent) -> tuple[bool, str]:
+    close_interrupted_tool_sequence(agent.messages)
+    agent.context.reset_transport()
+    steer = (
+        "[ΑΥΤΟΜΑΤΗ ΑΝΑΚΤΗΣΗ — ΟΡΙΟ ΕΞΟΔΟΥ (length)] Η προηγούμενη απάντηση ή κλήση εργαλείου "
+        "κόπηκε επειδή ξεπέρασε το μέγιστο μέγεθος εξόδου σε ένα βήμα. "
+        "ΜΗΝ προσπαθήσεις να γράψεις ολόκληρο μεγάλο αρχείο σε ένα μόνο write_file. "
+        "Γράψε πρώτα έναν καθαρό, λειτουργικό σκελετό (<= 250 γραμμές) και πρόσθεσε "
+        "τα υπόλοιπα τμήματα σταδιακά με edit_file ή replace_symbol."
+    )
+    agent.messages.append({"role": "user", "content": steer, "_origin": "internal"})
+    detail = "Η απάντηση κόπηκε στο όριο εξόδου (length) — αυτόματη συνέχιση σε μικρότερα βήματα."
+    agent.events.emit("recovery", recovery_kind="output_truncated", text=detail)
+    return True, detail
 
 
 def attempt_turn_recovery(agent, exc: BaseException, attempted: set[str]) -> tuple[bool, str]:
@@ -131,6 +154,9 @@ def attempt_turn_recovery(agent, exc: BaseException, attempted: set[str]) -> tup
     if kind is None or kind in attempted:
         return False, ""
     attempted.add(kind)
+
+    if kind == "output_truncated":
+        return _recover_output_truncated(agent)
 
     if kind == "orphan_tool_sequence":
         fixes = close_interrupted_tool_sequence(agent.messages)

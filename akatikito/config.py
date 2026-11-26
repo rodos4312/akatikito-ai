@@ -32,7 +32,7 @@ class Config:
     command_timeout: int = 120
     parallel_tool_workers: int = 4  # independent reads only; writes/commands are barriers
     stream_responses: bool = True
-    model_stream_timeout: float = 30.0
+    model_stream_timeout: float = 90.0
     max_output_chars: int = 12000
 
     # Σύνθεση system prompt: μη-περικοπτόμενα τμήματα (κανόνες, προτιμήσεις,
