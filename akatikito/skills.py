@@ -449,9 +449,8 @@ class Skills:
                      'source_count':r.get('source_count',0)}
                     for r in self._load()["workflows"] if r["count"] >= 2][-8:]
 
-    def propose(self, name, description, steps, workflow_id="", scope="user",
-                category="", triggers=None, notes=None, required_tools=None,
-                template="", direct_learn=False, force_new=False):
+    @staticmethod
+    def _validate_propose_inputs(name, description, steps, scope, triggers, required_tools, notes):
         if not isinstance(name, str) or not NAME.fullmatch(name):
             raise ValueError("Όνομα skill: 2–64 λατινικά πεζά, αριθμοί και παύλες.")
         description = str(description).strip()
@@ -469,91 +468,111 @@ class Skills:
             required_tools = [t.strip() for t in required_tools.split(",") if t.strip()]
         if isinstance(notes, str):
             notes = [n.strip() for n in notes.splitlines() if n.strip()]
+        return description, triggers, required_tools, notes
 
+    def _match_existing_skill(self, entries, data, name, current, candidate_body,
+                              description, steps, triggers, force_new):
+        cand_key = text_key(candidate_body.split("---", 2)[-1])
+        for existing_name, entry in entries.items():
+            if existing_name != name and text_key(entry["text"].split("---", 2)[-1].strip()) == cand_key:
+                return name, current, "", "Χρησιμοποίησε την υπάρχουσα συνταγή: " + existing_name
+        if current is not None or force_new:
+            return name, current, "", None
+        similar = self.find_similar(name, description, steps, triggers, threshold=0.52)
+        if not similar:
+            return name, current, "", None
+        best = similar[0]
+        sim_entry = entries.get(best["name"])
+        if not sim_entry or sim_entry["source"] == "builtin":
+            return name, current, "", None
+        if data["uses"].get(str(sim_entry["path"])):
+            return best["name"], sim_entry, name, None
+        warn = (
+            f"ΕΝΤΟΠΙΣΤΗΚΕ ΠΑΡΟΜΟΙΟ SKILL: Υπάρχει ήδη η συνταγή '{best['name']}' "
+            f"({best['description']}, ομοιότητα {int(best['score']*100)}%). "
+            f"Διάβασέ την πρώτα με use_skill(name='{best['name']}') και έπειτα βελτίωσέ την "
+            f"με patch_skill ή propose_skill(name='{best['name']}'), αντί να φτιάξεις διπλότυπο."
+        )
+        return name, current, "", warn
+
+    def _resolve_propose_target(self, current, data, name, scope, workflow_id, direct_learn):
+        if current and current["source"] == "builtin":
+            raise ValueError("Η έτοιμη συνταγή είναι κλειδωμένη· πρότεινε διαφορετική συνταγή.")
+        if current:
+            if not data["uses"].get(str(current["path"])):
+                raise ValueError("Διάβασε πρώτα τη συνταγή με use_skill πριν προτείνεις βελτίωση.")
+            resolved_scope = "project" if current["source"] in ("project", "legacy-project") else "user"
+            return current["path"], resolved_scope
+        workflow = next((r for r in data["workflows"] if r["id"] == workflow_id and r["count"] >= 2), None)
+        if workflow is None and not direct_learn and workflow_id not in ("direct", "learn"):
+            raise ValueError("Νέο skill χρειάζεται καταγεγραμμένη επανάληψη επιτυχημένης διαδικασίας 3+ βημάτων.")
+        base_dir = self.project / ".akatikito" / "skills" if scope == "project" else self.user_root
+        return base_dir / (name + ".md"), scope
+
+    def _record_skill_proposal(self, data, name, description, body, scope, target, current,
+                               workflow_id, category, triggers, required_tools, auto_refined_from):
+        if current and current["text"] == body:
+            return "Η συνταγή είναι ήδη ίδια· δεν δημιουργήθηκε διπλότυπο."
+        signature = hashlib.sha256(body.encode("utf-8")).hexdigest()
+        proj = str(self.project)
+        for row in data["proposals"]:
+            if row["name"] == name and row["project"] == proj and row["signature"] == signature:
+                return "Υπάρχει ήδη η ίδια πρόταση skill· περιμένει έγκριση."
+        old = [r for r in data["proposals"] if r["name"] == name and r["project"] == proj]
+        data["history"].extend({"action": "superseded_proposal", "before": r, "at": time.time()} for r in old)
+        data["proposals"] = [r for r in data["proposals"] if r not in old]
+        if len(data["proposals"]) >= 100:
+            raise ValueError("Υπάρχουν 100 εκκρεμείς προτάσεις· χρειάζεται πρώτα έλεγχος.")
+        proposal_row = {
+            "id": uuid.uuid4().hex, "name": name, "description": description,
+            "body": body, "scope": scope, "project": proj,
+            "target": str(target), "base": digest(target), "signature": signature,
+            "created": time.time(), "workflow_id": workflow_id,
+            "mode": "refine" if current is not None else "create",
+        }
+        if category:
+            proposal_row["category"] = str(category).strip()[:40]
+        if triggers:
+            proposal_row["triggers"] = [str(t).strip() for t in triggers if str(t).strip()][:20]
+        if required_tools:
+            proposal_row["required_tools"] = [str(t).strip() for t in required_tools if str(t).strip()][:20]
+        if auto_refined_from:
+            proposal_row["merged_from"] = auto_refined_from
+        data["proposals"].append(proposal_row)
+        self._save(data)
+        if auto_refined_from:
+            return f"ΠΡΟΤΑΣΗ SKILL (συγχωνεύτηκε στο υπάρχον παρόμοιο '{name}'): απαιτεί προεπισκόπηση και έγκριση χρήστη."
+        return "ΠΡΟΤΑΣΗ SKILL: " + name + " — απαιτεί προεπισκόπηση και έγκριση χρήστη."
+
+    def propose(self, name, description, steps, workflow_id="", scope="user",
+                category="", triggers=None, notes=None, required_tools=None,
+                template="", direct_learn=False, force_new=False):
+        description, triggers, required_tools, notes = self._validate_propose_inputs(
+            name, description, steps, scope, triggers, required_tools, notes
+        )
         with LOCK:
             entries, data = self._entries(), self._load()
             current = entries.get(name)
-
-            # Exact body duplicates under another name are suggestions to reuse.
             candidate_body = _format_skill_body(
                 name, description, steps, category, triggers, notes, required_tools, template
             )
-            for existing_name, entry in entries.items():
-                if existing_name == name:
-                    continue
-                existing_body = entry["text"].split("---", 2)[-1].strip()
-                if text_key(existing_body) == text_key(candidate_body.split("---", 2)[-1]):
-                    return "Χρησιμοποίησε την υπάρχουσα συνταγή: " + existing_name
-
-            # Smart similarity detection when creating a new skill name
-            auto_refined_from = ""
-            if current is None and not force_new:
-                similar = self.find_similar(name, description, steps, triggers, threshold=0.52)
-                if similar:
-                    best = similar[0]
-                    sim_entry = entries.get(best["name"])
-                    if sim_entry and sim_entry["source"] != "builtin":
-                        if data["uses"].get(str(sim_entry["path"])):
-                            auto_refined_from = name
-                            name = best["name"]
-                            current = sim_entry
-                        else:
-                            return (
-                                f"ΕΝΤΟΠΙΣΤΗΚΕ ΠΑΡΟΜΟΙΟ SKILL: Υπάρχει ήδη η συνταγή '{best['name']}' "
-                                f"({best['description']}, ομοιότητα {int(best['score']*100)}%). "
-                                f"Διάβασέ την πρώτα με use_skill(name='{best['name']}') και έπειτα βελτίωσέ την "
-                                f"με patch_skill ή propose_skill(name='{best['name']}'), αντί να φτιάξεις διπλότυπο."
-                            )
-
+            name, current, auto_refined_from, early = self._match_existing_skill(
+                entries, data, name, current, candidate_body, description, steps, triggers, force_new
+            )
+            if early is not None:
+                return early
             body = _format_skill_body(
                 name, description, steps, category, triggers, notes, required_tools, template
             )
             if len(body.encode("utf-8")) > MAX_BODY:
                 raise ValueError("Η συνταγή ξεπερνά τα 40000 bytes.")
-
-            if current and current["source"] == "builtin":
-                raise ValueError("Η έτοιμη συνταγή είναι κλειδωμένη· πρότεινε διαφορετική συνταγή.")
-            if current:
-                if not data["uses"].get(str(current["path"])):
-                    raise ValueError("Διάβασε πρώτα τη συνταγή με use_skill πριν προτείνεις βελτίωση.")
-                target = current["path"]
-                scope = "project" if current["source"] in ("project", "legacy-project") else "user"
-            else:
-                workflow = next((r for r in data["workflows"] if r["id"] == workflow_id and r["count"] >= 2), None)
-                if workflow is None and not direct_learn and workflow_id not in ("direct", "learn"):
-                    raise ValueError("Νέο skill χρειάζεται καταγεγραμμένη επανάληψη επιτυχημένης διαδικασίας 3+ βημάτων.")
-                target = (self.project / ".akatikito" / "skills" if scope == "project" else self.user_root) / (name + ".md")
-            if current and current["text"] == body:
-                return "Η συνταγή είναι ήδη ίδια· δεν δημιουργήθηκε διπλότυπο."
-            signature = hashlib.sha256(body.encode("utf-8")).hexdigest()
-            for row in data["proposals"]:
-                if row["name"] == name and row["project"] == str(self.project) and row["signature"] == signature:
-                    return "Υπάρχει ήδη η ίδια πρόταση skill· περιμένει έγκριση."
-            old = [r for r in data["proposals"] if r["name"] == name and r["project"] == str(self.project)]
-            data["history"].extend({"action": "superseded_proposal", "before": r, "at": time.time()} for r in old)
-            data["proposals"] = [r for r in data["proposals"] if r not in old]
-            if len(data["proposals"]) >= 100:
-                raise ValueError("Υπάρχουν 100 εκκρεμείς προτάσεις· χρειάζεται πρώτα έλεγχος.")
-            proposal_row = {
-                "id": uuid.uuid4().hex, "name": name, "description": description,
-                "body": body, "scope": scope, "project": str(self.project),
-                "target": str(target), "base": digest(target), "signature": signature,
-                "created": time.time(), "workflow_id": workflow_id,
-                "mode": "refine" if current is not None else "create",
-            }
-            if category:
-                proposal_row["category"] = str(category).strip()[:40]
-            if triggers:
-                proposal_row["triggers"] = [str(t).strip() for t in triggers if str(t).strip()][:20]
-            if required_tools:
-                proposal_row["required_tools"] = [str(t).strip() for t in required_tools if str(t).strip()][:20]
-            if auto_refined_from:
-                proposal_row["merged_from"] = auto_refined_from
-            data["proposals"].append(proposal_row)
-            self._save(data)
-        if auto_refined_from:
-            return f"ΠΡΟΤΑΣΗ SKILL (συγχωνεύτηκε στο υπάρχον παρόμοιο '{name}'): απαιτεί προεπισκόπηση και έγκριση χρήστη."
-        return "ΠΡΟΤΑΣΗ SKILL: " + name + " — απαιτεί προεπισκόπηση και έγκριση χρήστη."
+            target, scope = self._resolve_propose_target(
+                current, data, name, scope, workflow_id, direct_learn
+            )
+            return self._record_skill_proposal(
+                data, name, description, body, scope, target, current,
+                workflow_id, category, triggers, required_tools, auto_refined_from
+            )
 
     def patch(self, name: str, add_steps: list[str] | None = None,
               replace_step: dict | None = None, add_notes: list[str] | None = None,

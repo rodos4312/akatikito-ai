@@ -100,7 +100,6 @@
     "akatikito/skills.py::Skills._load": 27,
     "akatikito/skills.py::Skills.answer": 23,
     "akatikito/skills.py::Skills.patch": 32,
-    "akatikito/skills.py::Skills.propose": 61,
     "akatikito/skills.py::Skills.save_owner_skill": 30,
     "akatikito/skills_format.py::_check_metadata": 22,
     "akatikito/skills_format.py::_parse_skill_text": 23,
