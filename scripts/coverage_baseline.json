@@ -1,9 +1,9 @@
 {
   "areas": {
-    "agent": 49.3,
-    "app_api": 41.0,
-    "memory": 53.8,
-    "overall": 31.2,
-    "tools": 56.1
+    "agent": 50.5,
+    "app_api": 47.0,
+    "memory": 55.3,
+    "overall": 40.6,
+    "tools": 59.3
   }
 }

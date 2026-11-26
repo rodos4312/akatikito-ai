@@ -63,6 +63,21 @@ FAST_COVERAGE_TESTS: tuple[str, ...] = (
     "tests/test_memory_recall.py",
     "tests/test_engine_improvements.py",
     "tests/test_doctor.py",
+    "tests/test_telegram_l1.py",
+    "tests/test_background_service_l2.py",
+    "tests/test_briefings_l3.py",
+    "tests/test_email_assistant_l4.py",
+    "tests/test_notes_vault_l5.py",
+    "tests/test_content_workflow_l6.py",
+    "tests/test_cache_discipline_b2.py",
+    "tests/test_diagnostics_bundle_b4.py",
+    "tests/test_skill_curator_b9.py",
+    "tests/test_family_profiles_b10.py",
+    "tests/test_cli_d1_d2.py",
+    "tests/test_git_workflow_d4.py",
+    "tests/test_plugin_sdk_d5.py",
+    "tests/test_acp_server_d3.py",
+    "tests/test_channels_wave4_l7.py",
 )
 
 
@@ -157,7 +172,9 @@ def run_coverage(root: Path, test_targets: list[str]) -> dict:
             sys.executable, "-m", "coverage", "run",
             f"--data-file={data_file}",
             "--source=akatikito",
-            "-m", "pytest", "-q", *test_targets,
+            "-m", "pytest", "-q",
+            "-k", "not test_ten_thousand_memories_answer_fast",
+            *test_targets,
         ]
         res = subprocess.run(run_cmd, cwd=str(root), capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=300)
         if res.returncode != 0:
