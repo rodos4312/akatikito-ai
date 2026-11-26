@@ -1,8 +1,6 @@
 {
   "AK-HARDCODED-PATH": {},
-  "AK-IF-LADDER": {
-    "akatikito/mobile_bridge.py": 1
-  },
+  "AK-IF-LADDER": {},
   "AK-SOURCE-READ-TEST": {},
   "AK-TEST-SLEEP": {
     "tests/test_app_api.py": 1,

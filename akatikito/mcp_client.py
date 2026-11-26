@@ -208,66 +208,88 @@ class MCPHub:
         tmp=self.path.with_suffix('.tmp')
         tmp.write_text(json.dumps({'servers':servers},ensure_ascii=False,indent=2),encoding='utf-8')
         os.replace(tmp,self.path)
-    def save_server(self,name,config):
-        if not isinstance(name,str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,30}',name):
-            raise ValueError('Όνομα MCP server: 1–30 λατινικά γράμματα, αριθμοί, παύλες ή κάτω παύλες.')
-        if not isinstance(config,dict):raise ValueError('Μη έγκυρες ρυθμίσεις MCP server.')
-        transport=config.get('transport','stdio')
-        if transport not in ('stdio','http','streamable-http'):raise ValueError('Η μεταφορά πρέπει να είναι stdio ή http.')
-        modes=config.get('modes') or ['ask','assistant','code','debug','architect']
-        if not isinstance(modes,list) or not all(m in ('ask','assistant','code','debug','architect') for m in modes):
-            raise ValueError('Μη έγκυρες λειτουργίες MCP.')
-        readonly=[str(x).strip() for x in (config.get('readOnlyTools') or []) if str(x).strip()]
-        auto_connect=bool(config.get('autoConnect',False))
+    @staticmethod
+    def _build_stdio_entry(config: dict, old: dict, modes: list, readonly: list, auto_connect: bool) -> dict:
+        command = str(config.get("command") or "").strip()
+        if not command:
+            raise ValueError("Συμπλήρωσε την εντολή (command) του stdio server.")
+        args = [str(a) for a in (config.get("args") or []) if str(a).strip()]
+        raw_env = config.get("env") if isinstance(config.get("env"), dict) else {}
+        old_env = old.get("env") if isinstance(old.get("env"), dict) else {}
+        masked_env = {}
+        for k, v in raw_env.items():
+            key = str(k).strip()
+            if not key or not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,120}", key):
+                raise ValueError(f"Μη έγκυρο όνομα μεταβλητής περιβάλλοντος MCP: {key}")
+            val = str(v)
+            if not val and key in old_env:
+                masked_env[key] = old_env[key]
+            elif val:
+                masked_env[key] = val if val.startswith("v1:") else mask_secret(val)
+        entry = {
+            "transport": "stdio", "command": command, "args": args, "env": masked_env,
+            "modes": modes, "readOnlyTools": readonly, "autoConnect": auto_connect,
+        }
+        if config.get("cwd"):
+            entry["cwd"] = str(config["cwd"])
+        return entry
+
+    @staticmethod
+    def _build_http_entry(config: dict, old: dict, modes: list, readonly: list, auto_connect: bool) -> dict:
+        from .mcp_http import auth_headers, endpoint
+
+        url, _ = endpoint({"url": str(config.get("url") or "").strip()})
+        headers_env = config.get("headersEnv") if isinstance(config.get("headersEnv"), dict) else {}
+        raw_headers = config.get("headers") if isinstance(config.get("headers"), dict) else {}
+        old_headers = old.get("headers") if isinstance(old.get("headers"), dict) else {}
+        masked_headers = {}
+        plain_for_check = {}
+        for k, v in raw_headers.items():
+            hname, hval = str(k).strip(), str(v).strip()
+            if not hname:
+                continue
+            if not hval and hname in old_headers:
+                masked_headers[hname] = old_headers[hname]
+                plain_for_check[hname] = unmask_secret(old_headers[hname])
+            elif hval:
+                plain_for_check[hname] = unmask_secret(hval) if hval.startswith("v1:") else hval
+                masked_headers[hname] = hval if hval.startswith("v1:") else mask_secret(hval)
+        if plain_for_check or headers_env:
+            auth_headers({"headers": plain_for_check, "headersEnv": {}})
+        return {
+            "transport": "http", "url": url, "headers": masked_headers, "headersEnv": headers_env,
+            "modes": modes, "readOnlyTools": readonly, "autoConnect": auto_connect,
+        }
+
+    def save_server(self, name, config):
+        if not isinstance(name, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,30}", name):
+            raise ValueError("Όνομα MCP server: 1–30 λατινικά γράμματα, αριθμοί, παύλες ή κάτω παύλες.")
+        if not isinstance(config, dict):
+            raise ValueError("Μη έγκυρες ρυθμίσεις MCP server.")
+        transport = config.get("transport", "stdio")
+        if transport not in ("stdio", "http", "streamable-http"):
+            raise ValueError("Η μεταφορά πρέπει να είναι stdio ή http.")
+        modes = config.get("modes") or ["ask", "assistant", "code", "debug", "architect"]
+        if not isinstance(modes, list) or not all(m in ("ask", "assistant", "code", "debug", "architect") for m in modes):
+            raise ValueError("Μη έγκυρες λειτουργίες MCP.")
+        readonly = [str(x).strip() for x in (config.get("readOnlyTools") or []) if str(x).strip()]
+        auto_connect = bool(config.get("autoConnect", False))
         with self.lock:
-            servers=dict(self.configured())
-            old=servers.get(name,{}) if isinstance(servers.get(name),dict) else {}
-            if transport=='stdio':
-                command=str(config.get('command') or '').strip()
-                if not command:raise ValueError('Συμπλήρωσε την εντολή (command) του stdio server.')
-                args=[str(a) for a in (config.get('args') or []) if str(a).strip()]
-                raw_env=config.get('env') if isinstance(config.get('env'),dict) else {}
-                old_env=old.get('env') if isinstance(old.get('env'),dict) else {}
-                masked_env={}
-                for k,v in raw_env.items():
-                    key=str(k).strip()
-                    if not key or not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]{0,120}',key):
-                        raise ValueError(f'Μη έγκυρο όνομα μεταβλητής περιβάλλοντος MCP: {key}')
-                    val=str(v)
-                    if not val and key in old_env:
-                        masked_env[key]=old_env[key]
-                    elif val:
-                        masked_env[key]=val if val.startswith('v1:') else mask_secret(val)
-                entry={'transport':'stdio','command':command,'args':args,'env':masked_env,'modes':modes,'readOnlyTools':readonly,'autoConnect':auto_connect}
-                if config.get('cwd'):entry['cwd']=str(config['cwd'])
-            else:
-                from .mcp_http import endpoint,auth_headers
-                url,_=endpoint({'url':str(config.get('url') or '').strip()})
-                headers_env=config.get('headersEnv') if isinstance(config.get('headersEnv'),dict) else {}
-                raw_headers=config.get('headers') if isinstance(config.get('headers'),dict) else {}
-                old_headers=old.get('headers') if isinstance(old.get('headers'),dict) else {}
-                masked_headers={}
-                plain_for_check={}
-                for k,v in raw_headers.items():
-                    hname=str(k).strip()
-                    hval=str(v).strip()
-                    if not hname:continue
-                    if not hval and hname in old_headers:
-                        masked_headers[hname]=old_headers[hname]
-                        plain_for_check[hname]=unmask_secret(old_headers[hname])
-                    elif hval:
-                        plain_for_check[hname]=unmask_secret(hval) if hval.startswith('v1:') else hval
-                        masked_headers[hname]=hval if hval.startswith('v1:') else mask_secret(hval)
-                if plain_for_check or headers_env:
-                    auth_headers({'headers':plain_for_check,'headersEnv':{}})
-                entry={'transport':'http','url':url,'headers':masked_headers,'headersEnv':headers_env,'modes':modes,'readOnlyTools':readonly,'autoConnect':auto_connect}
+            servers = dict(self.configured())
+            old = servers.get(name, {}) if isinstance(servers.get(name), dict) else {}
+            entry = (
+                self._build_stdio_entry(config, old, modes, readonly, auto_connect)
+                if transport == "stdio"
+                else self._build_http_entry(config, old, modes, readonly, auto_connect)
+            )
             # Preserve approvedHash ONLY if core connection parameters did not change!
-            if old.get('approvedHash') and _config_digest(entry)==old.get('approvedHash'):
-                entry['approvedHash']=old['approvedHash']
-            if name not in servers and len(servers)>=20:raise ValueError('Όριο 20 MCP servers.')
-            servers[name]=entry
+            if old.get("approvedHash") and _config_digest(entry) == old.get("approvedHash"):
+                entry["approvedHash"] = old["approvedHash"]
+            if name not in servers and len(servers) >= 20:
+                raise ValueError("Όριο 20 MCP servers.")
+            servers[name] = entry
             self._write_servers(servers)
-            self.auto_warnings.pop(name,None)
+            self.auto_warnings.pop(name, None)
         return entry
     def import_json(self,raw_text: str):
         """Import one or more MCP servers from Claude Desktop / Cursor / VS Code / Akatikito JSON."""

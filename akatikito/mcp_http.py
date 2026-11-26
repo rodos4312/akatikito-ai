@@ -122,75 +122,120 @@ class HTTPClient(StdioClient):
         if result.get('inputRequests'):raise MCPError('Ο MCP server ζητά μη ενεργοποιημένη δυνατότητα client.')
         return result
 
-    def _exchange(self,payload,key,cancelled,stopped):
-        method=payload['method'];headers=dict(self.headers)
-        headers.update({'Content-Type':'application/json','Accept':'application/json, text/event-stream',
-                        'MCP-Protocol-Version':self.version,'Mcp-Method':method})
-        if method in ('tools/call','resources/read','prompts/get'):
-            from .mcp_headers import encoded,values
-            headers['Mcp-Name']=encoded(payload['params'].get('name') or payload['params'].get('uri',''))
-            if method=='tools/call' and self.version==MODERN:
-                name=payload['params'].get('name')
-                if name not in self.tool_headers:raise MCPError('Χρειάζεται tools/list πριν από HTTP tools/call.')
-                headers.update(values(self.tool_headers[name],payload['params'].get('arguments',{})))
-        if self.version!=MODERN and self.session:headers['Mcp-Session-Id']=self.session
-        conn=self._connection()
-        conn.auto_open=0
-        response=None
+    def _exchange_headers(self, payload: dict, method: str) -> dict:
+        headers = dict(self.headers)
+        headers.update({
+            "Content-Type": "application/json",
+            "Accept": "application/json, text/event-stream",
+            "MCP-Protocol-Version": self.version,
+            "Mcp-Method": method,
+        })
+        if method in ("tools/call", "resources/read", "prompts/get"):
+            from .mcp_headers import encoded, values
+
+            headers["Mcp-Name"] = encoded(payload["params"].get("name") or payload["params"].get("uri", ""))
+            if method == "tools/call" and self.version == MODERN:
+                name = payload["params"].get("name")
+                if name not in self.tool_headers:
+                    raise MCPError("Χρειάζεται tools/list πριν από HTTP tools/call.")
+                headers.update(values(self.tool_headers[name], payload["params"].get("arguments", {})))
+        if self.version != MODERN and self.session:
+            headers["Mcp-Session-Id"] = self.session
+        return headers
+
+    def _read_json_response(self, response, key, status: int, legacy_probe: bool):
+        raw = response.read(MAX_LINE + 1)
+        if len(raw) > MAX_LINE:
+            raise MCPError("Πολύ μεγάλο αποτέλεσμα HTTP MCP.")
+        try:
+            obj = json.loads(raw)
+        except ValueError:
+            if legacy_probe:
+                raise LegacyEndpoint("Χρειάζεται αρχικοποίηση legacy HTTP MCP.") from None
+            raise
+        if legacy_probe and (not isinstance(obj, dict) or obj.get("jsonrpc") != "2.0"):
+            raise LegacyEndpoint("Χρειάζεται αρχικοποίηση legacy HTTP MCP.")
+        return self._response(obj, key, status)
+
+    def _read_sse_response(self, response, key, status: int):
+        total = 0
+        data: list[str] = []
+        result = None
+        while result is None:
+            line = response.readline(MAX_LINE + 1)
+            total += len(line)
+            if total > MAX_LINE:
+                raise MCPError("Πολύ μεγάλη ροή HTTP MCP.")
+            if not line:
+                raise MCPError("Η ροή HTTP MCP έκλεισε πριν από τελική απόκριση.")
+            text = line.decode("utf-8-sig").rstrip("\r\n")
+            if not text:
+                if data:
+                    result = self._response(json.loads("\n".join(data)), key, status)
+                data = []
+            elif text.startswith("data:"):
+                data.append(text[5:].removeprefix(" "))
+        return result
+
+    def _parse_http_response(self, response, method: str, key):
+        status = response.status
+        if 300 <= status < 400:
+            raise MCPError("Απορρίφθηκε ανακατεύθυνση HTTP MCP· δεν προωθήθηκαν credentials.")
+        if status in (401, 403):
+            raise MCPError(f"HTTP MCP: HTTP {status}· έλεγξε τα credentials του server.")
+        if key is None:
+            if status != 202:
+                raise MCPError(f"HTTP MCP notification: HTTP {status}.")
+            return {}
+        if status == 404 and self.session:
+            raise MCPError("Η συνεδρία HTTP MCP έληξε. Χρειάζεται επανασύνδεση· η κλήση δεν επαναλήφθηκε.")
+        content = response.getheader("Content-Type", "").split(";")[0].strip().casefold()
+        legacy_probe = method == "server/discover" and status in (400, 404, 405)
+        if legacy_probe and content != "application/json":
+            raise LegacyEndpoint("Χρειάζεται αρχικοποίηση legacy HTTP MCP.")
+        if content == "application/json":
+            result = self._read_json_response(response, key, status, legacy_probe)
+        elif content == "text/event-stream" and status < 400:
+            result = self._read_sse_response(response, key, status)
+        else:
+            raise MCPError(f"Μη υποστηριζόμενη απόκριση HTTP MCP (HTTP {status}).")
+        if result is None:
+            raise MCPError("Απουσιάζει τελική απόκριση HTTP MCP.")
+        if method == "initialize":
+            session = response.getheader("Mcp-Session-Id", "")
+            if session and (len(session) > 1024 or any(ord(c) < 33 or ord(c) > 126 for c in session)):
+                raise MCPError("Μη έγκυρη συνεδρία HTTP MCP.")
+            self.session = session
+        return result
+
+    def _exchange(self, payload, key, cancelled, stopped):
+        method = payload["method"]
+        headers = self._exchange_headers(payload, method)
+        conn = self._connection()
+        conn.auto_open = 0
+        response = None
         with self.state_lock:
-            if self.closed or cancelled.is_set() or stopped():raise MCPError('Η σύνδεση HTTP MCP έκλεισε.')
-            self.active=conn
+            if self.closed or cancelled.is_set() or stopped():
+                raise MCPError("Η σύνδεση HTTP MCP έκλεισε.")
+            self.active = conn
         try:
             # Resolve/connect before sending, so Stop during DNS cannot later send a tool call.
             conn.connect()
             with self.state_lock:
-                if self.closed or cancelled.is_set() or stopped():raise MCPError('Η σύνδεση HTTP MCP έκλεισε.')
-                self.active_socket=conn.sock
-            conn.request('POST',self.parts.path or '/',json.dumps(payload,ensure_ascii=False).encode('utf-8'),headers)
-            response=conn.getresponse();status=response.status
-            if 300<=status<400:raise MCPError('Απορρίφθηκε ανακατεύθυνση HTTP MCP· δεν προωθήθηκαν credentials.')
-            if status in (401,403):raise MCPError(f'HTTP MCP: HTTP {status}· έλεγξε τα credentials του server.')
-            if key is None:
-                if status!=202:raise MCPError(f'HTTP MCP notification: HTTP {status}.')
-                return {}
-            if status==404 and self.session:raise MCPError('Η συνεδρία HTTP MCP έληξε. Χρειάζεται επανασύνδεση· η κλήση δεν επαναλήφθηκε.')
-            content=response.getheader('Content-Type','').split(';')[0].strip().casefold()
-            legacy_probe=method=='server/discover' and status in (400,404,405)
-            if legacy_probe and content!='application/json':raise LegacyEndpoint('Χρειάζεται αρχικοποίηση legacy HTTP MCP.')
-            if content=='application/json':
-                raw=response.read(MAX_LINE+1)
-                if len(raw)>MAX_LINE:raise MCPError('Πολύ μεγάλο αποτέλεσμα HTTP MCP.')
-                try:obj=json.loads(raw)
-                except ValueError:
-                    if legacy_probe:raise LegacyEndpoint('Χρειάζεται αρχικοποίηση legacy HTTP MCP.') from None
-                    raise
-                if legacy_probe and (not isinstance(obj,dict) or obj.get('jsonrpc')!='2.0'):
-                    raise LegacyEndpoint('Χρειάζεται αρχικοποίηση legacy HTTP MCP.')
-                result=self._response(obj,key,status)
-            elif content=='text/event-stream' and status<400:
-                total=0;data=[];result=None
-                while result is None:
-                    line=response.readline(MAX_LINE+1);total+=len(line)
-                    if total>MAX_LINE:raise MCPError('Πολύ μεγάλη ροή HTTP MCP.')
-                    if not line:raise MCPError('Η ροή HTTP MCP έκλεισε πριν από τελική απόκριση.')
-                    line=line.decode('utf-8-sig').rstrip('\r\n')
-                    if not line:
-                        if data:result=self._response(json.loads('\n'.join(data)),key,status)
-                        data=[]
-                    elif line.startswith('data:'):data.append(line[5:].removeprefix(' '))
-            else:raise MCPError(f'Μη υποστηριζόμενη απόκριση HTTP MCP (HTTP {status}).')
-            if result is None:raise MCPError('Απουσιάζει τελική απόκριση HTTP MCP.')
-            if method=='initialize':
-                session=response.getheader('Mcp-Session-Id','')
-                if session and (len(session)>1024 or any(ord(c)<33 or ord(c)>126 for c in session)):
-                    raise MCPError('Μη έγκυρη συνεδρία HTTP MCP.')
-                self.session=session
-            return result
+                if self.closed or cancelled.is_set() or stopped():
+                    raise MCPError("Η σύνδεση HTTP MCP έκλεισε.")
+                self.active_socket = conn.sock
+            conn.request("POST", self.parts.path or "/", json.dumps(payload, ensure_ascii=False).encode("utf-8"), headers)
+            response = conn.getresponse()
+            return self._parse_http_response(response, method, key)
         finally:
-            if response is not None:response.close()
+            if response is not None:
+                response.close()
             conn.close()
             with self.state_lock:
-                if self.active is conn:self.active=None;self.active_socket=None
+                if self.active is conn:
+                    self.active = None
+                    self.active_socket = None
 
     def _request(self,method,params,stopped,timeout,notification=False,probe=False):
         with self.lock:

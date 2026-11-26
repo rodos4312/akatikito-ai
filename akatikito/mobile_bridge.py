@@ -431,119 +431,121 @@ class MobileBridge:
                 else:
                     self._send({"error": "Not found"}, 404)
 
+            def _handle_upload(self) -> None:
+                if not self._check_auth():
+                    return
+                raw_len = self.headers.get("Content-Length")
+                if raw_len is None:
+                    self._send({"error": "Missing Content-Length header"}, 400)
+                    return
+                try:
+                    length = int(raw_len)
+                except ValueError:
+                    self._send({"error": "Invalid Content-Length"}, 400)
+                    return
+                if length <= 0:
+                    self._send({"error": "Empty file upload is not allowed"}, 400)
+                    return
+                rel_hdr = urllib.parse.unquote(self.headers.get("X-File-Path", ""))
+                if not rel_hdr:
+                    qs = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
+                    rel_hdr = (qs.get("path") or [""])[0]
+                try:
+                    res = save_upload_stream(state._files_root(), rel_hdr, self.rfile, length)
+                    self._send(res)
+                except (OSError, ValueError, PermissionError) as exc:
+                    self._send({"error": str(exc)}, 400)
+
+            def _handle_login(self, data: dict) -> None:
+                ok, res = bridge._authenticate_login(data.get("pin", ""), data.get("token", ""))
+                if not ok:
+                    self._send({"ok": False, "error": res}, 403)
+                    return
+                st = state.status()
+                self._send({
+                    "ok": True,
+                    "session_token": res,
+                    "project": st.get("project", ""),
+                    "model": st.get("model", ""),
+                    "provider": st.get("provider", ""),
+                    "version": st.get("version", ""),
+                })
+
             def do_POST(self) -> None:
                 path = self.path.split("?")[0]
                 if path == "/api/mobile/files/upload":
-                    if not self._check_auth():
-                        return
-                    raw_len = self.headers.get("Content-Length")
-                    if raw_len is None:
-                        self._send({"error": "Missing Content-Length header"}, 400)
-                        return
-                    try:
-                        length = int(raw_len)
-                    except ValueError:
-                        self._send({"error": "Invalid Content-Length"}, 400)
-                        return
-                    if length <= 0:
-                        self._send({"error": "Empty file upload is not allowed"}, 400)
-                        return
-                    rel_hdr = urllib.parse.unquote(self.headers.get("X-File-Path", ""))
-                    if not rel_hdr:
-                        qs = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
-                        rel_hdr = (qs.get("path") or [""])[0]
-                    try:
-                        res = save_upload_stream(state._files_root(), rel_hdr, self.rfile, length)
-                        self._send(res)
-                    except (OSError, ValueError, PermissionError) as exc:
-                        self._send({"error": str(exc)}, 400)
+                    self._handle_upload()
                     return
                 data = self._read_json()
                 if data is None:
                     return
                 if path == "/api/mobile/login":
-                    ok, res = bridge._authenticate_login(data.get("pin", ""), data.get("token", ""))
-                    if not ok:
-                        self._send({"ok": False, "error": res}, 403)
-                        return
-                    st = state.status()
-                    self._send({
-                        "ok": True,
-                        "session_token": res,
-                        "project": st.get("project", ""),
-                        "model": st.get("model", ""),
-                        "provider": st.get("provider", ""),
-                        "version": st.get("version", ""),
-                    })
+                    self._handle_login(data)
                     return
                 if not self._check_auth():
                     return
-                if path == "/api/mobile/send":
-                    self._send(state.send(data.get("text", ""), data.get("attachments")))
-                elif path == "/api/mobile/attachments/upload":
-                    self._send(state.upload_attachment(data))
-                elif path == "/api/mobile/stop":
-                    self._send(state.stop())
-                elif path == "/api/mobile/poll":
-                    try:
-                        since_val = int(data.get("since", 0))
-                    except (TypeError, ValueError):
-                        self._send({"error": "Invalid since parameter"}, 400)
-                        return
-                    self._send(state.poll(since_val))
-                elif path == "/api/mobile/mode":
-                    self._send(state.set_mode(data.get("mode", "")))
-                elif path == "/api/mobile/preferences":
-                    # Strict allowlist: mobile may ONLY adjust model routing, NEVER security/budget/autonomous flags
-                    allowed_keys = {"model", "auto_mode", "fast_provider", "fast_model", "smart_provider", "smart_model"}
-                    filtered = {k: v for k, v in data.items() if k in allowed_keys}
-                    if not filtered:
-                        self._send({"error": "Δεν επιτρέπεται αλλαγή αυτής της ρύθμισης από το κινητό."}, 403)
-                        return
-                    self._send(state.set_preferences(filtered))
-                elif path == "/api/mobile/session/new":
-                    self._send(state.new_session())
-                elif path == "/api/mobile/session/open":
-                    self._send(state.open_session(data.get("id", ""), data.get("project", "")))
-                elif path == "/api/mobile/session/delete":
-                    self._send(state.delete_session(data.get("id", ""), data.get("project", "")))
-                elif path == "/api/mobile/routines":
-                    self._send(state.routines_list())
-                elif path == "/api/mobile/agenda/list":
-                    self._send(state.agenda_list())
-                elif path == "/api/mobile/agenda/add":
-                    self._send(state.agenda_add(data))
-                elif path == "/api/mobile/agenda/toggle":
-                    self._send(state.agenda_toggle(data.get("id", ""), data.get("done", True)))
-                elif path == "/api/mobile/agenda/delete":
-                    self._send(state.agenda_delete(data.get("id", "")))
-                elif path == "/api/mobile/learning":
-                    self._send(state.learning_view(data.get("offset", 0)))
-                elif path == "/api/mobile/learning/action":
-                    self._send(state.learning_action(data))
-                elif path == "/api/mobile/docs/search":
-                    self._send(state.docs_search(data.get("query", ""), data.get("limit", 8)))
-                elif path == "/api/mobile/approval":
-                    self._send(state.answer_approval(data.get("id", ""), data.get("allow") is True, data.get("always") is True))
-                elif path == "/api/mobile/files/tree":
-                    self._send(state.list_project_tree(data.get("path", "."), data.get("project"), data.get("offset", 0), data.get("limit", 100), ""))
-                elif path == "/api/mobile/files/open":
-                    self._send(state.open_file(data.get("path", ""), data.get("offset", 0), "", data.get("project"), data.get("session_id")))
-                elif path == "/api/mobile/projects/switch":
-                    # Security: mobile can ONLY switch to folders already approved in desktop recent_projects
-                    requested = str(data.get("project", "") or "").strip()
-                    recent = list(getattr(getattr(state, "settings", None), "recent_projects", []) or [])
-                    cur = str(state._files_root())
-                    allowed_paths = {str(Path(p).expanduser().resolve()).casefold() for p in ([cur] + recent) if p}
-                    try:
-                        req_resolved = str(Path(requested).expanduser().resolve()).casefold() if requested else ""
-                    except OSError:
-                        req_resolved = ""
-                    if not req_resolved or req_resolved not in allowed_paths:
-                        self._send({"error": "Επιτρέπεται εναλλαγή μόνο σε πρόσφατα εγκεκριμένα projects του PC."}, 403)
-                        return
-                    self._send(state.switch_project(requested))
-                else:
+                handler = _MOBILE_POST_ROUTES.get(path)
+                if handler is None:
                     self._send({"error": "Not found"}, 404)
+                    return
+                payload, code = handler(state, data)
+                self._send(payload, code)
 
         return MobileHandler
+
+
+def _mobile_poll(state, data: dict) -> tuple[dict, int]:
+    try:
+        since_val = int(data.get("since", 0))
+    except (TypeError, ValueError):
+        return {"error": "Invalid since parameter"}, 400
+    return state.poll(since_val), 200
+
+
+def _mobile_preferences(state, data: dict) -> tuple[dict, int]:
+    # Strict allowlist: mobile may ONLY adjust model routing, NEVER security/budget/autonomous flags
+    allowed_keys = {"model", "auto_mode", "fast_provider", "fast_model", "smart_provider", "smart_model"}
+    filtered = {k: v for k, v in data.items() if k in allowed_keys}
+    if not filtered:
+        return {"error": "Δεν επιτρέπεται αλλαγή αυτής της ρύθμισης από το κινητό."}, 403
+    return state.set_preferences(filtered), 200
+
+
+def _mobile_project_switch(state, data: dict) -> tuple[dict, int]:
+    # Security: mobile can ONLY switch to folders already approved in desktop recent_projects
+    requested = str(data.get("project", "") or "").strip()
+    recent = list(getattr(getattr(state, "settings", None), "recent_projects", []) or [])
+    cur = str(state._files_root())
+    allowed_paths = {str(Path(p).expanduser().resolve()).casefold() for p in ([cur] + recent) if p}
+    try:
+        req_resolved = str(Path(requested).expanduser().resolve()).casefold() if requested else ""
+    except OSError:
+        req_resolved = ""
+    if not req_resolved or req_resolved not in allowed_paths:
+        return {"error": "Επιτρέπεται εναλλαγή μόνο σε πρόσφατα εγκεκριμένα projects του PC."}, 403
+    return state.switch_project(requested), 200
+
+
+_MOBILE_POST_ROUTES = {
+    "/api/mobile/send": lambda s, d: (s.send(d.get("text", ""), d.get("attachments")), 200),
+    "/api/mobile/attachments/upload": lambda s, d: (s.upload_attachment(d), 200),
+    "/api/mobile/stop": lambda s, _d: (s.stop(), 200),
+    "/api/mobile/poll": _mobile_poll,
+    "/api/mobile/mode": lambda s, d: (s.set_mode(d.get("mode", "")), 200),
+    "/api/mobile/preferences": _mobile_preferences,
+    "/api/mobile/session/new": lambda s, _d: (s.new_session(), 200),
+    "/api/mobile/session/open": lambda s, d: (s.open_session(d.get("id", ""), d.get("project", "")), 200),
+    "/api/mobile/session/delete": lambda s, d: (s.delete_session(d.get("id", ""), d.get("project", "")), 200),
+    "/api/mobile/routines": lambda s, _d: (s.routines_list(), 200),
+    "/api/mobile/agenda/list": lambda s, _d: (s.agenda_list(), 200),
+    "/api/mobile/agenda/add": lambda s, d: (s.agenda_add(d), 200),
+    "/api/mobile/agenda/toggle": lambda s, d: (s.agenda_toggle(d.get("id", ""), d.get("done", True)), 200),
+    "/api/mobile/agenda/delete": lambda s, d: (s.agenda_delete(d.get("id", "")), 200),
+    "/api/mobile/learning": lambda s, d: (s.learning_view(d.get("offset", 0)), 200),
+    "/api/mobile/learning/action": lambda s, d: (s.learning_action(d), 200),
+    "/api/mobile/docs/search": lambda s, d: (s.docs_search(d.get("query", ""), d.get("limit", 8)), 200),
+    "/api/mobile/approval": lambda s, d: (s.answer_approval(d.get("id", ""), d.get("allow") is True, d.get("always") is True), 200),
+    "/api/mobile/files/tree": lambda s, d: (s.list_project_tree(d.get("path", "."), d.get("project"), d.get("offset", 0), d.get("limit", 100), ""), 200),
+    "/api/mobile/files/open": lambda s, d: (s.open_file(d.get("path", ""), d.get("offset", 0), "", d.get("project"), d.get("session_id")), 200),
+    "/api/mobile/projects/switch": _mobile_project_switch,
+}
