@@ -43,7 +43,7 @@
     "akatikito/eval_harness.py": 2,
     "akatikito/events.py": 1,
     "akatikito/features.py": 1,
-    "akatikito/file_organization.py": 4,
+    "akatikito/file_organization.py": 2,
     "akatikito/gateway.py": 8,
     "akatikito/github_updater.py": 1,
     "akatikito/hotkey.py": 7,

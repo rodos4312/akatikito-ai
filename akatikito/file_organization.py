@@ -111,52 +111,47 @@ class Organizer:
                 if Path(op["destination"]).suffix.casefold() not in DOCUMENTS:
                     raise PermissionError("Ο Βοηθός οργανώνει μόνο έγγραφα και πολυμέσα.")
 
-    def _validate_ops(self, ops, budget, prepare=False):
-        if not isinstance(ops, list) or not 1 <= len(ops) <= 32:
-            raise ValueError("Χρειάζονται 1–32 σαφείς ενέργειες.")
-        sources = []
-        destinations = []
-        mkdirs = set()
-        total = 0
-        count = 0
-        for op in ops:
-            if not isinstance(op, dict) or op.get("action") not in ("move", "copy", "mkdir", "trash"):
-                raise ValueError("Ενέργεια move, copy, mkdir ή trash.")
-            action = op["action"]
-            source = None
-            dest = None
-            if action != "mkdir":
-                source = self.path(op.get("source"))
-                if prepare:
-                    source = self._canonical(source)
-                    op["source"] = self.rel(source)
-                    op["snapshot"] = snapshot(source, budget)
-                expected = op.get("snapshot")
-                if not expected or not exact_exists(source):
-                    raise ValueError("Η πηγή δεν υπάρχει πλέον.")
-                sources.append(op["source"])
-                total += expected["bytes"]
-                count += len(expected["entries"])
-            if action != "trash":
-                dest = self.path(op.get("destination"))
-                if prepare:
-                    if dest.parent.exists():
-                        parent = self.root if dest.parent == self.root else self._canonical(dest.parent)
-                        dest = parent / dest.name
-                    op["destination"] = self.rel(dest)
-                if source and op["source"] == op["destination"]:
-                    raise ValueError("Η πηγή και ο προορισμός είναι ίδιοι.")
-                case_only = bool(source and action == "move" and op["source"].casefold() == op["destination"].casefold())
-                if dest.exists() and not case_only:
-                    raise FileExistsError("Ο προορισμός υπάρχει ήδη: " + op["destination"])
-                parent = self.rel(dest.parent)
-                if not dest.parent.is_dir() and parent not in mkdirs:
-                    raise ValueError("Δημιούργησε πρώτα τον φάκελο προορισμού στο ίδιο σχέδιο.")
-                destinations.append((op["destination"], action))
-                if action == "mkdir":
-                    mkdirs.add(op["destination"])
-        if total > MAX_TOTAL or count > MAX_ENTRIES:
-            raise ValueError("Το σύνολο ξεπερνά τα όρια οργάνωσης.")
+    def _validate_single_op(self, op, budget, prepare: bool, sources: list, destinations: list, mkdirs: set) -> tuple[int, int]:
+        if not isinstance(op, dict) or op.get("action") not in ("move", "copy", "mkdir", "trash"):
+            raise ValueError("Ενέργεια move, copy, mkdir ή trash.")
+        action = op["action"]
+        source = None
+        added_bytes = 0
+        added_entries = 0
+        if action != "mkdir":
+            source = self.path(op.get("source"))
+            if prepare:
+                source = self._canonical(source)
+                op["source"] = self.rel(source)
+                op["snapshot"] = snapshot(source, budget)
+            expected = op.get("snapshot")
+            if not expected or not exact_exists(source):
+                raise ValueError("Η πηγή δεν υπάρχει πλέον.")
+            sources.append(op["source"])
+            added_bytes = expected["bytes"]
+            added_entries = len(expected["entries"])
+        if action != "trash":
+            dest = self.path(op.get("destination"))
+            if prepare:
+                if dest.parent.exists():
+                    parent = self.root if dest.parent == self.root else self._canonical(dest.parent)
+                    dest = parent / dest.name
+                op["destination"] = self.rel(dest)
+            if source and op["source"] == op["destination"]:
+                raise ValueError("Η πηγή και ο προορισμός είναι ίδιοι.")
+            case_only = bool(source and action == "move" and op["source"].casefold() == op["destination"].casefold())
+            if dest.exists() and not case_only:
+                raise FileExistsError("Ο προορισμός υπάρχει ήδη: " + op["destination"])
+            parent = self.rel(dest.parent)
+            if not dest.parent.is_dir() and parent not in mkdirs:
+                raise ValueError("Δημιούργησε πρώτα τον φάκελο προορισμού στο ίδιο σχέδιο.")
+            destinations.append((op["destination"], action))
+            if action == "mkdir":
+                mkdirs.add(op["destination"])
+        return added_bytes, added_entries
+
+    @staticmethod
+    def _check_op_conflicts(ops: list, sources: list, destinations: list) -> None:
         for i, a in enumerate(sources):
             if any(_overlap(a, b) for b in sources[i + 1 :]):
                 raise ValueError("Επικαλυπτόμενες ή διπλές πηγές.")
@@ -170,6 +165,19 @@ class Organizer:
                     and any(o["action"] == "move" and o.get("source") == source and o.get("destination") == a for o in ops)
                 ):
                     raise ValueError("Πηγή και προορισμός επικαλύπτονται.")
+
+    def _validate_ops(self, ops, budget, prepare=False):
+        if not isinstance(ops, list) or not 1 <= len(ops) <= 32:
+            raise ValueError("Χρειάζονται 1–32 σαφείς ενέργειες.")
+        sources, destinations, mkdirs = [], [], set()
+        total = count = 0
+        for op in ops:
+            b, c = self._validate_single_op(op, budget, prepare, sources, destinations, mkdirs)
+            total += b
+            count += c
+        if total > MAX_TOTAL or count > MAX_ENTRIES:
+            raise ValueError("Το σύνολο ξεπερνά τα όρια οργάνωσης.")
+        self._check_op_conflicts(ops, sources, destinations)
         self._scope(ops)
 
     def preview(self, operations):
@@ -403,110 +411,116 @@ class Organizer:
         result.transaction_id = plan["id"]
         return result
 
+    def _preflight_apply(self, id, expected, approve):
+        plan = self._plan(id, expected)
+        old = self._load(id)
+        if old:
+            if old.get("state") == "complete":
+                return plan, self._result(plan, False, message="Η οργάνωση εφαρμόστηκε παλαιότερα· δεν εκτελέστηκε ξανά."), None
+            raise ValueError("Υπάρχει ήδη ιστορικό γι’ αυτό το σχέδιο. Έλεγξε την επαναφορά ή δημιούργησε νέο σχέδιο.")
+        if time.time() > plan["created"] + 900:
+            raise ValueError("Η προεπισκόπηση έληξε. Δημιούργησε νέο σχέδιο.")
+        if any(row["id"] != id and row["state"] in ("preparing", "applying", "undoing", "recovery_required") for row in self.history(limit=None)):
+            raise ValueError("Υπάρχει εκκρεμής ανάκτηση αρχείων. Έλεγξε πρώτα το ιστορικό.")
+        if not approve or not approve(self.summary(plan)):
+            raise PermissionError("[OWNER_DENIED] Η οργάνωση δεν εγκρίθηκε.")
+        budget = Budget(getattr(self.ws, "search_stopped", lambda: False))
+        self._validate_ops(plan["operations"], budget)
+        for op in plan["operations"]:
+            if op.get("source") and snapshot(self.path(op["source"]), budget)["version"] != op["snapshot"]["version"]:
+                raise ValueError("Η πηγή άλλαξε μετά την προεπισκόπηση: " + op["source"])
+        if time.time() > plan["created"] + 900:
+            raise ValueError("Η προεπισκόπηση έληξε κατά την έγκριση.")
+        self._guard(plan)
+        needed = sum((op.get("snapshot") or {}).get("bytes", 0) * (2 if op["action"] == "copy" else 1) for op in plan["operations"]) + 8 * 1024 * 1024
+        if shutil.disk_usage(self.root).free < needed:
+            raise ValueError("Δεν υπάρχει αρκετός ελεύθερος χώρος για ασφαλή αντίγραφα.")
+        return plan, None, budget
+
+    def _run_apply_ops(self, plan, folder: Path, journal: dict, budget) -> None:
+        for n, op in enumerate(plan["operations"]):
+            if op.get("source"):
+                copy_tree(self.path(op["source"]), folder / "backup" / str(n), op["snapshot"], budget)
+        for op in plan["operations"]:
+            if op.get("source") and snapshot(self.path(op["source"]), budget)["version"] != op["snapshot"]["version"]:
+                raise ValueError("Η πηγή άλλαξε κατά την προετοιμασία.")
+        journal["state"] = "applying"
+        self._save(journal)
+        for n, op in enumerate(plan["operations"]):
+            stage = folder / "staging" / str(n)
+            action = op["action"]
+            if action == "copy":
+                copy_tree(folder / "backup" / str(n), stage, op["snapshot"], budget)
+            elif action == "mkdir":
+                stage.mkdir()
+            pairs = (
+                [(op["source"], self.rel(stage)), (self.rel(stage), op["destination"])]
+                if action == "move"
+                else [(op["source"], self.rel(folder / "trash" / str(n)))]
+                if action == "trash"
+                else [(self.rel(stage), op["destination"])]
+            )
+            for source, dest in pairs:
+                snap = snapshot(self.path(source, True), budget)
+                wanted = op["snapshot"]["content"] if action != "mkdir" else EMPTY
+                if not snap or snap["content"] != wanted or (source == op.get("source") and snap["version"] != op["snapshot"]["version"]):
+                    raise ValueError("Η πηγή άλλαξε πριν από την εφαρμογή.")
+                move = {"source": source, "destination": dest, "identity": snap["identity"], "content": snap["content"]}
+                journal["pending"] = move
+                self._save(journal)
+                self._relocate(source, dest, move["identity"], move["content"], budget)
+                journal["moves"].append(move)
+                journal["pending"] = None
+                self._save(journal)
+
+    def _recover_apply_failure(self, plan, journal: dict, failure: Exception):
+        uncertain = []
+        try:
+            moves = self._effective(plan, journal, Budget())
+        except Exception as recovery_error:  # quality: allow BLE001 — capture any journal recovery failure for safe rollback
+            moves = journal["moves"]
+            uncertain.append(str(recovery_error))
+        errors = self._rollback(moves) + uncertain
+        journal.update(
+            state="recovery_required" if errors else "rolled_back",
+            error=str(failure),
+            rollback_errors=errors,
+            moves=moves,
+            pending=journal.get("pending") if uncertain else None,
+        )
+        try:
+            self._save(journal)
+        except OSError:
+            errors.append("Δεν αποθηκεύτηκε η τελική κατάσταση ανάκτησης.")
+        if errors:
+            return self._result(plan, recovery=True, message="ΣΦΑΛΜΑ: ΑΤΕΛΗΣ ΕΠΑΝΑΦΟΡΑ. " + str(failure) + " · " + "; ".join(errors))
+        raise ValueError("Η οργάνωση απέτυχε και οι μετακινήσεις αναιρέθηκαν: " + str(failure)) from failure
+
     def apply(self, id, expected, approve):
         self._policy()
-        budget = Budget(getattr(self.ws, "search_stopped", lambda: False))
         with self.lock:
-            plan = self._plan(id, expected)
-            old = self._load(id)
-            if old:
-                if old.get("state") == "complete":
-                    return self._result(plan, False, message="Η οργάνωση εφαρμόστηκε παλαιότερα· δεν εκτελέστηκε ξανά.")
-                raise ValueError("Υπάρχει ήδη ιστορικό γι’ αυτό το σχέδιο. Έλεγξε την επαναφορά ή δημιούργησε νέο σχέδιο.")
-            if time.time() > plan["created"] + 900:
-                raise ValueError("Η προεπισκόπηση έληξε. Δημιούργησε νέο σχέδιο.")
-            if any(row["id"] != id and row["state"] in ("preparing", "applying", "undoing", "recovery_required") for row in self.history(limit=None)):
-                raise ValueError("Υπάρχει εκκρεμής ανάκτηση αρχείων. Έλεγξε πρώτα το ιστορικό.")
-            if not approve or not approve(self.summary(plan)):
-                raise PermissionError("[OWNER_DENIED] Η οργάνωση δεν εγκρίθηκε.")
-            budget = Budget(getattr(self.ws, "search_stopped", lambda: False))
-            self._validate_ops(plan["operations"], budget)
-            for op in plan["operations"]:
-                if op.get("source") and snapshot(self.path(op["source"]), budget)["version"] != op["snapshot"]["version"]:
-                    raise ValueError("Η πηγή άλλαξε μετά την προεπισκόπηση: " + op["source"])
-            if time.time() > plan["created"] + 900:
-                raise ValueError("Η προεπισκόπηση έληξε κατά την έγκριση.")
-            self._guard(plan)
-            needed = sum((op.get("snapshot") or {}).get("bytes", 0) * (2 if op["action"] == "copy" else 1) for op in plan["operations"]) + 8 * 1024 * 1024
-            if shutil.disk_usage(self.root).free < needed:
-                raise ValueError("Δεν υπάρχει αρκετός ελεύθερος χώρος για ασφαλή αντίγραφα.")
+            plan, existing_result, budget = self._preflight_apply(id, expected, approve)
+            if existing_result is not None:
+                return existing_result
             folder = self._folder(id)
             if folder.exists():
                 raise ValueError("Η προετοιμασία αυτού του σχεδίου είχε διακοπεί. Δημιούργησε νέα προεπισκόπηση.")
             for name in ("backup", "staging", "trash"):
                 checked(folder / name).mkdir(parents=True, exist_ok=False)
             journal = {
-                "id": id,
-                "review": plan["review"],
-                "created": plan["created"],
-                "operations": self.summary(plan)["operations"],
-                "state": "preparing",
-                "phase": "apply",
-                "moves": [],
-                "pending": None,
+                "id": id, "review": plan["review"], "created": plan["created"],
+                "operations": self.summary(plan)["operations"], "state": "preparing",
+                "phase": "apply", "moves": [], "pending": None,
             }
             self._save(journal)
             try:
-                for n, op in enumerate(plan["operations"]):
-                    if op.get("source"):
-                        copy_tree(self.path(op["source"]), folder / "backup" / str(n), op["snapshot"], budget)
-                for op in plan["operations"]:
-                    if op.get("source") and snapshot(self.path(op["source"]), budget)["version"] != op["snapshot"]["version"]:
-                        raise ValueError("Η πηγή άλλαξε κατά την προετοιμασία.")
-                journal["state"] = "applying"
-                self._save(journal)
-                for n, op in enumerate(plan["operations"]):
-                    stage = folder / "staging" / str(n)
-                    action = op["action"]
-                    if action == "copy":
-                        copy_tree(folder / "backup" / str(n), stage, op["snapshot"], budget)
-                    elif action == "mkdir":
-                        stage.mkdir()
-                    pairs = (
-                        [(op["source"], self.rel(stage)), (self.rel(stage), op["destination"])]
-                        if action == "move"
-                        else [(op["source"], self.rel(folder / "trash" / str(n)))]
-                        if action == "trash"
-                        else [(self.rel(stage), op["destination"])]
-                    )
-                    for source, dest in pairs:
-                        snap = snapshot(self.path(source, True), budget)
-                        wanted = op["snapshot"]["content"] if action != "mkdir" else EMPTY
-                        if not snap or snap["content"] != wanted or (source == op.get("source") and snap["version"] != op["snapshot"]["version"]):
-                            raise ValueError("Η πηγή άλλαξε πριν από την εφαρμογή.")
-                        move = {"source": source, "destination": dest, "identity": snap["identity"], "content": snap["content"]}
-                        journal["pending"] = move
-                        self._save(journal)
-                        self._relocate(source, dest, move["identity"], move["content"], budget)
-                        journal["moves"].append(move)
-                        journal["pending"] = None
-                        self._save(journal)
+                self._run_apply_ops(plan, folder, journal, budget)
                 journal["watch"] = self._watch([p for m in journal["moves"] for p in (m["source"], m["destination"])], budget)
                 journal.update(state="complete", finished=time.time())
                 self._save(journal)
                 return self._result(plan)
-            except Exception as failure:
-                uncertain = []
-                try:
-                    moves = self._effective(plan, journal, Budget())
-                except Exception as recovery_error:
-                    moves = journal["moves"]
-                    uncertain.append(str(recovery_error))
-                errors = self._rollback(moves) + uncertain
-                journal.update(
-                    state="recovery_required" if errors else "rolled_back",
-                    error=str(failure),
-                    rollback_errors=errors,
-                    moves=moves,
-                    pending=journal.get("pending") if uncertain else None,
-                )
-                try:
-                    self._save(journal)
-                except OSError:
-                    errors.append("Δεν αποθηκεύτηκε η τελική κατάσταση ανάκτησης.")
-                if errors:
-                    return self._result(plan, recovery=True, message="ΣΦΑΛΜΑ: ΑΤΕΛΗΣ ΕΠΑΝΑΦΟΡΑ. " + str(failure) + " · " + "; ".join(errors))
-                raise ValueError("Η οργάνωση απέτυχε και οι μετακινήσεις αναιρέθηκαν: " + str(failure)) from failure
+            except Exception as failure:  # quality: allow BLE001 — any failure triggers verified journal rollback
+                return self._recover_apply_failure(plan, journal, failure)
 
     def undo_preview(self, id):
         self._policy(allow_undo=True)

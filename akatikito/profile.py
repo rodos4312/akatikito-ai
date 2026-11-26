@@ -178,7 +178,8 @@ class Profile:
                 self._save(data)
             return data
 
-    def propose(self, topic, text, kind="belief", status="unconfirmed", replaces=None):
+    @staticmethod
+    def _validate_proposal(topic, text, kind, status) -> tuple[str, str]:
         topic, text = str(topic).strip(), str(text).strip()
         if not topic or not text or len(topic) > 120 or len(text) > 4000:
             raise ValueError("Δώσε θέμα έως 120 και κείμενο έως 4000 χαρακτήρες.")
@@ -187,45 +188,53 @@ class Profile:
         if kind == "fact" and status != "confirmed":
             raise ValueError("Ένα ανεπιβεβαίωτο στοιχείο δηλώνεται ως belief/unconfirmed.")
         _guard(topic, text)
+        return topic, text
+
+    @staticmethod
+    def _find_duplicate_proposal(data: dict, same: list, near_matches: list, topic: str, text: str, kind: str, status: str, replaces) -> str | None:
+        if not replaces and any(text_key(r["text"]) == text_key(text) and r["kind"] == kind and r["status"] == status for r in same):
+            return "Υπάρχει ήδη αυτή η μνήμη· δεν γράφτηκε ξανά."
+        if not replaces and near_matches:
+            new_toks = _semantic_tokens(text)
+            for nm in near_matches:
+                if len(new_toks - _semantic_tokens(nm["text"])) <= 1 and len(nm["text"]) >= len(text):
+                    return f"Υπάρχει ήδη παρόμοια μνήμη («{nm['topic']}»)· δεν γράφτηκε ξανά."
+        for row in data["proposals"]:
+            if (row.get("target") != "global"
+                    and ((topic_key(row["topic"]) == topic_key(topic) and text_key(row["text"]) == text_key(text))
+                         or is_near_duplicate(row["text"], text))
+                    and row["kind"] == kind and row["status"] == status):
+                return "Υπάρχει ήδη παρόμοια πρόταση μνήμης· περιμένει έγκριση."
+        return None
+
+    def propose(self, topic, text, kind="belief", status="unconfirmed", replaces=None):
+        topic, text = self._validate_proposal(topic, text, kind, status)
         with LOCK:
             data = self.load()
             same = [r for r in data["entries"] if topic_key(r["topic"]) == topic_key(topic)]
-            if not replaces and any(text_key(r["text"]) == text_key(text) and r["kind"] == kind and r["status"] == status
-                   for r in same):
-                return "Υπάρχει ήδη αυτή η μνήμη· δεν γράφτηκε ξανά."
-            # Smart near-duplicate check across ALL topics to prevent redundant memories
             near_matches = [
                 r for r in data["entries"]
                 if r["kind"] == kind and r["status"] == status and is_near_duplicate(r["text"], text)
             ]
-            if not replaces and near_matches:
-                new_toks = _semantic_tokens(text)
-                for nm in near_matches:
-                    old_toks = _semantic_tokens(nm["text"])
-                    if len(new_toks - old_toks) <= 1 and len(nm["text"]) >= len(text):
-                        return f"Υπάρχει ήδη παρόμοια μνήμη («{nm['topic']}»)· δεν γράφτηκε ξανά."
-            for row in data["proposals"]:
-                if (row.get('target') != 'global' and (
-                        (topic_key(row["topic"]) == topic_key(topic) and text_key(row["text"]) == text_key(text))
-                        or is_near_duplicate(row["text"], text))
-                        and row["kind"] == kind and row["status"] == status):
-                    return "Υπάρχει ήδη παρόμοια πρόταση μνήμης· περιμένει έγκριση."
+            dup_msg = self._find_duplicate_proposal(data, same, near_matches, topic, text, kind, status, replaces)
+            if dup_msg is not None:
+                return dup_msg
             replaced = sorted({r["id"] for r in same} | {r["id"] for r in near_matches} | set(replaces or []))
-            known = {r["id"] for r in data["entries"]}
-            if not set(replaced) <= known:
+            if not set(replaced) <= {r["id"] for r in data["entries"]}:
                 raise ValueError("Η αναθεώρηση αναφέρεται σε μνήμη που δεν υπάρχει πια.")
             # Οι προτάσεις γενικής μνήμης έχουν δικό τους κύκλο· ένα προφίλ δεν τις αντικαθιστά.
-            pending = [r for r in data["proposals"] if topic_key(r["topic"]) == topic_key(topic)
-                       and r.get("target") != "global"]
+            pending = [r for r in data["proposals"] if topic_key(r["topic"]) == topic_key(topic) and r.get("target") != "global"]
             for row in pending:
                 data["revisions"].append({"action": "superseded_proposal", "at": time.time(), "before": row})
             data["proposals"] = [r for r in data["proposals"] if r not in pending]
             if not replaced and len(data["entries"]) + len(data["proposals"]) >= 500:
                 raise ValueError("Η ενεργή μνήμη έφτασε τα 500 στοιχεία. Χρειάζεται τακτοποίηση, όχι διαγραφή ιστορικού.")
-            data["proposals"].append({"id": uuid.uuid4().hex, "topic": same[0]["topic"] if same else topic,
-                                      "text": text, "kind": kind, "status": status, "replaces": replaced,
-                                      "source": "agent (πρόταση)", "created": time.time(),
-                                      "before": [copy.deepcopy(r) for r in data["entries"] if r["id"] in replaced]})
+            data["proposals"].append({
+                "id": uuid.uuid4().hex, "topic": same[0]["topic"] if same else topic,
+                "text": text, "kind": kind, "status": status, "replaces": replaced,
+                "source": "agent (πρόταση)", "created": time.time(),
+                "before": [copy.deepcopy(r) for r in data["entries"] if r["id"] in replaced],
+            })
             self._save(data)
         return "ΠΡΟΤΑΣΗ ΜΝΗΜΗΣ: " + topic + " — " + text + " (απαιτεί έγκριση χρήστη)."
 
