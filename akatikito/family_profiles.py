@@ -25,6 +25,7 @@ _ROLE_RANK = {"restricted": 0, "standard": 1, "admin": 2}
 _PBKDF2_ITERS = 120_000
 PIN_MAX_WRONG = 5
 PIN_LOCKOUT_SECONDS = 30.0
+PIN_LOCKOUT_MAX_SECONDS = 3600.0
 
 
 class PinLockoutError(PermissionError):
@@ -84,6 +85,7 @@ class FamilyProfiles:
         self._clock = clock or time.monotonic
         self._pin_failures: dict[str, int] = {}
         self._pin_locked_until: dict[str, float] = {}
+        self._pin_lockout_strikes: dict[str, int] = {}
 
     def _load(self) -> dict:
         data = load_json(self.registry_path, lambda: {"active": "", "profiles": {}})
@@ -213,10 +215,14 @@ class FamilyProfiles:
             fails = self._pin_failures.get(profile_id, 0) + 1
             self._pin_failures[profile_id] = fails
             if fails >= PIN_MAX_WRONG:
-                self._pin_locked_until[profile_id] = now + PIN_LOCKOUT_SECONDS
+                strike = self._pin_lockout_strikes.get(profile_id, 0)
+                delay = min(PIN_LOCKOUT_MAX_SECONDS, PIN_LOCKOUT_SECONDS * (2**strike))
+                self._pin_lockout_strikes[profile_id] = strike + 1
+                self._pin_locked_until[profile_id] = now + delay
                 self._pin_failures[profile_id] = 0
             raise PermissionError("Απαιτείται έγκυρος κωδικός PIN για αλλαγή σε αυτό το προφίλ.")
         self._pin_failures.pop(profile_id, None)
+        self._pin_lockout_strikes.pop(profile_id, None)
 
     def verify_admin_pin(self, admin_pin: str) -> None:
         """Require the primary/admin profile PIN before creating new profiles."""
