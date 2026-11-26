@@ -59,6 +59,7 @@ POST_ROUTES = {
     "/api/session/new": lambda s, _d: s.new_session(),
     "/api/session/delete": lambda s, d: s.delete_session(d.get("id", ""), d.get("project", "")),
     "/api/session/pin": lambda s, d: s.pin_session(d.get("id", ""), d.get("pinned") is True, d.get("project", "")),
+    "/api/compact": lambda s, d: s.compact_session(d.get("use_llm", True) is not False),
     "/api/sessions/search": lambda s, d: s.search_sessions(d.get("query", ""), d.get("limit", 20)),
     "/api/restore": lambda s, d: s.restore(d.get("backup", "")),
     "/api/pick-folder": lambda s, _d: s.pick_folder(),

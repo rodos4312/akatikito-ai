@@ -47,6 +47,8 @@ class Config:
 
     # Περιορισμένη προβολή προς το μοντέλο, με πλήρες τοπικό ιστορικό.
     context_economy: bool = True
+    auto_compact: bool = True
+    auto_compact_threshold: float = 0.80
     context_active_max_bytes: int = 0  # 0: use provider window; unknown providers fall back to 160k bytes
     context_max_chars: int = 36000
     context_recent_groups: int = 4

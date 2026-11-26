@@ -188,4 +188,11 @@ assert.equal(sm.children.length, 1);
 sm.children[0].onclick();
 assert.equal(ta.value, 'open @paroxos_v8.html ');
 
+// 6. Category 1: Context Gauge click triggers /api/compact & compacted event renders in trail
+document.getElementById('ctx-gauge').onclick();
+assert.equal(apiCalls.at(-1).url, '/api/compact');
+assert.equal(apiCalls.at(-1).body.use_llm, true);
+assert.equal(ChatPro.appendTrailStep(chat, 'compacted', { before_chars: 120000, after_chars: 12000, saved_pct: 90, reason: 'auto' }), true);
+ChatPro.resetTrail();
+
 console.log('CHAT PRO UI OK');

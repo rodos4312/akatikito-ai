@@ -513,22 +513,16 @@ function updateSlashMenu(textarea) {
     menu.style.display = 'none'; return;
   }
   const q = val.slice(1).toLowerCase();
-  const base = [
-    {name: 'learn', description: 'Distill current conversation into a reusable Skill'},
-    ...cachedSkills,
-  ];
+  const base = [{name: 'compact', description: '🗜️ Συμπίεση ιστορικού (εξοικονόμηση tokens)'}, {name: 'learn', description: 'Distill current conversation into a reusable Skill'}, ...cachedSkills];
   const matches = base.filter(s => (s.name || '').toLowerCase().includes(q)).slice(0, 8);
   if (!matches.length) { menu.style.display = 'none'; return; }
   menu.replaceChildren();
   for (const sk of matches) {
-    const btn = document.createElement('button');
-    btn.className = 'cmd-item';
+    const btn = document.createElement('button'); btn.className = 'cmd-item';
     btn.textContent = '/' + sk.name + (sk.description ? ' — ' + sk.description : '');
     btn.onclick = () => {
-      textarea.value = '/' + sk.name + ' ';
-      menu.style.display = 'none';
-      textarea.focus();
-      grow(textarea);
+      if (sk.name === 'compact' && typeof ChatPro !== 'undefined' && ChatPro.runCompact) { textarea.value = ''; menu.style.display = 'none'; ChatPro.runCompact(); return; }
+      textarea.value = '/' + sk.name + ' '; menu.style.display = 'none'; textarea.focus(); grow(textarea);
     };
     menu.appendChild(btn);
   }

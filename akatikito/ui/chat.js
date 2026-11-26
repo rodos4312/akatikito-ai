@@ -40,7 +40,13 @@ function showTab(name) {
 
 function grow(el) { el.style.height = "auto"; el.style.height = Math.min(el.scrollHeight, 140) + "px"; }
 function onKey(e) {
-  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    if (e.target && String(e.target.value || "").trim() === "/compact" && typeof ChatPro !== "undefined" && ChatPro.runCompact) {
+      e.target.value = ""; grow(e.target); ChatPro.runCompact(); return;
+    }
+    send();
+  }
 }
 
 async function pasteInto(el) {

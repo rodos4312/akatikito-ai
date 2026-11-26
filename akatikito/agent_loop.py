@@ -101,6 +101,9 @@ def _begin_turn(agent, text: str, internal: bool) -> tuple[str, bool]:
         effective = agent.task.begin(agent._pending_owner_goal or text, agent.messages)
     _reset_turn_state(agent, effective)
     fresh = not agent.messages
+    if not fresh and not internal:
+        from .compaction import maybe_auto_compact
+        maybe_auto_compact(agent)
     if agent.config.auto_mode and not agent._manual_mode:
         agent._set_mode("assistant" if is_slash_learn else modes.classify(effective), reason="αυτόματα από την εργασία")
     apply_model_routing(agent, effective, fresh=fresh, is_direct_skill=is_direct_skill)

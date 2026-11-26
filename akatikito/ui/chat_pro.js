@@ -254,7 +254,7 @@
   }
 
   function appendTrailStep(chatEl, kind, data) {
-    if (!chatEl || !['reasoning', 'thinking', 'tool_call', 'tool_result', 'repair', 'verify', 'stopped', 'limit', 'give_up', 'checkpoint_error', 'fatal'].includes(kind)) {
+    if (!chatEl || !['reasoning', 'thinking', 'tool_call', 'tool_result', 'repair', 'verify', 'compacted', 'stopped', 'limit', 'give_up', 'checkpoint_error', 'fatal'].includes(kind)) {
       return false;
     }
     const pin = typeof root.isChatNearBottom === 'function' ? root.isChatNearBottom() : true;
@@ -290,6 +290,11 @@
     } else if (kind === 'repair') {
       const lbl = { investigate: 'Εντοπισμός αιτίας', diagnosis: 'Διάγνωση', passed: 'Επαληθεύτηκε η διόρθωση' }[data?.phase] || 'Διόρθωση';
       addTrailRow(trail, '', '🛠', `<b>${escHtml(lbl)}</b> — ${escHtml(data?.text || '')}`);
+    } else if (kind === 'compacted') {
+      const b = Math.round(Number(data?.before_chars || 0) / 100) / 10;
+      const a = Math.round(Number(data?.after_chars || 0) / 100) / 10;
+      const pct = Number(data?.saved_pct || 0);
+      addTrailRow(trail, 'ok', '🗜', `<b>Συμπίεση context</b> (${escHtml(data?.reason === 'auto' ? 'αυτόματη' : 'χειροκίνητη')}) · ${b}k → ${a}k chars (-${pct}%)`);
     } else {
       const msg = kind === 'stopped' ? 'Σταμάτησα όπως ζήτησες'
         : kind === 'limit' ? 'Έφτασα το όριο βημάτων'
@@ -453,7 +458,9 @@
       const lbl = document.getElementById('ctx-lbl');
       if (fill) fill.style.width = `${pct}%`;
       if (lbl) lbl.textContent = (pct > 0 ? `ctx ${pct}%` : '') + (cPct > 0 ? `${pct > 0 ? ' · ' : ''}cache ${cPct}%` : '');
-      gauge.title = `Context: ${pct}% · Prompt: ${t.prompt_tokens || 0} · Cache hit: ${hit} (${cPct}%)`;
+      gauge.style.cursor = s.busy ? 'default' : 'pointer';
+      gauge.title = `Context: ${pct}% · Prompt: ${t.prompt_tokens || 0} · Cache hit: ${hit} (${cPct}%) — κλικ για συμπίεση (/compact)`;
+      gauge.onclick = () => { if (!s.busy) runCompact(); };
     }
     if (autoBtn) {
       const on = !!s.preferences?.autonomous;
@@ -539,6 +546,15 @@
     return true;
   }
 
+  async function runCompact() {
+    if (typeof root.api !== 'function') return null;
+    const r = await root.api('/api/compact', { use_llm: true });
+    if (r && r.error) { root.showNotice?.('err', r.error); return r; }
+    if (r && typeof root.updateBadges === 'function') root.updateBadges(r);
+    if (r && r.notice) root.showNotice?.('ok', r.notice);
+    return r;
+  }
+
   root.ChatPro = {
     highlightCode,
     renderMarkdown,
@@ -554,6 +570,7 @@
     collapseStreamReasoning,
     formatUserText,
     updateAtMenu,
+    runCompact,
     _setFileCacheForTest: (proj, entries) => { fileCache = { project: proj, entries, loading: false }; },
     resetTrail: () => { stopSpinner(); activeTrail = null; },
   };

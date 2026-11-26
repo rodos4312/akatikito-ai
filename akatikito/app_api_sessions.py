@@ -301,3 +301,22 @@ class SessionsUpgradeStateMixin:
             self.streaming = None
             self.notice = "Το υποψήφιο κρατήθηκε στο D: για έλεγχο. Επέστρεψες στη συνομιλία σου."
         return self.status()
+
+    def compact_session(self, use_llm: bool = True) -> dict:
+        if self.agent is None:
+            return {"error": "Δεν έχεις συνδεθεί ακόμα."}
+        if self.busy:
+            return {"error": "Περίμενε να ολοκληρωθεί η εργασία πριν τη συμπίεση."}
+        from .compaction import compact_conversation
+
+        result = compact_conversation(self.agent, use_llm=bool(use_llm), reason="manual")
+        if result.get("compacted"):
+            self._save_session()
+            b_k = round(result["before_chars"] / 1000, 1)
+            a_k = round(result["after_chars"] / 1000, 1)
+            self.notice = f"🗜️ Συμπιέστηκε το ιστορικό: {b_k}k → {a_k}k χαρακτήρες (-{result['saved_pct']}%)."
+        else:
+            self.notice = "ℹ️ Το ιστορικό είναι ήδη συμπαγές — δεν χρειάζεται συμπίεση ακόμα."
+        out = self.status()
+        out["compaction"] = result
+        return out
