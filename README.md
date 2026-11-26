@@ -12,7 +12,7 @@
 
 **Akatikito** is a local-first AI assistant and coding agent for Windows, with an optional Android app. It runs locally in its own desktop window (no background console window), connects to your choice of LLM provider (DeepSeek, OpenAI, Anthropic, Gemini, Z.ai GLM, OpenRouter, Ollama, or custom OpenAI-compatible endpoints), and keeps files, API keys, and memory under local user control.
 
-![Akatikito Desktop v2.4.0](docs/screenshots/desktop-home.png)
+![Akatikito Desktop v2.5.0](docs/screenshots/desktop-home.png)
 
 ---
 
@@ -37,7 +37,7 @@
 
 ## Android Companion & Standalone App (`v1.7.0`)
 
-A release-signed Android APK (`Akatikito-Mobile-arm64.apk`) is available on the **[Releases](https://github.com/rodos4312/akatikito-ai/releases/tag/v2.4.0)** page:
+A release-signed Android APK (`Akatikito-Mobile-arm64.apk`) is available on the **[Releases](https://github.com/rodos4312/akatikito-ai/releases/tag/v2.5.0)** page:
 
 - **Standalone mode**: Includes an embedded Python 3.11 runtime (Chaquopy) so the agent can run directly on the phone with your own API key — including chat, agenda, skills, memory, local workspace files, native Android voice input, and text-to-speech.
 - **Optional PC pairing**: Enable **Mobile Companion** in desktop Settings and scan the QR code from the phone. Supports both Tailscale (recommended for encrypted remote access over 4G/5G) and local Wi-Fi, with bidirectional PC ↔ phone file transfer restricted to approved project folders.
@@ -88,4 +88,4 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the full technical blueprint and [ROA
 Το **Akatikito** είναι ένας τοπικός AI βοηθός και coding agent για Windows, με προαιρετική εφαρμογή Android. Τρέχει σε δικό του παράθυρο χωρίς κονσόλα, υποστηρίζει 6 γλώσσες διεπαφής, επιλογή διαφορετικού παρόχου/μοντέλου για απλές και δύσκολες εργασίες, εργαλεία εγγράφων (Word, Excel, PDF, εικόνες, ZIP, τοπική αναζήτηση FTS5), ενσωματωμένα & εισαγόμενα `SKILL.md`, MCP hub, κανάλια (Telegram, Discord, Email, Slack) και κρυπτογράφηση κλειδιών με Windows DPAPI.
 
 - **Windows:** Τρέξε το `Install.cmd` και άνοιξε το **Akatikito** από τη συντόμευση της Επιφάνειας Εργασίας ή του Μενού Έναρξη.
-- **Android:** Κατέβασε το `Akatikito-Mobile-arm64.apk` από τα **[Releases](https://github.com/rodos4312/akatikito-ai/releases/tag/v2.4.0)** — δουλεύει είτε αυτόνομα στο κινητό είτε συνδεδεμένο με το PC μέσω QR (Tailscale ή Wi-Fi).
+- **Android:** Κατέβασε το `Akatikito-Mobile-arm64.apk` από τα **[Releases](https://github.com/rodos4312/akatikito-ai/releases/tag/v2.5.0)** — δουλεύει είτε αυτόνομα στο κινητό είτε συνδεδεμένο με το PC μέσω QR (Tailscale ή Wi-Fi).

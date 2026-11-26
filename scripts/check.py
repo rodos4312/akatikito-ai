@@ -141,6 +141,10 @@ def _step_supply(ctx: RunContext) -> tuple[int, str]:
     return _run_cmd([ctx.python, "scripts/supply_chain_check.py"], ctx.root, timeout=60)
 
 
+def _step_docs(ctx: RunContext) -> tuple[int, str]:
+    return _run_cmd([ctx.python, "scripts/release_check.py"], ctx.root, timeout=60)
+
+
 def _ui_js_files(root: Path) -> list[str]:
     files = sorted(p.relative_to(root).as_posix() for p in (root / "akatikito" / "ui").glob("*.js"))
     onb = root / "akatikito" / "onboarding.js"
@@ -210,6 +214,7 @@ STEPS: tuple[Step, ...] = (
     Step("rules", "hidden-error rules ratchet", _step_rules, fast=True),
     Step("footguns", "footgun checks (case, blobs, paths, spawns, UTF-8)", _step_footguns, fast=True),
     Step("supply", "supply-chain pins (Actions SHA & requirement bounds)", _step_supply, fast=True),
+    Step("docs", "release version & docs-drift checks", _step_docs, fast=True),
     Step("js", "UI JavaScript syntax", _step_js, fast=True),
     Step("node", "node UI tests", _step_node, fast=True),
     Step("pytest", "pytest", _step_pytest, fast=False),
