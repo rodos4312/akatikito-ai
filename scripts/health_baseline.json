@@ -19,7 +19,6 @@
     "akatikito/app_api_ops.py::OpsStateMixin.export_chat": 28,
     "akatikito/app_api_ops.py::OpsStateMixin.github_update_apply": 22,
     "akatikito/app_api_ops.py::OpsStateMixin.learning_action": 21,
-    "akatikito/app_api_server.py::make_handler.Handler.do_POST": 77,
     "akatikito/app_api_sessions.py::SessionsUpgradeStateMixin.open_session": 42,
     "akatikito/browser_web.py::BrowserReader.read": 37,
     "akatikito/browser_web.py::PublicProxy.__init__.Handler.forward": 30,

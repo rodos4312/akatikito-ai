@@ -24,20 +24,112 @@ def _version() -> str:
     return __version__
 
 
-def _dispatch_post_table(state: AppState, path: str, data: dict) -> tuple[dict, int]:
-    routes = {
-        "/api/steer": lambda d: state.steer(d.get("text", "")),
-        "/api/session/pin": lambda d: state.pin_session(d.get("id", ""), d.get("pinned") is True, d.get("project", "")),
-        "/api/sessions/search": lambda d: state.search_sessions(d.get("query", ""), d.get("limit", 20)),
-        "/api/usage/insights": lambda d: state.usage_insights(d.get("month", "")),
-        "/api/copy": lambda d: state.copy_text(d.get("text", "")),
-        "/api/paste": lambda d: state.paste_text(d),
-        "/api/chat/export": lambda d: state.export_chat(d),
-    }
-    handler = routes.get(path)
-    if handler is None:
-        return {"error": "άγνωστη διαδρομή"}, 404
-    return handler(data), 200
+def _post_connect(state: AppState, d: dict) -> dict:
+    return state.connect(
+        provider=d.get("provider", ""),
+        base_url=d.get("base_url", ""),
+        model=d.get("model", ""),
+        api_key=d.get("api_key", ""),
+        project=d.get("project", ""),
+        max_steps=d.get("max_steps", 50),
+        verify=d.get("verify", ""),
+        confirm_key_destination=d.get("confirm_key_destination") is True,
+    )
+
+
+def _post_mcp_disconnect(state: AppState, d: dict) -> dict:
+    if state.busy:
+        return {"error": "Περίμενε να ολοκληρωθεί η εργασία."}
+    state.mcp.disconnect(d.get("name", ""))
+    return {"ok": True}
+
+
+POST_ROUTES = {
+    "/api/connect": _post_connect,
+    "/api/plugins/action": lambda s, d: s.plugin_action(d),
+    "/api/channel/session": lambda s, d: s.channel_session(d.get("id", ""), d.get("project", "")),
+    "/api/send": lambda s, d: s.send(d.get("text", ""), d.get("attachments")),
+    "/api/steer": lambda s, d: s.steer(d.get("text", "")),
+    "/api/stop": lambda s, _d: s.stop(),
+    "/api/poll": lambda s, d: s.poll(int(d.get("since", 0))),
+    "/api/mode": lambda s, d: s.set_mode(d.get("mode", "")),
+    "/api/model": lambda s, d: s.change_model(d.get("model", "")),
+    "/api/models": lambda s, d: s.load_models(d.get("provider", ""), d.get("base_url", ""), d.get("api_key", "")),
+    "/api/session/open": lambda s, d: s.open_session(d.get("id", ""), d.get("project", "")),
+    "/api/session/new": lambda s, _d: s.new_session(),
+    "/api/session/delete": lambda s, d: s.delete_session(d.get("id", ""), d.get("project", "")),
+    "/api/session/pin": lambda s, d: s.pin_session(d.get("id", ""), d.get("pinned") is True, d.get("project", "")),
+    "/api/sessions/search": lambda s, d: s.search_sessions(d.get("query", ""), d.get("limit", 20)),
+    "/api/restore": lambda s, d: s.restore(d.get("backup", "")),
+    "/api/pick-folder": lambda s, _d: s.pick_folder(),
+    "/api/voice/config": lambda s, d: s.configure_voice(d),
+    "/api/voice/prepare": lambda s, d: s.start_voice(d, True),
+    "/api/voice/transcribe": lambda s, d: s.start_voice(d),
+    "/api/voice/cancel": lambda s, d: {"ok": s.voice.cancel(d.get("id"))},
+    "/api/mcp/connect": lambda s, d: s.mcp_connect(d.get("name", "")),
+    "/api/mcp/disconnect": _post_mcp_disconnect,
+    "/api/mcp/save": lambda s, d: s.mcp_save(d),
+    "/api/mcp/import": lambda s, d: s.mcp_import(d),
+    "/api/mcp/remove": lambda s, d: s.mcp_remove(d.get("name", "")),
+    "/api/attachments/upload": lambda s, d: s.upload_attachment(d),
+    "/api/attachments/screenshot": lambda s, d: s.capture_screenshot(d),
+    "/api/reminder/done": lambda s, d: s.finish_reminder(d.get("id", "")),
+    "/api/agenda/list": lambda s, _d: s.agenda_list(),
+    "/api/agenda/add": lambda s, d: s.agenda_add(d),
+    "/api/agenda/toggle": lambda s, d: s.agenda_toggle(d.get("id", ""), d.get("done", True)),
+    "/api/agenda/delete": lambda s, d: s.agenda_delete(d.get("id", "")),
+    "/api/scheduled/list": lambda s, _d: s.scheduled_list(),
+    "/api/scheduled/action": lambda s, d: s.scheduled_action(d.get("id", ""), d.get("action", "")),
+    "/api/scheduled/history": lambda s, d: s.scheduled_history(d.get("id", "")),
+    "/api/diagnostics/health": lambda s, _d: s.diagnostics_health(),
+    "/api/doctor/diagnose": lambda s, d: s.doctor_diagnose(d),
+    "/api/doctor/fix": lambda s, d: s.doctor_fix(d),
+    "/api/doctor/snapshot": lambda s, d: s.doctor_snapshot(d),
+    "/api/diagnostics/export": lambda s, d: s.diagnostics_export(d),
+    "/api/i18n": lambda s, d: s.i18n_bundle(d.get("lang")),
+    "/api/update/check": lambda s, _d: s.github_update_check(),
+    "/api/update/apply": lambda s, d: s.github_update_apply(d),
+    "/api/project-profile": lambda s, d: s.project_profile(d),
+    "/api/audit": lambda s, d: s.audit_view(d.get("limit", 60)),
+    "/api/docs/search": lambda s, d: s.docs_search(d.get("query", ""), d.get("limit", 8)),
+    "/api/routines/list": lambda s, _d: s.routines_list(),
+    "/api/routines/add": lambda s, d: s.routines_add(d),
+    "/api/routines/delete": lambda s, d: s.routines_delete(d.get("id", "")),
+    "/api/project/switch": lambda s, d: s.switch_project(d.get("project", "")),
+    "/api/files/open-os": lambda s, d: s.open_in_os(d.get("path", ""), d.get("reveal") is True),
+    "/api/mobile-bridge/status": lambda s, _d: s.mobile_bridge_status(),
+    "/api/mobile-bridge/start": lambda s, d: s.mobile_bridge_start(d.get("port", 0)),
+    "/api/mobile-bridge/stop": lambda s, _d: s.mobile_bridge_stop(),
+    "/api/approval": lambda s, d: s.answer_approval(d.get("id", ""), d.get("allow") is True, d.get("always") is True),
+    "/api/learning": lambda s, d: s.learning_view(d.get("offset", 0)),
+    "/api/learning/action": lambda s, d: s.learning_action(d),
+    "/api/memory": lambda s, d: s.memory_view(d),
+    "/api/memory/action": lambda s, d: s.memory_action(d),
+    "/api/checkpoint/diff": lambda s, d: s.checkpoint_action(d.get("id", "")),
+    "/api/checkpoint/undo": lambda s, d: s.checkpoint_action(d.get("id", ""), True),
+    "/api/preferences": lambda s, d: s.set_preferences(d),
+    "/api/files/pick": lambda s, _d: s.pick_file(),
+    "/api/files/tree": lambda s, d: s.list_project_tree(
+        d.get("path", "."), d.get("project"), d.get("offset", 0), d.get("limit", 100), d.get("version", "")
+    ),
+    "/api/files/plan": lambda s, d: s.files_organize("plan", d),
+    "/api/files/apply": lambda s, d: s.files_organize("apply", d),
+    "/api/files/undo-plan": lambda s, d: s.files_organize("undo_plan", d),
+    "/api/files/undo": lambda s, d: s.files_organize("undo", d),
+    "/api/files/history": lambda s, d: s.files_organize("history", d),
+    "/api/files/open": lambda s, d: s.open_file(
+        d.get("path", ""), d.get("offset", 0), d.get("version", ""), d.get("project"), d.get("session_id")
+    ),
+    "/api/files/diff": lambda s, d: s.file_diff(d.get("path", ""), d.get("backup_id", "")),
+    "/api/upgrade/start": lambda s, _d: s.start_upgrade(),
+    "/api/upgrade/check": lambda s, _d: s.check_upgrade(),
+    "/api/upgrade/apply": lambda s, _d: s.apply_upgrade(),
+    "/api/upgrade/cancel": lambda s, _d: s.cancel_upgrade(),
+    "/api/usage/insights": lambda s, d: s.usage_insights(d.get("month", "")),
+    "/api/copy": lambda s, d: s.copy_text(d.get("text", "")),
+    "/api/paste": lambda s, d: s.paste_text(d),
+    "/api/chat/export": lambda s, d: s.export_chat(d),
+}
 
 
 def make_handler(state: AppState) -> type:
@@ -163,175 +255,17 @@ def make_handler(state: AppState) -> type:
             self._send({'error':'Cross-origin requests are not allowed.'},403)
 
         def do_POST(self) -> None:
-            if not self._authorized(post=True):return
+            if not self._authorized(post=True):
+                return
             path = self.path.split("?")[0]
             data = self._body()
-            if data is None:return
-            if path == "/api/connect":
-                self._send(state.connect(
-                    provider=data.get("provider", ""),
-                    base_url=data.get("base_url", ""),
-                    model=data.get("model", ""),
-                    api_key=data.get("api_key", ""),
-                    project=data.get("project", ""),
-                    max_steps=data.get("max_steps", 50),
-                    verify=data.get("verify", ""),
-                    confirm_key_destination=data.get('confirm_key_destination') is True,
-                ))
-            elif path == "/api/plugins/action":
-                self._send(state.plugin_action(data))
-            elif path == "/api/channel/session":
-                self._send(state.channel_session(data.get("id",""),data.get("project","")))
-            elif path == "/api/send":
-                self._send(state.send(data.get("text", ""),data.get("attachments")))
-            elif path == "/api/stop":
-                self._send(state.stop())
-            elif path == "/api/poll":
-                self._send(state.poll(int(data.get("since", 0))))
-            elif path == "/api/mode":
-                self._send(state.set_mode(data.get("mode", "")))
-            elif path == "/api/model":
-                self._send(state.change_model(data.get("model", "")))
-            elif path == "/api/models":
-                self._send(state.load_models(
-                    data.get("provider", ""), data.get("base_url", ""), data.get("api_key", "")
-                ))
-            elif path == "/api/session/open":
-                self._send(state.open_session(data.get("id", ""), data.get("project", "")))
-            elif path == "/api/session/new":
-                self._send(state.new_session())
-            elif path == "/api/session/delete":
-                self._send(state.delete_session(data.get("id", ""), data.get("project", "")))
-            elif path == "/api/restore":
-                self._send(state.restore(data.get("backup", "")))
-            elif path == "/api/pick-folder":
-                self._send(state.pick_folder())
-            elif path == '/api/voice/config':
-                self._send(state.configure_voice(data))
-            elif path == '/api/voice/prepare':
-                self._send(state.start_voice(data,True))
-            elif path == '/api/voice/transcribe':
-                self._send(state.start_voice(data))
-            elif path == '/api/voice/cancel':
-                self._send({'ok':state.voice.cancel(data.get('id'))})
-            elif path == '/api/mcp/connect':
-                self._send(state.mcp_connect(data.get('name','')))
-            elif path == '/api/mcp/disconnect':
-                if state.busy:self._send({'error':'Περίμενε να ολοκληρωθεί η εργασία.'})
-                else:state.mcp.disconnect(data.get('name',''));self._send({'ok':True})
-            elif path == '/api/mcp/save':
-                self._send(state.mcp_save(data))
-            elif path == '/api/mcp/import':
-                self._send(state.mcp_import(data))
-            elif path == '/api/mcp/remove':
-                self._send(state.mcp_remove(data.get('name','')))
-            elif path == '/api/attachments/upload':
-                self._send(state.upload_attachment(data))
-            elif path == '/api/attachments/screenshot':
-                self._send(state.capture_screenshot(data))
-            elif path == '/api/reminder/done':
-                self._send(state.finish_reminder(data.get('id','')))
-            elif path == '/api/agenda/list':
-                self._send(state.agenda_list())
-            elif path == '/api/agenda/add':
-                self._send(state.agenda_add(data))
-            elif path == '/api/agenda/toggle':
-                self._send(state.agenda_toggle(data.get('id',''), data.get('done',True)))
-            elif path == '/api/agenda/delete':
-                self._send(state.agenda_delete(data.get('id','')))
-            elif path == '/api/scheduled/list':
-                self._send(state.scheduled_list())
-            elif path == '/api/scheduled/action':
-                self._send(state.scheduled_action(data.get('id',''), data.get('action','')))
-            elif path == '/api/scheduled/history':
-                self._send(state.scheduled_history(data.get('id','')))
-            elif path == '/api/diagnostics/health':
-                self._send(state.diagnostics_health())
-            elif path == '/api/doctor/diagnose':
-                self._send(state.doctor_diagnose(data))
-            elif path == '/api/doctor/fix':
-                self._send(state.doctor_fix(data))
-            elif path == '/api/doctor/snapshot':
-                self._send(state.doctor_snapshot(data))
-            elif path == '/api/diagnostics/export':
-                self._send(state.diagnostics_export(data))
-            elif path == '/api/i18n':
-                self._send(state.i18n_bundle(data.get('lang')))
-            elif path == '/api/update/check':
-                self._send(state.github_update_check())
-            elif path == '/api/update/apply':
-                self._send(state.github_update_apply(data))
-            elif path == '/api/project-profile':
-                self._send(state.project_profile(data))
-            elif path == '/api/audit':
-                self._send(state.audit_view(data.get('limit', 60)))
-            elif path == '/api/docs/search':
-                self._send(state.docs_search(data.get('query', ''), data.get('limit', 8)))
-            elif path == '/api/routines/list':
-                self._send(state.routines_list())
-            elif path == '/api/routines/add':
-                self._send(state.routines_add(data))
-            elif path == '/api/routines/delete':
-                self._send(state.routines_delete(data.get('id', '')))
-            elif path == '/api/project/switch':
-                self._send(state.switch_project(data.get('project', '')))
-            elif path == '/api/files/open-os':
-                self._send(state.open_in_os(data.get('path', ''), data.get('reveal') is True))
-            elif path == '/api/mobile-bridge/status':
-                self._send(state.mobile_bridge_status())
-            elif path == '/api/mobile-bridge/start':
-                self._send(state.mobile_bridge_start(data.get('port', 0)))
-            elif path == '/api/mobile-bridge/stop':
-                self._send(state.mobile_bridge_stop())
-            elif path == '/api/approval':
-                self._send(state.answer_approval(data.get('id',''),data.get('allow') is True,data.get('always') is True))
-            elif path == '/api/learning':
-                self._send(state.learning_view(data.get('offset',0)))
-            elif path == '/api/learning/action':
-                self._send(state.learning_action(data))
-            elif path == '/api/memory':
-                self._send(state.memory_view(data))
-            elif path == '/api/memory/action':
-                self._send(state.memory_action(data))
-            elif path == '/api/checkpoint/diff':
-                self._send(state.checkpoint_action(data.get('id','')))
-            elif path == '/api/checkpoint/undo':
-                self._send(state.checkpoint_action(data.get('id',''),True))
-            elif path == '/api/preferences':
-                self._send(state.set_preferences(data))
-            elif path == '/api/files/pick':
-                self._send(state.pick_file())
-            elif path == '/api/files/tree':
-                self._send(state.list_project_tree(
-                    data.get('path','.'), data.get('project'),
-                    data.get('offset',0), data.get('limit',100), data.get('version',''),
-                ))
-            elif path == '/api/files/plan':
-                self._send(state.files_organize('plan', data))
-            elif path == '/api/files/apply':
-                self._send(state.files_organize('apply', data))
-            elif path == '/api/files/undo-plan':
-                self._send(state.files_organize('undo_plan', data))
-            elif path == '/api/files/undo':
-                self._send(state.files_organize('undo', data))
-            elif path == '/api/files/history':
-                self._send(state.files_organize('history', data))
-            elif path == '/api/files/open':
-                self._send(state.open_file(data.get('path',''), data.get('offset',0), data.get('version',''),
-                                          data.get('project'), data.get('session_id')))
-            elif path == '/api/files/diff':
-                self._send(state.file_diff(data.get('path', ''), data.get('backup_id', '')))
-            elif path == "/api/upgrade/start":
-                self._send(state.start_upgrade())
-            elif path == "/api/upgrade/check":
-                self._send(state.check_upgrade())
-            elif path == "/api/upgrade/apply":
-                self._send(state.apply_upgrade())
-            elif path == "/api/upgrade/cancel":
-                self._send(state.cancel_upgrade())
-            else:
-                payload, code = _dispatch_post_table(state, path, data)
-                self._send(payload, code)
+            if data is None:
+                return
+            handler = POST_ROUTES.get(path)
+            if handler is None:
+                self._send({"error": "άγνωστη διαδρομή"}, 404)
+                return
+            self._send(handler(state, data))
 
     return Handler
 
