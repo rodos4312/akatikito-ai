@@ -508,7 +508,10 @@ function updateSlashMenu(textarea) {
   const menu = document.getElementById('slash-menu');
   if (!menu || !textarea) return;
   const val = String(textarea.value || '');
-  if (!val.startsWith('/') || val.includes(' ') || val.includes('\n')) { menu.style.display = 'none'; return; }
+  if (!val.startsWith('/') || val.includes(' ') || val.includes('\n')) {
+    if (typeof ChatPro !== 'undefined' && ChatPro.updateAtMenu && ChatPro.updateAtMenu(textarea, menu)) return;
+    menu.style.display = 'none'; return;
+  }
   const q = val.slice(1).toLowerCase();
   const base = [
     {name: 'learn', description: 'Distill current conversation into a reusable Skill'},

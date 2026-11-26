@@ -36,6 +36,7 @@ class El {
   appendChild(c) { c.parentNode = this; this.children.push(c); return c; }
   append(...cs) { cs.forEach((c) => this.appendChild(c)); }
   prepend(c) { c.parentNode = this; this.children.unshift(c); }
+  replaceChildren(...cs) { this.children = []; cs.forEach((c) => this.appendChild(c)); }
   insertBefore(c, ref) {
     c.parentNode = this;
     const idx = this.children.indexOf(ref);
@@ -44,21 +45,43 @@ class El {
   }
   querySelector(sel) {
     if (sel === '.status') return this.children.find((c) => c.className === 'status') || null;
+    if (sel === '.pro-dock-card') return this.children.find((c) => c.classList.contains('pro-dock-card')) || null;
     return null;
   }
   addEventListener(name, fn) { this._listeners[name] = fn; }
 }
 
-const byId = new Map([['chat', new El('div')], ['chat-workspace', new El('div')]]);
+const topbar = new El('div');
+const busyBadge = new El('span'); busyBadge.id = 'busy-badge'; topbar.appendChild(busyBadge);
+const byId = new Map([
+  ['chat', new El('div')],
+  ['chat-workspace', new El('div')],
+  ['task-panel', new El('div')],
+  ['subtask-panel', new El('div')],
+  ['slash-menu', new El('div')],
+  ['busy-badge', busyBadge],
+]);
 const document = {
-  getElementById(id) { return byId.get(id) || null; },
+  getElementById(id) {
+    if (byId.has(id)) return byId.get(id);
+    const find = (node) => {
+      if (node.id === id) return node;
+      for (const ch of node.children || []) { const hit = find(ch); if (hit) return hit; }
+      return null;
+    };
+    return find(topbar);
+  },
   createElement(tag) { return new El(tag); },
   addEventListener() {},
 };
 
+const apiCalls = [];
 const ctx = {
   document,
   codeSnippets: [],
+  currentProject: 'D:\\demo',
+  api: async (url, body) => { apiCalls.push({ url, body }); return { ok: true, preferences: body }; },
+  grow: () => {},
   friendlyToolCall: (name) => `🔧 <b>${name}</b>`,
   isChatNearBottom: () => true,
   scrollChatIfPinned: () => {},
@@ -124,5 +147,45 @@ assert(jumpBtn.classList.contains('show'), 'jump pill visible when scrolled up')
 jumpBtn.onclick();
 assert.equal(chat.scrollTop, 1200);
 assert(!jumpBtn.classList.contains('show'), 'jump pill hides after jumping to bottom');
+
+// 4. Todo Progress Card + Subtasks Tree + Context Gauge + 1-click Autonomy Pill
+ChatPro.syncStatus({
+  busy: false,
+  preferences: { autonomous: true },
+  context: { sent_chars: 120000, budget_chars: 160000 },
+  tokens: { prompt_tokens: 10000, completion_tokens: 500, cache_hit_tokens: 8000 },
+  todos: [{ text: 'Step 1', status: 'done' }, { text: 'Step 2', status: 'in_progress' }],
+  subtasks: [{ task: 'Scan CSS', status: 'running', tokens: { prompt_tokens: 1200, completion_tokens: 100 } }],
+});
+assert(document.getElementById('task-panel').children[0].classList.contains('pro-dock-card'), 'todo card rendered');
+assert(document.getElementById('subtask-panel').children[0].classList.contains('pro-dock-card'), 'subtasks tree rendered');
+assert(document.getElementById('ctx-lbl').textContent.includes('ctx 75%'), 'context gauge shows 75%');
+assert(document.getElementById('ctx-lbl').textContent.includes('cache 80%'), 'context gauge shows cache 80%');
+assert(document.getElementById('ctx-gauge').classList.contains('warn'), 'context gauge warns >= 60%');
+const autoPill = document.getElementById('auto-pill');
+assert.equal(autoPill.textContent, '⚡ Auto');
+autoPill.onclick();
+assert.equal(apiCalls[0].url, '/api/preferences');
+assert.equal(apiCalls[0].body.autonomous, false);
+
+// 5. Auto-collapse live reasoning + @file /skill user chips + @ autocomplete
+const ls = { reasoning: 'Deep thought about layout', reasoningBody: new El('div') };
+ChatPro.collapseStreamReasoning(ls);
+assert(ls.reasoningBody.classList.contains('collapsed') && ls.reasoningBody.textContent.includes('Σκέψη μοντέλου'));
+ls.reasoningBody.onclick();
+assert(!ls.reasoningBody.classList.contains('collapsed') && ls.reasoningBody.textContent === 'Deep thought about layout');
+
+const uHtml = ChatPro.formatUserText('Check @paroxos_v8.html with /review <script>');
+assert(uHtml.includes('<span class="user-ref-chip">@paroxos_v8.html</span>'));
+assert(uHtml.includes('<span class="user-ref-chip">/review</span>'));
+assert(!uHtml.includes('<script>'));
+
+ChatPro._setFileCacheForTest('D:\\demo', [{ path: 'paroxos_v8.html', name: 'paroxos_v8.html', type: 'file' }]);
+const ta = new El('textarea'); ta.value = 'open @par'; ta.selectionStart = 9;
+const sm = document.getElementById('slash-menu');
+assert.equal(ChatPro.updateAtMenu(ta, sm), true);
+assert.equal(sm.children.length, 1);
+sm.children[0].onclick();
+assert.equal(ta.value, 'open @paroxos_v8.html ');
 
 console.log('CHAT PRO UI OK');

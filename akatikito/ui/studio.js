@@ -193,6 +193,10 @@
     box.textContent = lines.join('\n');
   }
 
+  function notifyChatPro(s) {
+    if (typeof root.ChatPro !== 'undefined' && root.ChatPro.syncStatus) root.ChatPro.syncStatus(s);
+  }
+
   function syncSettingsControls(s) {
     if (!s || typeof s !== 'object') return;
     const prefs = s.preferences || {};
@@ -213,6 +217,7 @@
     if (fontVal) fontVal.textContent = sz + 'px';
     if (fontLbl) fontLbl.textContent = sz + 'px';
     renderBackgroundStatus(s.background_service_status);
+    notifyChatPro(s);
   }
 
   function searchSessionsFullText(query) {

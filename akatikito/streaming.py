@@ -10,9 +10,26 @@ def value(obj, name, default=None):
 
 
 def usage_of(usage):
-    return {key: value(usage, source, 0) or 0 for key, source in (
-        ('prompt_tokens', 'prompt_tokens'), ('completion_tokens', 'completion_tokens'),
-        ('cache_hit_tokens', 'prompt_cache_hit_tokens'), ('cache_miss_tokens', 'prompt_cache_miss_tokens'))}
+    prompt = int(value(usage, 'prompt_tokens', 0) or 0)
+    completion = int(value(usage, 'completion_tokens', 0) or 0)
+    details = value(usage, 'prompt_tokens_details')
+    cached = int(
+        value(usage, 'prompt_cache_hit_tokens', 0)
+        or (value(details, 'cached_tokens', 0) if details is not None else 0)
+        or value(usage, 'cache_read_input_tokens', 0)
+        or 0
+    )
+    miss = int(
+        value(usage, 'prompt_cache_miss_tokens', 0)
+        or value(usage, 'cache_creation_input_tokens', 0)
+        or (max(0, prompt - cached) if cached > 0 else 0)
+    )
+    return {
+        'prompt_tokens': prompt,
+        'completion_tokens': completion,
+        'cache_hit_tokens': cached,
+        'cache_miss_tokens': miss,
+    }
 
 
 class StreamAssemblyError(ValueError):

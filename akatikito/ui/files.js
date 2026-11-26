@@ -84,8 +84,10 @@ let livePhase = "", liveStep = "";
 function fmtTok(n) { const v = Number(n || 0); return v >= 1000 ? (v / 1000).toFixed(1) + "k" : String(v); }
 function formatBusyBadge(s) {
   const t = (s && s.tokens) || {}, tot = (t.prompt_tokens || 0) + (t.completion_tokens || 0);
+  const hit = Math.min(t.prompt_tokens || 0, t.cache_hit_tokens || 0);
+  const cPct = hit > 0 && t.prompt_tokens > 0 ? ' · ' + Math.round(hit * 100 / t.prompt_tokens) + '% cache' : '';
   const base = s && s.busy ? i18nText('badge_busy', '⚡ εργάζεται…') : i18nText('badge_idle', '💤 αδρανής');
-  return base + (s && s.busy && liveStep ? ' · ' + liveStep : '') + (tot > 0 ? ' · ' + fmtTok(tot) + ' tok' : '');
+  return base + (s && s.busy && liveStep ? ' · ' + liveStep : '') + (tot > 0 ? ' · ' + fmtTok(tot) + ' tok' + cPct : '');
 }
 function addStep(kind, data) {
   if (kind === "step") {
@@ -213,9 +215,11 @@ async function poll() {
     if (refreshSessions) await loadSessions();
     if (busy) {
       const t = s.tokens || {}, tot = (t.prompt_tokens || 0) + (t.completion_tokens || 0);
+      const hit = Math.min(t.prompt_tokens || 0, t.cache_hit_tokens || 0);
+      const cacheBit = hit > 0 && t.prompt_tokens > 0 ? ` · ${Math.round(hit * 100 / t.prompt_tokens)}% cache` : "";
       const stepTag = liveStep ? ` (${liveStep})` : "";
-      const tokTag = tot > 0 ? ` · ⚡ ${fmtTok(tot)} tok (${fmtTok(t.prompt_tokens)} in / ${fmtTok(t.completion_tokens)} out)` : "";
-      if (typeof ChatPro !== "undefined" && ChatPro.updateActiveTrail) ChatPro.updateActiveTrail(liveStep, tot > 0 ? `⚡ ${fmtTok(tot)} tok` : "");
+      const tokTag = tot > 0 ? ` · ⚡ ${fmtTok(tot)} tok (${fmtTok(t.prompt_tokens)} in / ${fmtTok(t.completion_tokens)} out${cacheBit})` : "";
+      if (typeof ChatPro !== "undefined" && ChatPro.updateActiveTrail) ChatPro.updateActiveTrail(liveStep, tot > 0 ? `⚡ ${fmtTok(tot)} tok${cacheBit}` : "");
       setStatus(`${esc((livePhase || "🧠 σκέφτομαι…") + stepTag)} ${esc(s.model || "")}${esc(tokTag)}`);
       document.getElementById("stopbtn").style.display = "";
       document.getElementById("stopside").style.display = "";

@@ -347,6 +347,198 @@
     }
   }
 
+  let todoCollapsed = false;
+  let todoSig = '';
+  function renderTodos(todos) {
+    const panel = document.getElementById('task-panel');
+    if (!panel) return;
+    const rows = Array.isArray(todos) ? todos : [];
+    const sig = JSON.stringify([rows, todoCollapsed]);
+    if (sig === todoSig && panel.querySelector?.('.pro-dock-card')) return;
+    todoSig = sig;
+    panel.replaceChildren();
+    if (!rows.length) return;
+    const done = rows.filter((r) => r.status === 'done' || r.status === 'completed').length;
+    const pct = Math.round((done * 100) / rows.length);
+    const card = document.createElement('div');
+    card.className = 'pro-dock-card' + (todoCollapsed ? ' collapsed' : '');
+    const head = document.createElement('div'); head.className = 'pro-dock-head';
+    const chev = document.createElement('span'); chev.className = 'trail-chev'; chev.textContent = todoCollapsed ? '▸' : '▾';
+    const ttl = document.createElement('span'); ttl.textContent = `Σχέδιο εργασίας (${done}/${rows.length})`;
+    const meta = document.createElement('span'); meta.className = 'pro-dock-meta'; meta.textContent = `${pct}%`;
+    head.append(chev, ttl, meta);
+    head.onclick = () => { todoCollapsed = !todoCollapsed; todoSig = ''; renderTodos(rows); };
+    const track = document.createElement('div'); track.className = 'pro-progress-track';
+    const fill = document.createElement('div'); fill.className = 'pro-progress-fill'; fill.style.width = `${pct}%`;
+    track.appendChild(fill);
+    const body = document.createElement('div'); body.className = 'pro-dock-body';
+    for (const r of rows) {
+      const st = r.status === 'done' || r.status === 'completed' ? 'done' : r.status === 'in_progress' ? 'active' : 'pending';
+      const item = document.createElement('div'); item.className = 'todo-row ' + st;
+      const ico = document.createElement('span'); ico.className = 'todo-ico';
+      ico.textContent = st === 'done' ? '✓' : st === 'active' ? '◉' : '○';
+      const txt = document.createElement('span'); txt.textContent = String(r.text || '');
+      item.append(ico, txt); body.appendChild(item);
+    }
+    card.append(head, track, body);
+    panel.appendChild(card);
+  }
+
+  let subSig = '';
+  function renderSubtasks(subtasks) {
+    const panel = document.getElementById('subtask-panel');
+    if (!panel) return;
+    const rows = Array.isArray(subtasks) ? subtasks : [];
+    const sig = JSON.stringify(rows);
+    if (sig === subSig && panel.querySelector?.('.pro-dock-card')) return;
+    subSig = sig;
+    panel.replaceChildren();
+    if (!rows.length) return;
+    const card = document.createElement('div'); card.className = 'pro-dock-card';
+    const head = document.createElement('div'); head.className = 'pro-dock-head';
+    head.textContent = `🤖 Υπο-εργασίες (${rows.length})`;
+    const body = document.createElement('div'); body.className = 'pro-dock-body';
+    const rail = document.createElement('div'); rail.className = 'trail-rail';
+    for (const r of rows) {
+      const st = String(r.status || '');
+      const dotCls = st === 'running' ? 'running' : st === 'done' || st === 'completed' ? 'ok' : st === 'error' || st === 'failed' ? 'bad' : '';
+      const dotTxt = dotCls === 'ok' ? '✓' : dotCls === 'bad' ? '✗' : '●';
+      const tok = (r.tokens?.prompt_tokens || 0) + (r.tokens?.completion_tokens || 0);
+      const tokStr = tok > 0 ? ` · ${tok >= 1000 ? (tok / 1000).toFixed(1) + 'k' : tok} tok` : '';
+      const row = document.createElement('div'); row.className = 'trail-row';
+      const line = document.createElement('div'); line.className = 'trail-line';
+      const dot = document.createElement('span'); dot.className = 'trail-dot ' + dotCls; dot.textContent = dotTxt;
+      const txt = document.createElement('span'); txt.textContent = `${r.task || ''} (${st}${tokStr})`;
+      line.append(dot, txt); row.appendChild(line); rail.appendChild(row);
+    }
+    body.appendChild(rail); card.append(head, body); panel.appendChild(card);
+  }
+
+  function ensureTopbarWidgets() {
+    const busy = document.getElementById('busy-badge');
+    const bar = busy && busy.parentNode;
+    if (!bar) return {};
+    let gauge = document.getElementById('ctx-gauge');
+    if (!gauge) {
+      gauge = document.createElement('span'); gauge.id = 'ctx-gauge'; gauge.className = 'ctx-gauge';
+      gauge.style.display = 'none';
+      const b = document.createElement('span'); b.className = 'ctx-bar';
+      const f = document.createElement('span'); f.className = 'ctx-fill'; f.id = 'ctx-fill';
+      const lbl = document.createElement('span'); lbl.id = 'ctx-lbl';
+      b.appendChild(f); gauge.append(b, lbl);
+      if (typeof bar.insertBefore === 'function') bar.insertBefore(gauge, busy.nextSibling || null);
+      else bar.appendChild(gauge);
+    }
+    let autoBtn = document.getElementById('auto-pill');
+    if (!autoBtn) {
+      autoBtn = document.createElement('button'); autoBtn.id = 'auto-pill'; autoBtn.type = 'button'; autoBtn.className = 'auto-pill';
+      if (typeof bar.insertBefore === 'function') bar.insertBefore(autoBtn, gauge.nextSibling || null);
+      else bar.appendChild(autoBtn);
+    }
+    return { gauge, autoBtn };
+  }
+
+  function syncTopbarControls(s) {
+    const { gauge, autoBtn } = ensureTopbarWidgets();
+    if (gauge) {
+      const ctx = s.context || {}, t = s.tokens || {};
+      const sent = Number(ctx.sent_chars || ctx.active_bytes || 0);
+      const budget = Number(ctx.budget_chars || ctx.active_max_bytes || 160000);
+      const pct = sent > 0 && budget > 0 ? Math.min(100, Math.round((sent * 100) / budget)) : 0;
+      const hit = Math.min(t.prompt_tokens || 0, t.cache_hit_tokens || 0);
+      const cPct = hit > 0 && t.prompt_tokens > 0 ? Math.round((hit * 100) / t.prompt_tokens) : 0;
+      gauge.style.display = pct > 0 || cPct > 0 ? 'inline-flex' : 'none';
+      gauge.className = 'ctx-gauge' + (pct >= 82 ? ' high' : pct >= 60 ? ' warn' : '');
+      const fill = document.getElementById('ctx-fill');
+      const lbl = document.getElementById('ctx-lbl');
+      if (fill) fill.style.width = `${pct}%`;
+      if (lbl) lbl.textContent = (pct > 0 ? `ctx ${pct}%` : '') + (cPct > 0 ? `${pct > 0 ? ' · ' : ''}cache ${cPct}%` : '');
+      gauge.title = `Context: ${pct}% · Prompt: ${t.prompt_tokens || 0} · Cache hit: ${hit} (${cPct}%)`;
+    }
+    if (autoBtn) {
+      const on = !!s.preferences?.autonomous;
+      autoBtn.className = 'auto-pill' + (on ? ' on' : '');
+      autoBtn.textContent = on ? '⚡ Auto' : '🔒 Ask';
+      autoBtn.disabled = !!s.busy;
+      autoBtn.title = on
+        ? 'Αυτόνομες συνηθισμένες εντολές (επικίνδυνες πάντα με έγκριση) — κλικ για αυστηρή λειτουργία'
+        : 'Έγκριση σε κάθε εντολή — κλικ για αυτόνομη εκτέλεση συνηθισμένων εντολών';
+      autoBtn.onclick = async () => {
+        if (s.busy || typeof root.api !== 'function') return;
+        const r = await root.api('/api/preferences', { autonomous: !on });
+        if (r && r.error) root.showNotice?.('err', r.error);
+        else if (r && typeof root.updateBadges === 'function') root.updateBadges(r);
+      };
+    }
+  }
+
+  function syncStatus(s) {
+    if (!s || typeof s !== 'object') return;
+    renderTodos(s.todos);
+    renderSubtasks(s.subtasks);
+    syncTopbarControls(s);
+  }
+
+  function collapseStreamReasoning(ls) {
+    if (!ls || !ls.reasoningBody) return;
+    const approx = Math.max(1, Math.round(String(ls.reasoning || '').length / 4));
+    const el = ls.reasoningBody;
+    el.classList.add('collapsed');
+    el.textContent = `▸ Σκέψη μοντέλου (~${approx} tok) — κλικ για προβολή`;
+    el.onclick = () => {
+      const isCol = el.classList.toggle('collapsed');
+      el.textContent = isCol ? `▸ Σκέψη μοντέλου (~${approx} tok) — κλικ για προβολή` : ls.reasoning;
+    };
+  }
+
+  function formatUserText(text) {
+    return escHtml(text).replace(/(^|\s)((?:@|\/)[A-Za-z0-9_.\-/\\]+)/g, '$1<span class="user-ref-chip">$2</span>');
+  }
+
+  let fileCache = { project: '', entries: [], loading: false };
+  async function loadAtFiles() {
+    const proj = String(root.currentProject || '');
+    if (!proj || fileCache.loading || (fileCache.project === proj && fileCache.entries.length)) return;
+    if (typeof root.api !== 'function') return;
+    fileCache.loading = true;
+    try {
+      const r = await root.api('/api/files/tree', { path: '.', project: proj, limit: 100 });
+      fileCache = { project: proj, entries: (r && Array.isArray(r.entries) ? r.entries : []), loading: false };
+    } catch (_) { fileCache.loading = false; }
+  }
+
+  function updateAtMenu(textarea, menu) {
+    const val = String(textarea.value || '');
+    const pos = typeof textarea.selectionStart === 'number' ? textarea.selectionStart : val.length;
+    const before = val.slice(0, pos);
+    const m = before.match(/(?:^|\s)@([^\s@]{0,60})$/);
+    if (!m) return false;
+    const q = m[1].toLowerCase();
+    loadAtFiles();
+    const list = fileCache.entries
+      .filter((e) => String(e.path || e.name || '').toLowerCase().includes(q))
+      .slice(0, 8);
+    if (!list.length) return false;
+    menu.replaceChildren();
+    for (const item of list) {
+      const target = item.path || item.name || '';
+      const btn = document.createElement('button');
+      btn.className = 'cmd-item';
+      btn.textContent = (item.type === 'dir' ? '📁 ' : '📄 ') + '@' + target;
+      btn.onclick = () => {
+        const start = pos - m[1].length - 1;
+        const after = val.slice(pos);
+        textarea.value = val.slice(0, start) + '@' + target + ' ' + after;
+        menu.style.display = 'none';
+        textarea.focus?.();
+        root.grow?.(textarea);
+      };
+      menu.appendChild(btn);
+    }
+    menu.style.display = 'flex';
+    return true;
+  }
+
   root.ChatPro = {
     highlightCode,
     renderMarkdown,
@@ -355,6 +547,14 @@
     sealActiveTrail,
     formatTimeNow,
     initJumpToBottom,
+    renderTodos,
+    renderSubtasks,
+    syncTopbarControls,
+    syncStatus,
+    collapseStreamReasoning,
+    formatUserText,
+    updateAtMenu,
+    _setFileCacheForTest: (proj, entries) => { fileCache = { project: proj, entries, loading: false }; },
     resetTrail: () => { stopSpinner(); activeTrail = null; },
   };
 

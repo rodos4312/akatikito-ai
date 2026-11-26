@@ -11,7 +11,7 @@ from akatikito.app_api import AppState
 from akatikito.config import Config
 from akatikito.model import OpenAIModel
 from akatikito.settings import Settings
-from akatikito.streaming import StreamReply
+from akatikito.streaming import StreamReply, usage_of
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -147,3 +147,27 @@ def test_agent_model_reply_streams_reasoning_events(tmp_path):
     kinds = [ev.kind for ev in agent.events.log]
     assert "stream_reasoning" in kinds
     assert "stream_delta" in kinds
+
+
+def test_usage_of_reads_openrouter_openai_deepseek_and_anthropic_cache_fields():
+    # OpenAI / OpenRouter / Gemini dict shape
+    u_or = usage_of({"prompt_tokens": 10000, "completion_tokens": 500, "prompt_tokens_details": {"cached_tokens": 8000}})
+    assert u_or == {"prompt_tokens": 10000, "completion_tokens": 500, "cache_hit_tokens": 8000, "cache_miss_tokens": 2000}
+
+    # OpenAI SDK object shape
+    obj = SimpleNamespace(
+        prompt_tokens=6000,
+        completion_tokens=200,
+        prompt_tokens_details=SimpleNamespace(cached_tokens=4500),
+    )
+    u_obj = usage_of(obj)
+    assert u_obj["cache_hit_tokens"] == 4500 and u_obj["cache_miss_tokens"] == 1500
+
+    # DeepSeek shape
+    u_ds = usage_of({"prompt_tokens": 5000, "completion_tokens": 100, "prompt_cache_hit_tokens": 3000, "prompt_cache_miss_tokens": 2000})
+    assert u_ds["cache_hit_tokens"] == 3000 and u_ds["cache_miss_tokens"] == 2000
+
+    # Anthropic-compat shape
+    u_an = usage_of({"prompt_tokens": 4000, "completion_tokens": 80, "cache_read_input_tokens": 2500, "cache_creation_input_tokens": 1500})
+    assert u_an["cache_hit_tokens"] == 2500 and u_an["cache_miss_tokens"] == 1500
+

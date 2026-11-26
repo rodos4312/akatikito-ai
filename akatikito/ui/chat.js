@@ -678,6 +678,12 @@ function streamEvent(kind, data) {
       if (!liveStream.text) liveStream.label.textContent = "🧠 Σκέφτεται… " + liveStream.model;
     } else if (kind === "stream_delta") {
       liveStream.text += data.text || "";
+      if (liveStream.reasoning && !liveStream.reasoningCollapsed && liveStream.reasoningBody) {
+        liveStream.reasoningCollapsed = true;
+        if (typeof ChatPro !== "undefined" && ChatPro.collapseStreamReasoning) {
+          ChatPro.collapseStreamReasoning(liveStream);
+        }
+      }
       if (typeof ChatPro !== "undefined" && ChatPro.renderMarkdown) {
         liveStream.body.innerHTML = ChatPro.renderMarkdown(liveStream.text, {streaming: true});
       } else {
@@ -717,7 +723,8 @@ function addMsg(role, text, model = "", provider = "", usage = null) {
   const richMd = role === "assistant" && typeof ChatPro !== "undefined" && ChatPro.renderMarkdown;
   div.className = "msg " + role + (richMd ? " md-rich" : "");
   div.dataset.key = role + "|" + String(text || "").trim();  // ταυτότητα για να μη διπλασιάζεται
-  div.innerHTML = role === "assistant" ? (richMd ? ChatPro.renderMarkdown(text) : fmt(text)) : esc(text);
+  const richUser = role === "user" && typeof ChatPro !== "undefined" && ChatPro.formatUserText;
+  div.innerHTML = role === "assistant" ? (richMd ? ChatPro.renderMarkdown(text) : fmt(text)) : (richUser ? ChatPro.formatUserText(text) : esc(text));
   if (role === "assistant") {          // κουμπί αντιγραφής κάτω από κάθε απάντηση
     if (model) {
       const label = document.createElement("span");
