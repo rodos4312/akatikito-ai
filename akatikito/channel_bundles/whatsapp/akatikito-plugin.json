@@ -1,0 +1,15 @@
+{
+  "id": "whatsapp",
+  "name": "WhatsApp Cloud API",
+  "version": "1.0.0",
+  "kind": "channel",
+  "api_version": 1,
+  "entry": "adapter.py",
+  "files": [
+    "adapter.py"
+  ],
+  "permissions": [
+    "Outbound HTTPS only to https://graph.facebook.com (or loopback test server)",
+    "Owner allowlist enforced by Gateway"
+  ]
+}
