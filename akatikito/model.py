@@ -51,7 +51,11 @@ class OpenAIModel:
     requires_completion_evidence = True
 
     def __init__(self, config: Config) -> None:
-        if not config.api_key:
+        from urllib.parse import urlsplit
+
+        host = (urlsplit(config.base_url or "").hostname or "").lower()
+        effective_key = config.api_key or ("local" if host in ("127.0.0.1", "localhost", "::1") else "")
+        if not effective_key:
             raise ModelError(
                 "Λείπει το API key. Βάλε AKATIKITO_API_KEY ή διάλεξε κλειδί στο παράθυρο."
             )
@@ -59,7 +63,7 @@ class OpenAIModel:
 
         self.config = config
         self._active_stream = None
-        self._client = OpenAI(base_url=config.base_url, api_key=config.api_key, max_retries=0)
+        self._client = OpenAI(base_url=config.base_url, api_key=effective_key, max_retries=0)
 
     @property
     def preserves_tool_reasoning(self) -> bool:

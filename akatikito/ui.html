@@ -754,6 +754,7 @@
 <div id="setup-dialog" role="dialog" aria-modal="true" aria-labelledby="setup-title" style="display:none;position:fixed;inset:0;z-index:1000;background:#000b;align-items:center;justify-content:center;padding:18px">
   <div style="background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:24px;width:min(600px,100%);max-height:92vh;overflow:auto;display:flex;flex-direction:column;gap:16px">
     <h2 id="setup-title" data-i18n="setup_title">Καλώς ήρθες στο Akatikito</h2>
+    <div id="setup-simple"></div><div id="setup-examples" style="display:none"></div>
     <p id="setup-progress" class="hint" aria-live="polite"></p>
     <section id="setup-page-0" class="field"><label for="setup-project">1. Πού θα δουλεύει ο βοηθός;</label><p class="hint">Επίλεξε τον φάκελο του project σου. Ο οδηγός δεν μετακινεί αρχεία.</p><input id="setup-project" placeholder="D:\Το project μου"><button class="btn" onclick="setupPickFolder()">📁 Επιλογή φακέλου</button></section>
     <section id="setup-page-1" class="field" style="display:none"><label for="setup-provider">2. Πάροχος και σύνδεση</label><select id="setup-provider" onchange="setupProviderChanged()"></select><label for="setup-url">Διεύθυνση για Custom πάροχο</label><input id="setup-url" placeholder="https://…/v1"><label for="setup-key">Κλειδί API</label><input id="setup-key" type="password" autocomplete="off" placeholder="Νέο κλειδί ή κενό για το ήδη αποθηκευμένο"><p id="setup-key-hint" class="hint"></p></section>

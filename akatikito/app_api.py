@@ -694,7 +694,8 @@ class AppState(OpsStateMixin, FilesStateMixin, SessionsUpgradeStateMixin, Memory
             found = list_models(url, key, force=True)
             return {"models": found, "error": "" if found else "Ο πάροχος δεν επέστρεψε μοντέλα."}
         except Exception as exc:  # noqa: BLE001
-            return {"models": [], "error": f"Δεν φόρτωσε η λίστα ({type(exc).__name__})."}
+            from .onboarding_helpers import friendly_connection_error
+            return {"models": [], "error": friendly_connection_error(exc, self.settings.ui_language)}
 
     def backups(self) -> list[dict]:
         return self.agent.ws.list_backups(limit=20) if self.agent else []

@@ -132,6 +132,7 @@ POST_ROUTES = {
     "/api/profiles/action": lambda s, d: s.family_profile_action(d),
     "/api/email/action": lambda s, d: s.email_draft_action(d),
     "/api/background/stop": lambda s, _d: s.background_service_stop(),
+    "/api/onboarding/detect-local": lambda s, _d: s.detect_local_ai(),
 }
 
 

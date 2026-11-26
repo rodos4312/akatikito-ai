@@ -162,3 +162,8 @@ class ExtrasStateMixin:
             return {"error": err}
         self._save_settings()
         return {"ok": True, "background_service_status": self.background_service_status()}
+
+    def detect_local_ai(self, endpoints=None) -> dict:
+        from .onboarding_helpers import detect_local_ai
+
+        return detect_local_ai(endpoints=endpoints)
