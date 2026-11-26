@@ -82,8 +82,11 @@ class Akatikito:
         self._turn_id: int = 0
         self.last_checkpoint = ''
         from .checkpoints import Checkpoints
+        from .session_frame import CacheGuard
         self.checkpoint_store = Checkpoints(self.ws.root) if self.config.checkpoints else None
         self.cache_id = uuid.uuid4().hex  # σταθερό routing key ανά συνεδρία· τα hits εξαρτώνται από το κείμενο
+        self.cache_guard = CacheGuard()
+        self.cache_frame_fingerprint: str = ""
 
     # ------------------------------------------------------------------ έλεγχος
 
@@ -128,6 +131,8 @@ class Akatikito:
         self._session_route_tier = ""; self._ask_unlocked_tools = set()
         self.messages = []
         self.cache_id = uuid.uuid4().hex
+        self.cache_guard.reset_for_new_session()
+        self.cache_frame_fingerprint = ""
         self.context.reset_transport()
         self.context.begin_turn()
         self.activity.begin_turn()
@@ -148,6 +153,14 @@ class Akatikito:
         if not self._manual_mode:
             self.mode = modes.DEFAULT_MODE
             self.mode_reason = ""
+
+    def defer_setting_change(self, label: str, *, apply_now: bool = False) -> dict:
+        """Record a mid-session setting change without breaking prompt cache unless apply_now=True."""
+        res = self.cache_guard.on_setting_change(label, apply_now=apply_now)
+        if apply_now and res.get("fingerprint"):
+            self.cache_frame_fingerprint = res["fingerprint"]
+        self.events.emit("cache_notice", label=label, **res)
+        return res
 
     def _set_mode(self, mode: str, reason: str = "") -> None:
         if mode not in modes.MODES or mode == self.mode:

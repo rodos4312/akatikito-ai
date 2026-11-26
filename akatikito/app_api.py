@@ -292,7 +292,11 @@ class AppState(OpsStateMixin, FilesStateMixin, SessionsUpgradeStateMixin, Memory
                 return 'Χρειάζεται boolean για τη σύμπτυξη μενού.'
             self.settings.sidebar_collapsed = data['sidebar_collapsed']
         from . import advanced
-        return advanced.apply_preferences(self.settings, self.agent, data)
+        err = advanced.apply_preferences(self.settings, self.agent, data)
+        if not err and self.agent is not None and 'advanced_features' in data and not data.get('apply_now', True):
+            note = self.agent.defer_setting_change('advanced_features', apply_now=False)
+            self.notice = note.get('notice', '')
+        return err
 
     def upload_attachment(self,data):
         if self.busy or not self.agent:return {'error':'Συνδέσου και περίμενε να τελειώσει η εργασία.'}

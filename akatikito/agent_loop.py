@@ -125,6 +125,31 @@ def _begin_turn(agent, text: str, internal: bool) -> tuple[str, bool]:
     return effective, can_repair
 
 
+def _track_cache_frame(agent, request: list[dict], tools: list[dict]) -> None:
+    from .session_frame import SessionFrame
+
+    guard = getattr(agent, "cache_guard", None)
+    if guard is None:
+        return
+    sys_text = request[0].get("content", "") if request and request[0].get("role") == "system" else ""
+    model_name = str(getattr(agent.config, "model", "") or "")
+    if guard.frame is None:
+        frame = guard.freeze(sys_text, tools, model_name)
+        agent.cache_frame_fingerprint = frame.fingerprint()
+        return
+    current_fp = SessionFrame.build(sys_text, tools, model_name).fingerprint()
+    if current_fp != agent.cache_frame_fingerprint:
+        res = guard.on_setting_change(
+            "policy_or_tools",
+            apply_now=True,
+            new_system=sys_text,
+            new_tools=tools,
+            new_model=model_name,
+        )
+        agent.cache_frame_fingerprint = res["fingerprint"]
+        agent.events.emit("cache_notice", label="policy_or_tools", **res)
+
+
 def _prepare_step_request(agent, step: int):
     agent.events.emit("step", step=step, of=agent.config.max_steps, phase="think")
     agent.events.emit("plan_step", step=step)
@@ -159,6 +184,7 @@ def _prepare_step_request(agent, step: int):
         agent.messages[0] = {"role": "system", "content": agent.policy_prompt()}
         if request and request[0].get("role") == "system":
             request[0] = dict(agent.messages[0])
+    _track_cache_frame(agent, request, tools)
     return request, tools, None
 
 
