@@ -66,7 +66,9 @@ class RunContext:
     python: str
     staged: list[str] | None  # None = full repo, list = staged paths only
     ci: bool = False
-    parallel: bool = False
+    parallel: bool = True
+    include_slow: bool = False
+    serial: bool = False
 
 
 @dataclass(frozen=True)
@@ -193,18 +195,25 @@ def _step_node(ctx: RunContext) -> tuple[int, str]:
     return 0, f"{len(tests)} suite(s)"
 
 
-def _step_pytest(ctx: RunContext) -> tuple[int, str]:
-    if ctx.parallel:
-        cmd = [ctx.python, "scripts/run_tests_isolated.py", "--tier", "full"]
+def _build_pytest_cmd(ctx: RunContext) -> list[str]:
+    tier = "full" if (ctx.ci or ctx.include_slow) else "fast"
+    if not ctx.serial and ctx.parallel:
+        cmd = [ctx.python, "scripts/run_tests_isolated.py", "--tier", tier]
         if ctx.ci:
             cmd.extend(["--ci", "--retry-flaky"])
-        return _run_cmd(cmd, ctx.root, timeout=900)
+        return cmd
     cmd = [ctx.python, "-m", "pytest", "-q", "-p", "no:cacheprovider"]
+    if tier == "fast":
+        cmd.extend(["-m", "not slow"])
     if ctx.ci:
         cmd.extend(["-k", "not real_chromium"])
     else:
         cmd.append("-x")
-    return _run_cmd(cmd, ctx.root, timeout=900)
+    return cmd
+
+
+def _step_pytest(ctx: RunContext) -> tuple[int, str]:
+    return _run_cmd(_build_pytest_cmd(ctx), ctx.root, timeout=900)
 
 
 STEPS: tuple[Step, ...] = (
@@ -241,8 +250,10 @@ def main(argv: list[str] | None = None, *, root: Path = ROOT) -> int:
     parser.add_argument("--fast", action="store_true", help="Run all fast checks (skip pytest)")
     parser.add_argument("--staged", action="store_true", help="Scope fast checks to git staged files")
     parser.add_argument("--only", default="", help="Comma-separated step names to run")
-    parser.add_argument("--ci", action="store_true", help="CI mode (filters real_chromium in pytest)")
-    parser.add_argument("--parallel", action="store_true", help="Run pytest isolated per file in parallel")
+    parser.add_argument("--ci", action="store_true", help="CI mode (full tier, filters real_chromium, retries flaky)")
+    parser.add_argument("--parallel", action="store_true", default=True, help="Run pytest isolated per file in parallel (default)")
+    parser.add_argument("--serial", action="store_true", help="Run pytest in a single serial process")
+    parser.add_argument("--include-slow", action="store_true", help="Include @pytest.mark.slow scale benchmarks locally")
     parser.add_argument("--list", action="store_true", help="List available steps and exit")
     args = parser.parse_args(argv)
 
@@ -259,7 +270,15 @@ def main(argv: list[str] | None = None, *, root: Path = ROOT) -> int:
         return 2
 
     staged = staged_files(root) if args.staged else None
-    ctx = RunContext(root=root, python=resolve_python(root), staged=staged, ci=args.ci, parallel=args.parallel)
+    ctx = RunContext(
+        root=root,
+        python=resolve_python(root),
+        staged=staged,
+        ci=args.ci,
+        parallel=not args.serial,
+        include_slow=args.include_slow,
+        serial=args.serial,
+    )
     total = len(chosen)
     started_all = time.monotonic()
 

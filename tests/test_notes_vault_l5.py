@@ -8,6 +8,7 @@ import pytest
 from akatikito.notes_vault import NotesVault
 
 
+@pytest.mark.slow
 def test_search_1000_markdown_notes_under_one_second(tmp_path):
     vault_dir = tmp_path / "obsidian"
     vault_dir.mkdir()

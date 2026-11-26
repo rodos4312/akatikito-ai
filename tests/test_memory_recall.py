@@ -96,6 +96,7 @@ def test_quotes_in_a_question_cannot_break_the_search_syntax(store):
     assert recall(store, 'αρχείο "notes" OR NEAR( *').items
 
 
+@pytest.mark.slow
 def test_ten_thousand_memories_answer_fast(tmp_path):
     with MemoryStore(tmp_path / "big.db") as s:
         if not s.fts:
