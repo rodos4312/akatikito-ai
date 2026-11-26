@@ -108,6 +108,8 @@ function renderFileList(files) {
   }
   for (const row of rows) {
     const button = document.createElement('button'); button.className = 'btn file-row';
+    button.draggable = true;
+    button.ondragstart = (e) => { if (e.dataTransfer) { e.dataTransfer.setData('application/x-akatikito-file', row.path); e.dataTransfer.setData('text/plain', '@' + row.path); } };
     const name = document.createElement('span'); name.className = 'file-name'; name.textContent = row.path;
     const action = document.createElement('span'); action.className = 'file-action'; action.textContent = row.action || '';
     button.append(name, action); button.onclick = () => openProjectFile(row.path); list.appendChild(button);
@@ -618,6 +620,7 @@ async function pickFolder() {
 // Ίδιος μηχανισμός προχείρου και συντομεύσεων, χωρίς άδειες WebView.
 document.addEventListener("keydown", function(e) {
   if (e.key === "Escape") {
+    if (typeof closeAttachmentPreview === "function" && closeAttachmentPreview()) return;
     if (typeof hideDropOverlay === "function" && hideDropOverlay()) return;
     const pal = document.getElementById("cmd-palette");
     if (pal && pal.style.display === "flex") { closeCommandPalette(); return; }
@@ -743,7 +746,11 @@ function addMsg(role, text, model = "", provider = "", usage = null) {
   div.dataset.key = role + "|" + String(text || "").trim();  // ταυτότητα για να μη διπλασιάζεται
   const richUser = role === "user" && typeof ChatPro !== "undefined" && ChatPro.formatUserText;
   div.innerHTML = role === "assistant" ? (richMd ? ChatPro.renderMarkdown(text) : fmt(text)) : (richUser ? ChatPro.formatUserText(text) : esc(text));
+  if (role === "user" && typeof attachments !== "undefined" && Array.isArray(attachments) && attachments.length && typeof renderSentAttachments === "function") {
+    renderSentAttachments(div, attachments);
+  }
   if (role === "assistant") {          // κουμπί αντιγραφής κάτω από κάθε απάντηση
+    if (typeof ChatPro !== "undefined" && ChatPro.attachTurnFileCards) ChatPro.attachTurnFileCards(div);
     if (model) {
       const label = document.createElement("span");
       label.className = "model-label";

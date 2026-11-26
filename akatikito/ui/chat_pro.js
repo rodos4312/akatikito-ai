@@ -13,6 +13,7 @@
   ]);
 
   let activeTrail = null;
+  let pendingTurnFiles = [];
   let spinTimer = null;
   let spinIdx = 0;
 
@@ -222,8 +223,13 @@
       row._dot.textContent = failed ? '✗' : '✓';
     }
     if (failed) trail.hasError = true;
-    if (data.path && ['edit_file', 'write_file', 'convert_data_file', 'create_word_document', 'create_excel_sheet', 'create_pdf_document'].includes(data.name)) {
+    if (data.path && ['edit_file', 'write_file', 'replace_symbol', 'apply_patch', 'convert_data_file', 'create_word_document', 'create_excel_sheet', 'create_pdf_document'].includes(data.name)) {
       row.appendChild(makeToolActionBtns(data));
+      const p = String(data.path);
+      const action = data.name === 'edit_file' || data.name === 'replace_symbol' || data.name === 'apply_patch' ? 'ενημερώθηκε' : 'δημιουργήθηκε';
+      const existing = pendingTurnFiles.find((x) => x.path === p);
+      if (existing) existing.action = action;
+      else pendingTurnFiles.push({ path: p, action });
     }
     if (data.diff && typeof root.formatColoredDiff === 'function') {
       const diffWrap = document.createElement('div');
@@ -668,10 +674,57 @@
     }
   }
 
+  function _fileExtBadge(filePath) {
+    const base = String(filePath || '').split(/[\\/]/).pop() || '';
+    const dot = base.lastIndexOf('.');
+    return dot >= 0 && dot < base.length - 1 ? base.slice(dot + 1).toUpperCase().slice(0, 4) : 'FILE';
+  }
+
+  function attachTurnFileCards(msgEl) {
+    if (!msgEl || !pendingTurnFiles.length) return;
+    const files = pendingTurnFiles.splice(0, pendingTurnFiles.length);
+    const row = document.createElement('div');
+    row.className = 'file-cards-row';
+    for (const item of files) {
+      const card = document.createElement('div');
+      card.className = 'file-card';
+      const badge = document.createElement('span');
+      badge.className = 'attach-badge';
+      badge.textContent = _fileExtBadge(item.path);
+      const info = document.createElement('div');
+      info.className = 'file-card-info';
+      const nm = document.createElement('span');
+      nm.className = 'file-card-name';
+      nm.textContent = item.path;
+      const sub = document.createElement('span');
+      sub.className = 'file-card-sub';
+      sub.textContent = item.action || 'αρχείο';
+      info.append(nm, sub);
+      const btns = document.createElement('div');
+      btns.className = 'file-card-btns';
+      const defs = [
+        ['👁 Προεπισκόπηση', () => root.openProjectFile?.(item.path)],
+        ['↗ Άνοιγμα', () => root.openFileInOs?.(item.path, false)],
+        ['📁 Φάκελος', () => root.openFileInOs?.(item.path, true)],
+      ];
+      for (const [label, fn] of defs) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.textContent = label;
+        b.onclick = fn;
+        btns.appendChild(b);
+      }
+      card.append(badge, info, btns);
+      row.appendChild(card);
+    }
+    msgEl.appendChild(row);
+  }
+
   root.ChatPro = {
     highlightCode,
     renderMarkdown,
     appendTrailStep,
+    attachTurnFileCards,
     updateActiveTrail,
     sealActiveTrail,
     formatTimeNow,
@@ -689,7 +742,7 @@
     pauseQueue: () => { queuePaused = true; renderQueueDock(); },
     getQueue: () => [...queuedMsgs],
     _setFileCacheForTest: (proj, entries) => { fileCache = { project: proj, entries, loading: false }; },
-    resetTrail: () => { stopSpinner(); activeTrail = null; },
+    resetTrail: () => { stopSpinner(); activeTrail = null; pendingTurnFiles = []; },
   };
 
   if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
