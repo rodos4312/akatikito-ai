@@ -187,7 +187,7 @@
     if (statusEl && typeof chatEl.insertBefore === 'function') chatEl.insertBefore(box, statusEl);
     else chatEl.appendChild(box);
     activeTrail = {
-      root: box, rail, spinEl, titleEl, stepEl, tokEl, elapsedEl, chev,
+      root: box, body, rail, spinEl, titleEl, stepEl, tokEl, elapsedEl, chev,
       active: true, toolCount: 0, lastToolRow: null, startedAt: Date.now(), hasError: false,
     };
     startSpinner();
@@ -310,6 +310,9 @@
         : escHtml(data?.text || kind);
       trail.hasError = kind !== 'stopped';
       addTrailRow(trail, kind === 'stopped' ? '' : 'bad', kind === 'stopped' ? '⏹' : '⚠', msg);
+    }
+    if (trail.body && typeof trail.body.scrollHeight === 'number') {
+      trail.body.scrollTop = trail.body.scrollHeight;
     }
     root.scrollChatIfPinned?.(pin);
     return true;
@@ -504,6 +507,18 @@
     renderSubtasks(s.subtasks);
     syncTopbarControls(s);
     syncMessageQueue(s);
+  }
+
+  function syncStreamReasoning(ls) {
+    if (!ls || !ls.reasoningBody) return;
+    if (ls.reasoning && ls.text && !ls.reasoningCollapsed) {
+      ls.reasoningCollapsed = true;
+      collapseStreamReasoning(ls);
+    }
+    if (!ls.reasoningBody.classList?.contains('collapsed')) {
+      ls.reasoningBody.textContent = ls.reasoning;
+      ls.reasoningBody.scrollTop = ls.reasoningBody.scrollHeight;
+    }
   }
 
   function collapseStreamReasoning(ls) {
@@ -744,6 +759,7 @@
     renderSubtasks,
     syncTopbarControls,
     syncStatus,
+    syncStreamReasoning,
     collapseStreamReasoning,
     formatUserText,
     updateAtMenu,

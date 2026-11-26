@@ -725,8 +725,9 @@ function syncStream(state) {
   const pin = isChatNearBottom();
   if (!liveStream || liveStream.id !== state.id) streamEvent("stream_start", {stream_id:state.id, model:state.model});
   liveStream.reasoning = state.reasoning || "";
-  liveStream.reasoningBody.textContent = liveStream.reasoning;
   liveStream.text = state.text || "";
+  if (typeof ChatPro !== "undefined" && ChatPro.syncStreamReasoning) ChatPro.syncStreamReasoning(liveStream);
+  else if (liveStream.reasoningBody) liveStream.reasoningBody.textContent = liveStream.reasoning;
   if (liveStream.text && typeof ChatPro !== "undefined" && ChatPro.renderMarkdown) {
     liveStream.body.innerHTML = ChatPro.renderMarkdown(liveStream.text, {streaming: state.status === "active"});
   } else {

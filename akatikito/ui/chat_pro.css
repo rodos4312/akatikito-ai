@@ -71,6 +71,7 @@ body[data-theme="light"] {
 
 /* ---------- User & Editorial Assistant Messages ---------- */
 .msg {
+  flex-shrink: 0;
   max-width: 100%;
   font-size: var(--ui-font, 14px);
   line-height: 1.66;
@@ -256,6 +257,7 @@ body[data-theme="light"] {
 
 /* ---------- Hermes-Style Grouped Turn Activity Trail ---------- */
 .turn-trail {
+  flex-shrink: 0;
   width: 100%;
   background: var(--trail-bg);
   border: 1px solid var(--chat-card-border);
@@ -306,6 +308,8 @@ body[data-theme="light"] {
   display: flex;
   flex-direction: column;
   gap: 5px;
+  max-height: 380px;
+  overflow-y: auto;
 }
 .trail-rail {
   border-left: 1.5px solid var(--trail-rail);
@@ -393,6 +397,7 @@ body[data-theme="light"] {
 
 /* ---------- Live Stream Preview & Blinking Block Caret ---------- */
 .stream-preview {
+  flex-shrink: 0;
   align-self: stretch;
   width: 100%;
   max-width: 100%;
@@ -425,6 +430,7 @@ body[data-theme="light"] {
 
 /* Live bottom status pill */
 .status {
+  flex-shrink: 0;
   align-self: flex-start;
   display: inline-flex;
   align-items: center;
@@ -604,9 +610,14 @@ body[data-theme="light"] {
 .auto-pill:hover:not(:disabled) { border-color: var(--accent); color: var(--text); }
 .auto-pill:disabled { opacity: 0.45; cursor: not-allowed; }
 
-/* Auto-collapsed live reasoning toggle & @file /skill prompt chips */
+/* Compact live reasoning box & collapsed 1-line toggle */
+.stream-reasoning {
+  max-height: 160px;
+  overflow-y: auto;
+}
 .stream-reasoning.collapsed {
-  max-height: none;
+  max-height: 34px;
+  overflow: hidden;
   padding: 4px 10px;
   cursor: pointer;
   font-style: normal;
