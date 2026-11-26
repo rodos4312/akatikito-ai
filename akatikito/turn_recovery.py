@@ -130,14 +130,20 @@ def classify_recoverable_error(exc: BaseException) -> str | None:
 
 
 def _recover_output_truncated(agent) -> tuple[bool, str]:
+    from .model_limits import recommended_chunk_lines
+
     close_interrupted_tool_sequence(agent.messages)
     agent.context.reset_transport()
+    max_out = int(getattr(getattr(agent, "model", None), "max_output_tokens", 0) or 0)
+    # When truncated at output limit, target ~65% of the model's normal chunk ceiling.
+    lo, hi = recommended_chunk_lines(max_out)
+    safe_lo, safe_hi = max(120, int(lo * 0.65)), max(200, int(hi * 0.65))
     steer = (
         "[ΑΥΤΟΜΑΤΗ ΑΝΑΚΤΗΣΗ — ΟΡΙΟ ΕΞΟΔΟΥ (length)] Η προηγούμενη απάντηση ή κλήση εργαλείου "
         "κόπηκε επειδή ξεπέρασε το μέγιστο μέγεθος εξόδου σε ένα βήμα. "
         "ΜΗΝ προσπαθήσεις να γράψεις ολόκληρο τεράστιο αρχείο σε ένα μόνο write_file, "
         "ούτε όμως να το σπας σε πολύ μικρά κομμάτια. "
-        "Χώρισέ το σε 2–4 μεγάλα, συνεκτικά τμήματα (~350–450 γραμμές ανά βήμα) με write_file / edit_file "
+        f"Χώρισέ το σε συνεκτικά τμήματα (~{safe_lo}–{safe_hi} γραμμές ανά βήμα) με write_file / edit_file "
         "και τρέξε smoke_check μόλις ολοκληρωθεί το σύνολο."
     )
     agent.messages.append({"role": "user", "content": steer, "_origin": "internal"})

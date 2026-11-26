@@ -70,22 +70,39 @@ class OpenAIModel:
         # GLM requires its exact interleaved reasoning with tool results.
         return "glm" in self.config.model.lower()
 
-    @property
-    def context_window_tokens(self) -> int:
+    def _load_model_limits(self) -> tuple[int, int]:
+        from .model_limits import resolve_cached_limits
+
         identity = (self.config.base_url, self.config.model)
-        if getattr(self,"_limits_identity",None) != identity:
+        if getattr(self, "_limits_identity", None) != identity:
             self._limits_identity = identity
-            self._context_window_tokens = 0
-            if "nano-gpt.com" in (self.config.base_url or ""):
+            base = self.config.base_url or ""
+            key = hashlib.sha1(base.encode("utf-8")).hexdigest()[:12]
+            cache: dict = {}
+            should_fetch = "nano-gpt.com" in base or "openrouter.ai" in base
+            if should_fetch:
                 try:
-                    list_models(self.config.base_url,self.config.api_key,timeout=8)
-                    cache=json.loads(_models_cache_path().read_text(encoding="utf-8"))
-                    key=hashlib.sha1(self.config.base_url.encode("utf-8")).hexdigest()[:12]
-                    item=next((m for m in cache.get(key,{}).get("models",[]) if m.get("id")==self.config.model),{})
-                    self._context_window_tokens=_positive_limit(item.get("context_length"))
+                    list_models(base, self.config.api_key, timeout=8)
                 except Exception:
                     pass  # An unavailable catalogue never prevents use of a configured model.
-        return self._context_window_tokens
+            try:
+                cp = _models_cache_path()
+                if cp.is_file():
+                    cache = json.loads(cp.read_text(encoding="utf-8") or "{}")
+            except (OSError, json.JSONDecodeError):
+                cache = {}
+            limits = resolve_cached_limits(cache, key, self.config.model)
+            self._context_window_tokens = limits.context_tokens
+            self._max_output_tokens = limits.max_output_tokens
+        return self._context_window_tokens, getattr(self, "_max_output_tokens", 0)
+
+    @property
+    def context_window_tokens(self) -> int:
+        return self._load_model_limits()[0]
+
+    @property
+    def max_output_tokens(self) -> int:
+        return self._load_model_limits()[1]
 
     def _request_messages(self, messages):
         projected = copy.deepcopy(messages)
@@ -501,6 +518,41 @@ def _fetch_detailed(base_url: str, api_key: str, timeout: float) -> list[dict]:
     return items if isinstance(items, list) else []
 
 
+def _fetch_provider_models(base_url: str, api_key: str, timeout: float, nano: bool) -> list[dict]:
+    from .model_limits import extract_item_limits
+
+    if nano:
+        raw = _fetch_detailed(base_url, api_key, timeout)
+        return [
+            {
+                "id": str(item.get("id") or ""),
+                "included": bool((item.get("subscription") or {}).get("included")),
+                "available": item.get("available") is not False,
+                "context_length": extract_item_limits(item)[0],
+                "max_output_tokens": extract_item_limits(item)[1],
+            }
+            for item in raw
+            if item.get("id")
+        ]
+    from openai import OpenAI
+
+    client = OpenAI(base_url=base_url, api_key=api_key or "not-needed", timeout=timeout)
+    response = client.models.list()
+    models = []
+    for item in response.data:
+        mid = getattr(item, "id", "")
+        if not mid:
+            continue
+        ctx_len, max_out = extract_item_limits(item)
+        row = {"id": mid, "included": True, "available": True}
+        if ctx_len:
+            row["context_length"] = ctx_len
+        if max_out:
+            row["max_output_tokens"] = max_out
+        models.append(row)
+    return models
+
+
 def list_models(
     base_url: str,
     api_key: str = "",
@@ -529,34 +581,12 @@ def list_models(
         isinstance(entry, dict)
         and time.time() - float(entry.get("at") or 0) < _MODELS_TTL_SECONDS
         and bool(entry.get("detailed")) == nano
-        and entry.get("schema") == 2
+        and entry.get("schema") == 3
     )
     if force or not fresh:
-        if nano:
-            raw = _fetch_detailed(base_url, api_key, timeout)
-            models = [
-                {
-                    "id": str(item.get("id") or ""),
-                    "included": bool((item.get("subscription") or {}).get("included")),
-                    "available": item.get("available") is not False,
-                    "context_length": _positive_limit(item.get("context_length")),
-                    "max_output_tokens": _positive_limit(item.get("max_output_tokens")),
-                }
-                for item in raw
-                if item.get("id")
-            ]
-        else:
-            from openai import OpenAI
-
-            client = OpenAI(base_url=base_url, api_key=api_key or "not-needed", timeout=timeout)
-            response = client.models.list()
-            models = [
-                {"id": getattr(item, "id", ""), "included": True, "available": True}
-                for item in response.data
-                if getattr(item, "id", "")
-            ]
+        models = _fetch_provider_models(base_url, api_key, timeout, nano)
         if isinstance(cache, dict):
-            cache[key] = {"at": time.time(), "models": models, "detailed": nano, "schema":2}
+            cache[key] = {"at": time.time(), "models": models, "detailed": nano, "schema": 3}
             cache_path.write_text(json.dumps(cache, ensure_ascii=False), encoding="utf-8")
         entry = cache[key]
 

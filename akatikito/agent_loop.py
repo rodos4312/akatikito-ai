@@ -161,15 +161,24 @@ def _prepare_step_request(agent, step: int):
     continuous = bool(
         getattr(agent.model, "keeps_active_history", False) or getattr(agent.model, "preserves_tool_reasoning", False)
     )
-    if continuous:
-        native = max(0, int(getattr(agent.model, "context_window_tokens", 0) or 0))
-        configured = max(0, int(agent.config.context_active_max_bytes))
+    native = max(0, int(getattr(agent.model, "context_window_tokens", 0) or 0))
+    max_out = max(0, int(getattr(agent.model, "max_output_tokens", 0) or 0))
+    configured = max(0, int(agent.config.context_active_max_bytes))
+    if continuous or native:
         # UTF-8 bytes conservatively bound text token counts; reserve room for tools/output.
         automatic = max(1024, int(native * 0.6)) if native else 160000
         agent.context.active_max_bytes = min(configured, automatic) if configured else automatic
         agent.context.native_context_tokens = native
+    agent.context.max_output_tokens = max_out
     # Never reuse old permissions for the sake of a cache hit.
-    agent.messages[0] = {"role": "system", "content": agent.policy_prompt()}
+    policy = agent.policy_prompt()
+    if agent.mode in ("code", "debug") and (native or max_out):
+        from .model_limits import format_window_hint
+
+        whint = format_window_hint(native, max_out)
+        if whint:
+            policy = policy + "\n\n" + whint
+    agent.messages[0] = {"role": "system", "content": policy}
     from .turn_recovery import close_interrupted_tool_sequence
     if close_interrupted_tool_sequence(agent.messages):
         agent.context.reset_transport()
