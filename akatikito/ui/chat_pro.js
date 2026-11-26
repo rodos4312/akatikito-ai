@@ -451,13 +451,24 @@
     return { gauge, autoBtn };
   }
 
+  function _computeCtxGauge(ctx) {
+    const realPrompt = Number(ctx.real_prompt_tokens || 0);
+    const nativeCtx = Number(ctx.native_context_tokens || 0);
+    if (realPrompt > 0 && nativeCtx > 0) {
+      const pct = Math.min(100, Math.round((realPrompt * 100) / nativeCtx));
+      return { pct, note: `${Math.round(realPrompt / 1000)}k / ${Math.round(nativeCtx / 1000)}k tok` };
+    }
+    const sent = Number(ctx.active_bytes || ctx.sent_chars || 0);
+    const budget = Number(ctx.active_budget_bytes || ctx.budget_chars || ctx.active_max_bytes || 160000);
+    const pct = sent > 0 && budget > 0 ? Math.min(100, Math.round((sent * 100) / budget)) : 0;
+    return { pct, note: `${Math.round(sent / 1024)} / ${Math.round(budget / 1024)} KB` };
+  }
+
   function syncTopbarControls(s) {
     const { gauge, autoBtn } = ensureTopbarWidgets();
     if (gauge) {
       const ctx = s.context || {}, t = s.tokens || {};
-      const sent = Number(ctx.sent_chars || ctx.active_bytes || 0);
-      const budget = Number(ctx.budget_chars || ctx.active_max_bytes || 160000);
-      const pct = sent > 0 && budget > 0 ? Math.min(100, Math.round((sent * 100) / budget)) : 0;
+      const { pct, note } = _computeCtxGauge(ctx);
       const hit = Math.min(t.prompt_tokens || 0, t.cache_hit_tokens || 0);
       const cPct = hit > 0 && t.prompt_tokens > 0 ? Math.round((hit * 100) / t.prompt_tokens) : 0;
       gauge.style.display = pct > 0 || cPct > 0 ? 'inline-flex' : 'none';
@@ -467,7 +478,7 @@
       if (fill) fill.style.width = `${pct}%`;
       if (lbl) lbl.textContent = (pct > 0 ? `ctx ${pct}%` : '') + (cPct > 0 ? `${pct > 0 ? ' · ' : ''}cache ${cPct}%` : '');
       gauge.style.cursor = s.busy ? 'default' : 'pointer';
-      gauge.title = `Context: ${pct}% · Prompt: ${t.prompt_tokens || 0} · Cache hit: ${hit} (${cPct}%) — κλικ για συμπίεση (/compact)`;
+      gauge.title = `Context: ${pct}% (${note}) · Prompt: ${t.prompt_tokens || 0} · Cache hit: ${hit} (${cPct}%) — κλικ για συμπίεση (/compact)`;
       gauge.onclick = () => { if (!s.busy) runCompact(); };
     }
     if (autoBtn) {
