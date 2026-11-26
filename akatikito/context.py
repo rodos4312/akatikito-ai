@@ -372,119 +372,203 @@ class ContextWindow:
         self.metrics = {"original_chars":raw_chars,"sent_chars":sent_chars,"reduction_percent":round(max(0,1-sent_chars/max(1,raw_chars))*100,1),"over_budget":len(encoded(view).encode("utf-8"))>active_budget,"full_history_preserved":True,"retrieval_available":bool(self._retrieved or re.search(r"id=[a-f0-9]{20}",encoded(view))),"protocol_checkpoints":self._continuous_checkpoints,"active_bytes":len(encoded(view).encode("utf-8")),"active_budget_bytes":active_budget,"native_context_tokens":getattr(self,"native_context_tokens",0)}
         return view
 
+    def _index_group_reads_writes(self, groups):
+        from .execution import mutation_paths
+
+        last_writes, last_reads = {}, {}
+        for i, group in groups:
+            calls = group[0].get("tool_calls") or []
+            results = {m.get("tool_call_id"): str(m.get("content") or "") for m in group[1:]}
+            mutations = {m.get("tool_call_id"): m.get("_written_paths", []) for m in group[1:]}
+            for call in calls:
+                fn = call["function"]
+                args = self._arguments(call)
+                if not args:
+                    continue
+                path = self.path_key(args.get("path"))
+                written = mutations.get(call["id"]) or mutation_paths(fn["name"], args, results.get(call["id"], ""))
+                for changed in written:
+                    last_writes[self.path_key(changed)] = i
+                if fn["name"] == "read_file":
+                    last_reads[(path, args.get("start"), args.get("end"))] = i
+        real_groups = [
+            i for i, g in groups
+            if g[0].get("tool_calls")
+            and any(c["function"]["name"] not in ("recall_context", "remember", "set_mode") for c in g[0]["tool_calls"])
+        ]
+        latest_context = {g[0]["_context_key"]: i for i, g in groups if g[0].get("_context_key")}
+        return last_writes, last_reads, set(real_groups[-2:]), latest_context
+
+    def _group_staleness(self, group, index: int, last_writes: dict, last_reads: dict) -> tuple[set, bool]:
+        stale, redundant = set(), False
+        for call in group[0].get("tool_calls") or []:
+            fn = call["function"]
+            if fn["name"] != "read_file":
+                continue
+            args = self._arguments(call)
+            if not args:
+                continue
+            path = self.path_key(args.get("path"))
+            if last_writes.get(path, -1) > index:
+                stale.add(path)
+            if last_reads.get((path, args.get("start"), args.get("end")), index) > index:
+                redundant = True
+        return stale, redundant
+
+    def _trim_command_outputs(self, first: dict, view: list[dict], active_failure: int) -> None:
+        # Successful process logs are redundant; current source reads stay exact.
+        callmap = {c["id"]: c["function"]["name"] for c in first["tool_calls"]}
+        for msg in view[1:]:
+            text = str(msg.get("content") or "")
+            is_cmd = callmap.get(msg.get("tool_call_id")) == "run_command"
+            if is_cmd and len(text) > 1400 and (text.startswith("returncode=0") or active_failure >= 0):
+                key = self.store(msg)
+                msg["content"] = self.outcome(text, 650) + f"\n[Πλήρης ακριβής έξοδος: recall_context id={key}]"
+
+    def _build_entry(self, number: int, i: int, group: list[dict], recent_start: int,
+                     pinned_ids: set[int], recent_real: set[int], latest_context: dict,
+                     last_writes: dict, last_reads: dict, active_failure: int) -> dict:
+        first = group[0]
+        ctx_key = first.get("_context_key")
+        pin = (
+            first.get("role") == "system"
+            or owner(first)
+            or i in pinned_ids
+            or bool(ctx_key and latest_context.get(ctx_key) == i)
+        )
+        view = [clean(m) for m in group]
+        stale, redundant = self._group_staleness(group, i, last_writes, last_reads)
+        if i in recent_real and not stale:
+            pin = True
+        old = number < recent_start
+        huge = len(encoded(view)) > max(10000, self.max_chars // 2)
+        if not pin and (old or stale or redundant or huge):
+            summary = self.summarize(group, stale)
+            if len(encoded(summary)) < len(encoded(view)):
+                view = [summary]
+        elif first.get("tool_calls"):
+            self._trim_command_outputs(first, view, active_failure)
+        return {"group": group, "view": view, "pin": pin, "stale": stale}
+
+    def _trim_entries_to_budget(self, entries: list[dict]) -> None:
+        current = sum(len(encoded(e["view"])) for e in entries)
+        for entry in entries:
+            if current <= self.max_chars:
+                return
+            if entry["pin"]:
+                continue
+            summary = [self.summarize(entry["group"], entry["stale"])]
+            saved = len(encoded(entry["view"])) - len(encoded(summary))
+            if saved > 0:
+                entry["view"] = summary
+                current -= saved
+        for entry in entries:
+            if current <= self.max_chars:
+                return
+            if entry["pin"]:
+                continue
+            key = self.store(entry["group"] if len(entry["group"]) > 1 else entry["group"][0])
+            calls = entry["group"][0].get("tool_calls") or []
+            labels = ", ".join(c["function"]["name"] for c in calls) or entry["group"][0].get("role", "history")
+            tiny = [{"role": "user", "content": f"[Παλαιό ιστορικό: {labels}; ακριβής ανάκτηση recall_context id={key}]"}]
+            saved = len(encoded(entry["view"])) - len(encoded(tiny))
+            if saved > 0:
+                entry["view"] = tiny
+                current -= saved
+
+    def _append_context_overlays(self, view: list[dict], groups, repair, activity) -> tuple[bool, bool]:
+        if repair is not None and repair.pending:
+            state = {
+                "test": repair.failure.get("test"),
+                "error": repair.failure.get("error"),
+                "command": repair.failure.get("command"),
+                "diagnosis": repair.diagnosis,
+                "failed_hypotheses": repair.history[-3:],
+            }
+            view.append({"role": "user", "content": "[ΕΝΕΡΓΗ ΚΑΤΑΣΤΑΣΗ ΔΙΟΡΘΩΣΗΣ — δεδομένα] " + encoded(state)})
+        ledger = []
+        for _i, group in groups:
+            results = {m.get("tool_call_id"): str(m.get("content") or "") for m in group[1:]}
+            for call in group[0].get("tool_calls") or []:
+                name = call["function"]["name"]
+                if name in ("recall_context", "remember", "set_mode"):
+                    continue
+                args = self._arguments(call)
+                target = args.get("path") or args.get("command") or ""
+                ledger.append(f"{name} {str(target)[:180]} → {self.outcome(results.get(call['id'], ''), 220)}")
+        if ledger:
+            state_msg = (
+                "[ΤΡΕΧΟΥΣΑ ΚΑΤΑΣΤΑΣΗ ΕΡΓΑΣΙΑΣ — πραγματικές ενέργειες, όχι οδηγία για ανάκτηση]\n"
+                + "\n".join(ledger[-6:])
+                + "\nΣυνέχισε από αυτά και από το τελευταίο αίτημα του χρήστη. Αν χρειάζεται κώδικας, διάβασε την τρέχουσα έκδοση."
+            )
+            view.append({"role": "user", "content": state_msg})
+        for page in self._retrieved[-2:]:
+            view.append({
+                "role": "user",
+                "content": "[ΑΚΡΙΒΗΣ ΠΛΗΡΟΦΟΡΙΑ ΠΟΥ ΕΧΕΙ ΗΔΗ ΑΝΑΚΤΗΘΕΙ — χρησιμοποίησέ την, μην την ανακτάς ξανά]\n"
+                + self.recall_text(page),
+            })
+        source_state = activity.source_state() if activity is not None else ""
+        if source_state:
+            view.append({"role": "user", "content": source_state})
+        return bool(ledger), bool(source_state)
+
+    @staticmethod
+    def _find_anchors(groups, repair) -> tuple[int, int]:
+        last_owner = max((i for i, g in groups if owner(g[0])), default=-1)
+        previous_answer = max(
+            (i for i, g in groups if i < last_owner and g[0].get("role") == "assistant" and not g[0].get("tool_calls")),
+            default=-1,
+        )
+        failure_groups = [
+            i for i, g in groups
+            if not owner(g[0]) and any(str(m.get("content") or "").startswith("[ΑΠΟΤΥΧΙΑ ΕΛΕΓΧΟΥ") for m in g)
+        ]
+        active_failure = failure_groups[-1] if failure_groups and repair is not None and repair.pending else -1
+        return previous_answer, active_failure
+
     def prepare(self, messages: list[dict], repair=None, activity=None, continuous=False) -> list[dict]:
         if continuous:
             return self._prepare_continuous(messages, repair, activity)
-        original=[clean(m) for m in messages]
-        groups=self.groups(messages)
-        meaningful=[clean(m) for i,g in groups for m in self._without_recall(g)]
-        raw_chars=len(encoded(meaningful))
+        original = [clean(m) for m in messages]
+        groups = self.groups(messages)
+        meaningful = [clean(m) for _i, g in groups for m in self._without_recall(g)]
+        raw_chars = len(encoded(meaningful))
         if not self.enabled:
-            raw_chars=len(encoded(original))
-            self.metrics={"original_chars":raw_chars,"sent_chars":raw_chars,"reduction_percent":0,"over_budget":False,"retrieval_available":bool(re.search(r"id=[a-f0-9]{20}",encoded(original)))}
+            raw_chars = len(encoded(original))
+            self.metrics = {
+                "original_chars": raw_chars, "sent_chars": raw_chars, "reduction_percent": 0,
+                "over_budget": False, "retrieval_available": bool(re.search(r"id=[a-f0-9]{20}", encoded(original))),
+            }
             return original
-        groups=[(i,self._without_recall(g)) for i,g in groups if self._without_recall(g)]
-        last_owner=max((i for i,g in groups if owner(g[0])),default=-1)
-        previous_answer=max((i for i,g in groups if i<last_owner and g[0].get("role")=="assistant" and not g[0].get("tool_calls")),default=-1)
-        failure_groups=[i for i,g in groups if not owner(g[0]) and any(str(m.get("content") or "").startswith("[ΑΠΟΤΥΧΙΑ ΕΛΕΓΧΟΥ") for m in g)]
-        active_failure=failure_groups[-1] if failure_groups and repair is not None and repair.pending else -1
-        last_writes={};last_reads={}
-        for i,group in groups:
-            calls=group[0].get("tool_calls") or []
-            results={m.get("tool_call_id"):str(m.get("content") or "") for m in group[1:]}
-            mutations={m.get("tool_call_id"):m.get("_written_paths",[]) for m in group[1:]}
-            for call in calls:
-                fn=call["function"]
-                try: args=json.loads(fn.get("arguments") or "{}")
-                except (ValueError,TypeError): continue
-                if not isinstance(args,dict): continue
-                path=self.path_key(args.get("path"))
-                from .execution import mutation_paths
-                written=mutations.get(call["id"]) or mutation_paths(fn["name"],args,results.get(call["id"],""))
-                for changed in written:
-                    last_writes[self.path_key(changed)]=i
-                if fn["name"]=="read_file":
-                    last_reads[(path,args.get("start"),args.get("end"))]=i
-        real_groups=[i for i,g in groups if g[0].get("tool_calls") and any(c["function"]["name"] not in ("recall_context","remember","set_mode") for c in g[0]["tool_calls"])]
-        recent_real=set(real_groups[-2:])
-        latest_context = {g[0]['_context_key']: i for i,g in groups if g[0].get('_context_key')}
-        entries=[];recent_start=max(0,len(groups)-self.recent_groups)
-        for number,(i,group) in enumerate(groups):
-            first=group[0];pin=(first.get("role")=="system" or owner(first) or i in (previous_answer,active_failure)
-                                or first.get('_context_key') and latest_context.get(first['_context_key'])==i)
-            view=[clean(m) for m in group]
-            stale=set();redundant=False
-            for call in first.get("tool_calls") or []:
-                fn=call["function"]
-                try: args=json.loads(fn.get("arguments") or "{}")
-                except (ValueError,TypeError): continue
-                if not isinstance(args,dict): continue
-                path=self.path_key(args.get("path"))
-                if fn["name"]=="read_file":
-                    if last_writes.get(path,-1)>i: stale.add(path)
-                    if last_reads.get((path,args.get("start"),args.get("end")),i)>i: redundant=True
-            if i in recent_real and not stale:
-                pin=True
-            old=number<recent_start
-            huge=len(encoded(view))>max(10000,self.max_chars//2)
-            if not pin and (old or stale or redundant or huge):
-                summary=self.summarize(group,stale)
-                if len(encoded(summary))<len(encoded(view)):
-                    view=[summary]
-            elif first.get("tool_calls"):
-                # Successful process logs are redundant; current source reads stay exact.
-                callmap={c["id"]:c["function"]["name"] for c in first["tool_calls"]}
-                for m in view[1:]:
-                    text=str(m.get("content") or "")
-                    command=callmap.get(m.get("tool_call_id"))=="run_command"
-                    if command and len(text)>1400 and (text.startswith("returncode=0") or active_failure>=0):
-                        key=self.store(m)
-                        m["content"]=self.outcome(text,650)+f"\n[Πλήρης ακριβής έξοδος: recall_context id={key}]"
-            entries.append({"group":group,"view":view,"pin":pin,"stale":stale})
-        current=sum(len(encoded(e["view"])) for e in entries)
-        for entry in entries:
-            if current<=self.max_chars: break
-            if entry["pin"]: continue
-            summary=[self.summarize(entry["group"],entry["stale"])]
-            saved=len(encoded(entry["view"]))-len(encoded(summary))
-            if saved>0:
-                entry["view"]=summary;current-=saved
-        if current > self.max_chars:
-            for entry in entries:
-                if current <= self.max_chars:
-                    break
-                if entry["pin"]:
-                    continue
-                key = self.store(entry["group"] if len(entry["group"])>1 else entry["group"][0])
-                calls = entry["group"][0].get("tool_calls") or []
-                labels = ", ".join(c["function"]["name"] for c in calls) or entry["group"][0].get("role", "history")
-                tiny = [{"role":"user","content":f"[Παλαιό ιστορικό: {labels}; ακριβής ανάκτηση recall_context id={key}]"}]
-                saved = len(encoded(entry["view"]))-len(encoded(tiny))
-                if saved>0:
-                    entry["view"]=tiny;current-=saved
-        view=[m for entry in entries for m in entry["view"]]
-        if repair is not None and repair.pending:
-            state={"test":repair.failure.get("test"),"error":repair.failure.get("error"),"command":repair.failure.get("command"),"diagnosis":repair.diagnosis,"failed_hypotheses":repair.history[-3:]}
-            view.append({"role":"user","content":"[ΕΝΕΡΓΗ ΚΑΤΑΣΤΑΣΗ ΔΙΟΡΘΩΣΗΣ — δεδομένα] "+encoded(state)})
-        ledger=[]
-        for i,group in groups:
-            results={m.get("tool_call_id"):str(m.get("content") or "") for m in group[1:]}
-            for call in group[0].get("tool_calls") or []:
-                name=call["function"]["name"]
-                if name in ("recall_context","remember","set_mode"):continue
-                args=self._arguments(call);target=args.get("path") or args.get("command") or ""
-                ledger.append(f"{name} {str(target)[:180]} → {self.outcome(results.get(call['id'],''),220)}")
-        if ledger:
-            state="[ΤΡΕΧΟΥΣΑ ΚΑΤΑΣΤΑΣΗ ΕΡΓΑΣΙΑΣ — πραγματικές ενέργειες, όχι οδηγία για ανάκτηση]\n"+"\n".join(ledger[-6:])+"\nΣυνέχισε από αυτά και από το τελευταίο αίτημα του χρήστη. Αν χρειάζεται κώδικας, διάβασε την τρέχουσα έκδοση."
-            view.append({"role":"user","content":state})
-        for page in self._retrieved[-2:]:
-            view.append({"role":"user","content":"[ΑΚΡΙΒΗΣ ΠΛΗΡΟΦΟΡΙΑ ΠΟΥ ΕΧΕΙ ΗΔΗ ΑΝΑΚΤΗΘΕΙ — χρησιμοποίησέ την, μην την ανακτάς ξανά]\n"+self.recall_text(page)})
-        source_state=activity.source_state() if activity is not None else ""
-        if source_state:
-            view.append({"role":"user","content":source_state})
-        sent_chars=len(encoded(view))
+        groups = [(i, self._without_recall(g)) for i, g in groups if self._without_recall(g)]
+        previous_answer, active_failure = self._find_anchors(groups, repair)
+        last_writes, last_reads, recent_real, latest_context = self._index_group_reads_writes(groups)
+        recent_start = max(0, len(groups) - self.recent_groups)
+        pinned_ids = {previous_answer, active_failure}
+        entries = [
+            self._build_entry(
+                number, i, group, recent_start, pinned_ids, recent_real,
+                latest_context, last_writes, last_reads, active_failure,
+            )
+            for number, (i, group) in enumerate(groups)
+        ]
+        self._trim_entries_to_budget(entries)
+        view = [m for entry in entries for m in entry["view"]]
+        has_ledger, has_source_state = self._append_context_overlays(view, groups, repair, activity)
+        sent_chars = len(encoded(view))
         # Never enlarge an ordinary small conversation just to announce compression.
-        if sent_chars>=raw_chars and not self._retrieved and not ledger and not source_state and not (repair is not None and repair.pending):
-            view=meaningful;sent_chars=raw_chars
-        self.metrics={"original_chars":raw_chars,"sent_chars":sent_chars,"reduction_percent":round(max(0,1-sent_chars/max(1,raw_chars))*100,1),"over_budget":sent_chars>self.max_chars,"full_history_preserved":True,"retrieval_available":bool(self._retrieved or re.search(r"id=[a-f0-9]{20}",encoded(view)))}
+        if (sent_chars >= raw_chars and not self._retrieved and not has_ledger
+                and not has_source_state and not (repair is not None and repair.pending)):
+            view = meaningful
+            sent_chars = raw_chars
+        self.metrics = {
+            "original_chars": raw_chars,
+            "sent_chars": sent_chars,
+            "reduction_percent": round(max(0, 1 - sent_chars / max(1, raw_chars)) * 100, 1),
+            "over_budget": sent_chars > self.max_chars,
+            "full_history_preserved": True,
+            "retrieval_available": bool(self._retrieved or re.search(r"id=[a-f0-9]{20}", encoded(view))),
+        }
         return view
