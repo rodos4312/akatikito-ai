@@ -61,9 +61,13 @@ class OpenAIModel:
             )
         from openai import OpenAI  # τοπικό import: δεν φορτώνεται άδικα
 
+        from .model_guards import EmptyResponseTracker, RateLimitCooldown
+
         self.config = config
         self._active_stream = None
         self._client = OpenAI(base_url=config.base_url, api_key=effective_key, max_retries=0)
+        self._cooldown = RateLimitCooldown()
+        self._empty_guard = EmptyResponseTracker()
 
     @property
     def preserves_tool_reasoning(self) -> bool:
@@ -233,10 +237,47 @@ class OpenAIModel:
             kw["on_reasoning"] = on_reasoning
         return fb_client.chat_stream(messages, **kw)
 
+    def _maybe_arm_cooldown(self, exc: Exception | None) -> None:
+        from .model_retry import extract_retry_after, extract_status
+
+        cd = getattr(self, "_cooldown", None)
+        if cd is not None and extract_status(exc) == 429:
+            cd.arm(extract_retry_after(exc))
+
+    def _cooldown_verdict(self):
+        from .model_retry import Verdict
+
+        cd = getattr(self, "_cooldown", None)
+        if cd is None or not cd.active():
+            return None
+        rem = int(cd.remaining())
+        return Verdict(False, True, message=f"Ο κύριος πάροχος είναι σε cooldown ({rem}s μετά από 429)· χρήση fallback.")
+
+    def _check_empty_and_fallback(self, reply: dict, usage: dict, fallback_fn):
+        cd = getattr(self, "_cooldown", None)
+        if cd is not None:
+            cd.reset()
+        eg = getattr(self, "_empty_guard", None)
+        identity = (str(self.config.base_url or ""), str(self.config.model or ""))
+        if eg is not None and eg.record(identity, reply, usage):
+            from .model_retry import Verdict
+
+            fb = fallback_fn(Verdict(False, True, message="Συνεχόμενες κενές απαντήσεις από τον κύριο πάροχο· χρήση fallback."))
+            if fb is not None:
+                eg.reset()
+                return fb
+        return reply, usage
+
     def chat(
         self, messages: list[dict], tools: list[dict] | None = None, cache_key: str | None = None
     ) -> tuple[dict, dict]:
         from .model_retry import Verdict, classify, extract_retry_after, extract_status
+
+        cd_verdict = self._cooldown_verdict()
+        if cd_verdict is not None:
+            fb_cd = self._try_fallback_chat(messages, tools, cache_key, cd_verdict)
+            if fb_cd is not None:
+                return fb_cd
 
         kwargs = self._kwargs(messages, tools, cache_key)
         last_exc: Exception | None = None
@@ -266,23 +307,20 @@ class OpenAIModel:
         if last_exc is not None:
             fb_result = self._try_fallback_chat(messages, tools, cache_key, last_verdict)
             if fb_result is not None:
+                self._maybe_arm_cooldown(last_exc)
                 return fb_result
             prefix = f"{last_verdict.message} " if last_verdict.message else ""
             raise ModelError(prefix + self._format_error(last_exc)) from last_exc
         choice = response.choices[0].message
         reasoning = self._reasoning_of(choice)
-        calls = []
-        for call in (choice.tool_calls or []):
-            calls.append(
-                {
-                    "id": call.id,
-                    "name": call.function.name,
-                    "arguments": call.function.arguments,
-                }
-            )
+        calls = [
+            {"id": call.id, "name": call.function.name, "arguments": call.function.arguments}
+            for call in (choice.tool_calls or [])
+        ]
         # Ενιαίο token accounting με το streaming (usage_of)· None → μηδενικά.
+        reply = {"content": choice.content or "", "tool_calls": calls, "reasoning": reasoning, **self._protocol_payload(choice)}
         usage = usage_of(response.usage)
-        return {"content": choice.content or "", "tool_calls": calls, "reasoning": reasoning, **self._protocol_payload(choice)}, usage
+        return self._check_empty_and_fallback(reply, usage, lambda v: self._try_fallback_chat(messages, tools, cache_key, v))
 
     def cancel_stream(self):
         stream = getattr(self, "_active_stream", None)
@@ -322,6 +360,7 @@ class OpenAIModel:
             messages, tools, cache_key, on_delta, should_stop, verdict, on_reasoning=on_reasoning
         )
         if fb_result is not None:
+            self._maybe_arm_cooldown(exc)
             return fb_result
         prefix = f"{verdict.message} " if verdict.message else ""
         raise ModelError(prefix + self._format_error(exc)) from exc
@@ -341,6 +380,13 @@ class OpenAIModel:
     def chat_stream(self, messages, tools=None, cache_key=None, on_delta=None, should_stop=None, on_reasoning=None):
         """One streamed completion. Retry only before any response chunk was received."""
         should_stop = should_stop or (lambda: False)
+        cd_verdict = self._cooldown_verdict()
+        if cd_verdict is not None:
+            fb_cd = self._try_fallback_stream(
+                messages, tools, cache_key, on_delta, should_stop, cd_verdict, on_reasoning=on_reasoning
+            )
+            if fb_cd is not None:
+                return fb_cd
         kwargs = self._kwargs(messages, tools, cache_key)
         kwargs.update(stream=True, stream_options={"include_usage": True},
                       timeout=max(1.0, float(self.config.model_stream_timeout)))
@@ -366,7 +412,13 @@ class OpenAIModel:
                 self._consume_stream(stream, assembled, on_delta, on_reasoning, should_stop, received_flag)
                 if should_stop():
                     raise ModelStopped("Η ροή σταμάτησε από τον χρήστη.")
-                return assembled.reply(), assembled.usage
+                return self._check_empty_and_fallback(
+                    assembled.reply(),
+                    assembled.usage,
+                    lambda v: self._try_fallback_stream(
+                        messages, tools, cache_key, on_delta, should_stop, v, on_reasoning=on_reasoning
+                    ),
+                )
             except ModelStopped:
                 raise
             except Exception as exc:

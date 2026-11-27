@@ -365,11 +365,14 @@ class ContextWindow:
             self._continuous_cursor = len(messages)
             self._continuous_checkpoints += 1
             view = copy.deepcopy(compact)
+        from .image_eviction import evict_old_outbound_images
+
+        view, evicted_images = evict_old_outbound_images(view)
         # Live observations were persisted by observe() before this view was built.
         # They follow the new user/tool message; the system prefix remains policy-only.
         raw_chars = len(encoded([clean(m) for m in messages]))
         sent_chars = len(encoded(view))
-        self.metrics = {"original_chars":raw_chars,"sent_chars":sent_chars,"reduction_percent":round(max(0,1-sent_chars/max(1,raw_chars))*100,1),"over_budget":len(encoded(view).encode("utf-8"))>active_budget,"full_history_preserved":True,"retrieval_available":bool(self._retrieved or re.search(r"id=[a-f0-9]{20}",encoded(view))),"protocol_checkpoints":self._continuous_checkpoints,"active_bytes":len(encoded(view).encode("utf-8")),"active_budget_bytes":active_budget,"native_context_tokens":getattr(self,"native_context_tokens",0)}
+        self.metrics = {"original_chars":raw_chars,"sent_chars":sent_chars,"reduction_percent":round(max(0,1-sent_chars/max(1,raw_chars))*100,1),"over_budget":len(encoded(view).encode("utf-8"))>active_budget,"full_history_preserved":True,"retrieval_available":bool(self._retrieved or re.search(r"id=[a-f0-9]{20}",encoded(view))),"protocol_checkpoints":self._continuous_checkpoints,"active_bytes":len(encoded(view).encode("utf-8")),"active_budget_bytes":active_budget,"native_context_tokens":getattr(self,"native_context_tokens",0),"evicted_images":evicted_images}
         return view
 
     def _index_group_reads_writes(self, groups):
@@ -557,10 +560,13 @@ class ContextWindow:
         self._trim_entries_to_budget(entries)
         view = [m for entry in entries for m in entry["view"]]
         has_ledger, has_source_state = self._append_context_overlays(view, groups, repair, activity)
+        from .image_eviction import evict_old_outbound_images
+
+        view, evicted_images = evict_old_outbound_images(view)
         sent_chars = len(encoded(view))
         # Never enlarge an ordinary small conversation just to announce compression.
         if (sent_chars >= raw_chars and not self._retrieved and not has_ledger
-                and not has_source_state and not (repair is not None and repair.pending)):
+                and not has_source_state and not evicted_images and not (repair is not None and repair.pending)):
             view = meaningful
             sent_chars = raw_chars
         self.metrics = {
@@ -570,5 +576,6 @@ class ContextWindow:
             "over_budget": sent_chars > self.max_chars,
             "full_history_preserved": True,
             "retrieval_available": bool(self._retrieved or re.search(r"id=[a-f0-9]{20}", encoded(view))),
+            "evicted_images": evicted_images,
         }
         return view

@@ -178,6 +178,30 @@ def _find_indent_matches(normalized: str, source_lines: list[str], needle: list[
     return matches
 
 
+_UNICODE_PUNCT_TRANS = str.maketrans({
+    "\u201c": '"', "\u201d": '"',
+    "\u2018": "'", "\u2019": "'",
+    "\u2014": "--", "\u2013": "-",
+    "\u2026": "...", "\u00a0": " ",
+    "\u2212": "-", "\u202f": " ",
+    "\u2009": " ", "\u3000": " ",
+})
+
+
+def _find_unicode_matches(normalized: str, source_lines: list[str], needle: list[str], offsets: list[int], search: str):
+    if not (needle and len(source_lines) <= 10000 and len(needle) <= 200):
+        return []
+    norm_needle = [ln.translate(_UNICODE_PUNCT_TRANS).rstrip() for ln in needle]
+    matches = []
+    for i in range(len(source_lines) - len(needle) + 1):
+        if all(source_lines[i + j].translate(_UNICODE_PUNCT_TRANS).rstrip() == norm_needle[j] for j in range(len(needle))):
+            end = offsets[i + len(needle)]
+            if not search.endswith("\n") and normalized[end - 1 : end] == "\n":
+                end -= 1
+            matches.append((offsets[i], end, 0))
+    return matches
+
+
 def _find_edit_matches(normalized: str, source_lines: list[str], needle: list[str], offsets: list[int], search: str):
     starts = [m.start() for m in re.finditer("(?=" + re.escape(search) + ")", normalized)]
     matches = [(s, s + len(search), 0) for s in starts]
@@ -190,6 +214,8 @@ def _find_edit_matches(normalized: str, source_lines: list[str], needle: list[st
                 matches.append((offsets[i], end, 0))
     if not matches:
         matches = _find_indent_matches(normalized, source_lines, needle, offsets, search)
+    if not matches:
+        matches = _find_unicode_matches(normalized, source_lines, needle, offsets, search)
     return matches
 
 
