@@ -293,8 +293,10 @@ def _route_missing_key(raw: dict[str, Any], prefix: str) -> str:
 
 
 def check_subagents_runtime(doc, make_item) -> dict[str, Any]:
-    """Verify subtask token limits, module health, and fast/smart model API-key readiness."""
+    """Verify subtask token limits, bg_processes/context_pin readiness, and fast/smart model API keys."""
+    from .bg_processes import MAX_RUNNING_PROCESSES
     from .config import Config
+    from .context_pin import MAX_PINNED_FILES
 
     cfg = Config()
     per_tok = int(getattr(cfg, "subtask_token_limit", 0) or 0)
@@ -325,6 +327,6 @@ def check_subagents_runtime(doc, make_item) -> dict[str, Any]:
         "subagents_runtime",
         "Βοηθοί agent & δρομολόγηση μοντέλων",
         "ok",
-        f"Βοηθοί έτοιμοι (έως {workers} παράλληλοι, όριο {per_tok // 1000}k/{tot_tok // 1000}k tokens{fast_note}).",
-        meta={"token_limit": per_tok, "total_token_limit": tot_tok, "workers": workers, "fast_model": fast_ask},
+        f"Βοηθοί έτοιμοι (έως {workers} παράλληλοι, {per_tok // 1000}k/{tot_tok // 1000}k tokens{fast_note} · bg max {MAX_RUNNING_PROCESSES} · pins max {MAX_PINNED_FILES}).",
+        meta={"token_limit": per_tok, "total_token_limit": tot_tok, "workers": workers, "fast_model": fast_ask, "bg_max": MAX_RUNNING_PROCESSES, "pin_max": MAX_PINNED_FILES},
     )

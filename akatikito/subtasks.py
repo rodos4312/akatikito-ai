@@ -18,6 +18,9 @@ CHILD_FORBIDDEN_TOOLS = frozenset({
     "propose_skill",
     "patch_skill",
     "propose_global_memory",
+    "start_background_process",
+    "read_background_process",
+    "stop_background_process",
 })
 
 

@@ -153,6 +153,8 @@ def observe_request_state(agent) -> None:
         else ""
     )
     updates["τρέχων κώδικας"] = agent.activity.source_state()
+    pins = getattr(agent, "pins", None)
+    updates["καρφιτσωμένα αρχεία"] = pins.render(agent.ws) if pins is not None else ""
     if agent.context._retrieved:
         updates["ανακτημένα στοιχεία"] = "\n\n".join(agent.context.recall_text(p) for p in agent.context._retrieved[-2:])
     agent.context.observe(agent.messages, updates)

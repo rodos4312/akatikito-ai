@@ -38,6 +38,9 @@ class Akatikito:
         self.activity = ActivityGuard(self.ws)
         self.task = TaskState()
         self.ws.task_state = self.task
+        from .context_pin import ContextPinStore
+        self.pins = ContextPinStore()
+        self.ws.context_pins = self.pins
         from .features import RepoMap
         self.repo_map = RepoMap(self.ws.root)
         self._pending_owner_goal = ""
@@ -106,6 +109,8 @@ class Akatikito:
         cancel = getattr(self.model, "cancel_stream", None)
         if callable(cancel):
             cancel()
+        from .bg_processes import stop_all_background_processes
+        stop_all_background_processes(self.ws)
 
     def steer(self, text: str) -> bool:
         """Queue a mid-flight owner instruction for the next step boundary."""
@@ -140,6 +145,9 @@ class Akatikito:
         self.activity.begin_turn()
         self.repair.clear()
         self.task.clear()
+        self.pins.clear()
+        from .bg_processes import stop_all_background_processes
+        stop_all_background_processes(self.ws)
         self._pending_owner_goal = ""
         self._pending_completion = None
         self._current_task = ""
@@ -415,7 +423,35 @@ class Akatikito:
             feedback += "\n" + self._check_feedback(ok, output, step, self._last_verify_command)
         return feedback
 
+    def _try_local_slash(self, text: str, internal: bool) -> str | None:
+        if internal or getattr(self, "_child_depth", 0):
+            return None
+        from .context_pin import handle_pin_slash_command
+
+        return handle_pin_slash_command(self, text)
+
+    def _maybe_capture_skill(self, internal: bool) -> None:
+        if (internal or getattr(self, "_child_depth", 0) or self._stop
+                or self._owner_denied or self.repair.pending or self._filesystem_failure
+                or not any(e.kind == "answer" for e in self.events.log[self._turn_event_start:])):
+            return
+        try:
+            from .skills import Skills
+
+            Skills(self.ws.root).capture(
+                self.events.log[self._turn_event_start:], self.task.goal,
+                allow_readback=self.mode in ("assistant", "architect"), completed=True,
+                traits=getattr(getattr(self, "mcp", None), "entries", {}),
+                used_skills=getattr(self, "_used_skills_in_turn", ()),
+            )
+        except (OSError, ValueError) as exc:
+            self.events.emit("learning_error", text=str(exc))
+
     def chat(self, text: str, internal: bool = False, attachments=None) -> str:
+        pin_reply = self._try_local_slash(text, internal)
+        if pin_reply is not None:
+            self.events.emit("answer", text=pin_reply)
+            return pin_reply
         self._attachment_blocks = list(attachments or [])
         self.last_checkpoint = ''
         key = ''
@@ -429,18 +465,7 @@ class Akatikito:
             self._learning_proposals=set()
         try:
             answer=self._chat(text,internal)
-            if (not internal and not getattr(self,'_child_depth',0) and not self._stop
-                    and not self._owner_denied and not self.repair.pending
-                    and not self._filesystem_failure
-                    and any(e.kind=='answer' for e in self.events.log[self._turn_event_start:])):
-                try:
-                    from .skills import Skills
-                    Skills(self.ws.root).capture(self.events.log[self._turn_event_start:],self.task.goal,
-                                                 allow_readback=self.mode in ('assistant','architect'),completed=True,
-                                                 traits=getattr(getattr(self,'mcp',None),'entries',{}),
-                                                 used_skills=getattr(self,'_used_skills_in_turn',()))
-                except (OSError,ValueError) as exc:
-                    self.events.emit('learning_error',text=str(exc))
+            self._maybe_capture_skill(internal)
             return answer
         finally:
             if key:

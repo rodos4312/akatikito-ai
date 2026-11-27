@@ -50,6 +50,8 @@ _ASK_TOPIC_GROUPS: tuple[tuple[re.Pattern[str], tuple[str, ...]], ...] = (
      ("list_skills",)),
     (re.compile(r"(?:\btodo|checklist|λιστα εργασ)"),
      ("update_todos",)),
+    (re.compile(r"(?:\bpin\b|καρφιτσ)"),
+     ("pin_context_file",)),
     (re.compile(r"(?:\bsubtask\b|υποεργασ)"),
      ("run_subtask",)),
     (re.compile(r"(?:σημειωσ|obsidian|vault|\bnotes?\b)"),
@@ -176,12 +178,16 @@ MODES['assistant'] = {
     'tools':list(MODES['ask']['tools'])+['complete_task','write_file','edit_file','add_reminder','done_reminder','remember'],
     'prompt':'Είσαι γενικός βοηθός. Χρησιμοποίησε έγγραφα, web και υπενθυμίσεις σύμφωνα με το αίτημα. Δεν εκτελείς εντολές συστήματος. Δεν αλλάζεις κώδικα· για προγραμματισμό χρειάζεται Κώδικας. Μην δημιουργείς υπενθύμιση χωρίς αίτημα του χρήστη.'}
 for _mode in MODES.values():
-    _mode['tools'] += ['read_document','search_documents','search_notes','email_summary','list_reminders','update_todos','run_subtask','list_memory','list_skills','search_past_sessions']
+    _mode['tools'] += [
+        'read_document', 'search_documents', 'search_notes', 'email_summary',
+        'list_reminders', 'update_todos', 'run_subtask', 'pin_context_file',
+        'list_memory', 'list_skills', 'search_past_sessions',
+    ]
 for _name in ('architect','code','debug','assistant'):
     MODES[_name]['tools'] += ['use_skill','run_subtasks','git_status_diff','file_operation_history','propose_memory','propose_skill','patch_skill']
 
 for _name in ('code','debug'):
-    MODES[_name]['tools'] += ['add_reminder','done_reminder']
+    MODES[_name]['tools'] += ['add_reminder','done_reminder','start_background_process','read_background_process','stop_background_process']
 for _name in ('code','debug','assistant'):
     MODES[_name]['tools'] += ['create_word_document','create_excel_sheet','create_pdf_document','plan_file_operations','apply_file_operations','plan_file_undo','undo_file_operations']
 for _name in ('code', 'debug', 'assistant'):
