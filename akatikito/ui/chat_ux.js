@@ -601,6 +601,8 @@
       label: '💬 Συζήτηση & Context',
       items: [
         { name: 'compact', desc: 'Συμπίεση ιστορικού (εξοικονόμηση tokens)', instant: 'compact' },
+        { name: 'context', desc: 'Αναλυτική κατανομή tokens στο context (0 tokens)', instant: 'send' },
+        { name: 'usage', desc: 'Κόστος & χρήση: Σήμερα / 7 / 30 μέρες (0 tokens)', instant: 'send' },
         { name: 'pin', desc: 'Καρφίτσωμα αρχείου στο context (έως 3)', instant: '' },
         { name: 'unpin', desc: 'Ξεκαρφίτσωμα αρχείου (ή /unpin clear)', instant: '' },
         { name: 'pins', desc: 'Προβολή καρφιτσωμένων αρχείων (0 tokens)', instant: 'send' },

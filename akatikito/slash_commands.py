@@ -14,6 +14,8 @@ from .tools import dispatch
 _DIFF_RE = re.compile(r"^\s*/diff\b(.*)$", re.I | re.S)
 _TEST_RE = re.compile(r"^\s*/test\b(.*)$", re.I | re.S)
 _REVIEW_RE = re.compile(r"^\s*/review\b(.*)$", re.I | re.S)
+_CONTEXT_RE = re.compile(r"^\s*/context\b", re.I)
+_USAGE_RE = re.compile(r"^\s*/usage\b", re.I)
 
 
 def _handle_diff_command(agent, arg: str) -> str:
@@ -36,14 +38,23 @@ def _handle_test_command(agent, arg: str) -> str:
 
 
 def handle_local_slash_command(agent, text: str) -> str | None:
-    """Execute 0-token local slash commands (/pin, /unpin, /pins, /diff, /test)."""
+    """Execute 0-token local slash commands (/pin, /unpin, /pins, /context, /usage, /diff, /test)."""
     pin_reply = handle_pin_slash_command(agent, text)
     if pin_reply is not None:
         return pin_reply
-    m_diff = _DIFF_RE.match(str(text or ""))
+    raw = str(text or "")
+    if _CONTEXT_RE.match(raw):
+        from .context_breakdown import format_context_breakdown
+
+        return format_context_breakdown(agent)
+    if _USAGE_RE.match(raw):
+        from .usage_insights import format_usage_insights
+
+        return format_usage_insights(session_tokens=getattr(agent, "tokens", None))
+    m_diff = _DIFF_RE.match(raw)
     if m_diff:
         return _handle_diff_command(agent, m_diff.group(1))
-    m_test = _TEST_RE.match(str(text or ""))
+    m_test = _TEST_RE.match(raw)
     if m_test:
         return _handle_test_command(agent, m_test.group(1))
     return None

@@ -87,7 +87,29 @@ class ActivityGuard:
         self.last_reason = reason
         return "ΑΠΟΤΡΟΠΗ ΕΠΑΝΑΛΗΨΗΣ: " + reason
 
+    def _check_blind_overwrite(self, args) -> str:
+        if not args.get("overwrite") or not args.get("path"):
+            return ""
+        try:
+            target = self.ws.resolve(args["path"])
+            if not target.is_file() or target.stat().st_size == 0:
+                return ""
+            version = self._version(args)
+        except (OSError, ValueError, PermissionError):
+            return ""
+        if version is None or version in self.snapshots:
+            return ""
+        rel = self.ws.relative(target)
+        return self.block(
+            f"Το αρχείο «{rel}» υπάρχει ήδη και δεν έχει διαβαστεί η τρέχουσα έκδοσή του "
+            "(ή άλλαξε στον δίσκο). Διάβασέ το πρώτα με read_file/read_symbol ή χρησιμοποίησε edit_file/replace_symbol."
+        )
+
     def before(self, name, args):
+        if name == "write_file":
+            blind_err = self._check_blind_overwrite(args)
+            if blind_err:
+                return blind_err
         if name == "remember" and self.remembered:
             return self.block("Η μνήμη καταγράφηκε ήδη για αυτό το αίτημα. Μην ξαναγράφεις την ίδια προτίμηση με άλλα λόγια. Απάντησε στον χρήστη ή συνέχισε πραγματική εργασία.")
         if name == "read_file" and not args.get("outline"):
@@ -111,6 +133,13 @@ class ActivityGuard:
         if name in ("list_files", "read_file", "search_in_file", "search_project", *READ_TOOLS) and self.reads[self._read_key(name,args)] >= 2:
             return self.block("Η ίδια ανάγνωση/αναζήτηση έχει ήδη γίνει δύο φορές χωρίς αλλαγή. Αξιοποίησε τα διαθέσιμα στοιχεία αντί να επαναλάβεις την αναζήτηση.")
         return ""
+
+    def _note_version_seen(self, name: str, args) -> None:
+        if name not in ("read_symbol", "write_file", "edit_file", "replace_symbol"):
+            return
+        version = self._version(args)
+        if version:
+            self.snapshots.setdefault(version, {"lines": {}, "counts": Counter()})
 
     def record(self, name, args, result):
         success = not result.startswith(("ΣΦΑΛΜΑ", "ΑΠΟΡΡΙΨΗ", "ΑΠΟΤΡΟΠΗ"))
@@ -149,7 +178,8 @@ class ActivityGuard:
             fingerprint = (name, self._version(args), hashlib.sha256(body.encode()).hexdigest())
             progress = fingerprint not in self.evidence_seen
             self.evidence_seen.add(fingerprint)
-        elif success and name in ("record_diagnosis", "edit_file", "write_file", "run_command"):
+        elif success and name in ("read_symbol", "record_diagnosis", "edit_file", "replace_symbol", "write_file", "run_command", "run_tests"):
+            self._note_version_seen(name, args)
             progress = True
         if progress:
             self.blocked = 0

@@ -78,7 +78,7 @@ assert.ok(hdrs[2].includes('Skills'));
 
 const rows = menu.children.filter((c) => c.className.includes('slash-cmd-row'));
 const names = rows.map((r) => r.children[0].textContent);
-for (const expected of ['/compact', '/pin', '/unpin', '/pins', '/diff', '/test', '/review', '/learn', '/debug', '/weekly-project']) {
+for (const expected of ['/compact', '/context', '/usage', '/pin', '/unpin', '/pins', '/diff', '/test', '/review', '/learn', '/debug', '/weekly-project']) {
   assert.ok(names.includes(expected), 'missing ' + expected);
 }
 

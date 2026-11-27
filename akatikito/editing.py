@@ -202,7 +202,33 @@ def _find_unicode_matches(normalized: str, source_lines: list[str], needle: list
     return matches
 
 
-def _find_edit_matches(normalized: str, source_lines: list[str], needle: list[str], offsets: list[int], search: str):
+_BACKSLASH_RUN_RE = re.compile(r"\\+")
+
+
+def _find_escape_drift_matches(normalized: str, search: str, replacement: str):
+    """Conservative recovery when an LLM doubles backslashes in search (e.g. Windows paths/regex).
+
+    Only activates when every backslash run in search has even length and the halved form
+    exists verbatim in the file. Refuses silently rewriting replacements that contain backslashes.
+    """
+    if "\\" not in search or search in normalized:
+        return []
+    runs = _BACKSLASH_RUN_RE.findall(search)
+    if not runs or not all(len(r) % 2 == 0 for r in runs):
+        return []
+    halved = _BACKSLASH_RUN_RE.sub(lambda m: "\\" * (len(m.group(0)) // 2), search)
+    starts = [m.start() for m in re.finditer("(?=" + re.escape(halved) + ")", normalized)]
+    if not starts:
+        return []
+    if "\\" in replacement:
+        raise EditError(
+            "Εντοπίστηκε διπλό escaping backslashes (\\\\) στο search, αλλά και το replace περιέχει backslashes — "
+            "διάβασε ξανά το αρχείο και στείλε το ακριβές search/replace."
+        )
+    return [(s, s + len(halved), 0) for s in starts]
+
+
+def _find_edit_matches(normalized: str, source_lines: list[str], needle: list[str], offsets: list[int], search: str, replacement: str = ""):
     starts = [m.start() for m in re.finditer("(?=" + re.escape(search) + ")", normalized)]
     matches = [(s, s + len(search), 0) for s in starts]
     if not matches:
@@ -216,6 +242,8 @@ def _find_edit_matches(normalized: str, source_lines: list[str], needle: list[st
         matches = _find_indent_matches(normalized, source_lines, needle, offsets, search)
     if not matches:
         matches = _find_unicode_matches(normalized, source_lines, needle, offsets, search)
+    if not matches:
+        matches = _find_escape_drift_matches(normalized, search, replacement)
     return matches
 
 
@@ -228,8 +256,9 @@ def apply_edits(original, edits):
     spans = []
     for number, entry in enumerate(edits, 1):
         search, _ = _normalized(entry["search"])
+        replacement_raw, _ = _normalized(entry["replace"])
         needle = search.splitlines()
-        matches = _find_edit_matches(normalized, source_lines, needle, offsets, search)
+        matches = _find_edit_matches(normalized, source_lines, needle, offsets, search, replacement_raw)
         hint = entry.get("start_line")
         if hint is not None:
             matches = [(s, e, d) for s, e, d in matches if normalized.count("\n", 0, s) + 1 == hint]
