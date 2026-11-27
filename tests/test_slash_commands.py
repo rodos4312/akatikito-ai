@@ -53,13 +53,20 @@ def test_review_slash_command_expands_to_structured_review_prompt(tmp_path):
     seen_calls: list[list[dict]] = []
 
     class _SpyModel(ScriptedModel):
+        requires_completion_evidence = True
+
         def chat(self, messages, tools=None, cache_key=None):
             seen_calls.append(list(messages))
             return super().chat(messages, tools, cache_key)
 
-    agent = Akatikito(str(tmp_path), Config(auto_mode=False), _SpyModel([{"content": "Review OK"}]))
+    agent = Akatikito(str(tmp_path), Config(auto_mode=False), _SpyModel([{"content": "## Code Review\nΌλα καθαρά."}]))
+    agent.set_mode("code")
     ans = agent.chat("/review auth.py")
-    assert ans == "Review OK"
+    assert "Code Review" in ans
+    assert "Δεν ολοκληρώθηκε η εργασία" not in ans
+    assert agent._turn_requires_completion is False
+    assert "edit_file" not in agent._turn_tools
+    assert "git_status_diff" in agent._turn_tools
     assert len(seen_calls) == 1
     user_blob = "\n".join(str(m.get("content", "")) for m in seen_calls[0] if m.get("role") == "user")
     assert "CODE REVIEW /review" in user_blob

@@ -113,7 +113,13 @@ def _begin_turn(agent, text: str, internal: bool) -> tuple[str, bool]:
         agent._set_mode("assistant" if is_slash_learn else modes.classify(effective), reason="αυτόματα από την εργασία")
     apply_model_routing(agent, effective, fresh=fresh, is_direct_skill=is_direct_skill)
     agent._turn_tools = set(agent.allowed_tools())
-    if read_only(effective) and not is_learn_intent and not is_direct_skill:
+    is_slash_review = text.startswith("[ΕΝΤΟΛΗ CODE REVIEW /review]")
+    if is_slash_review:
+        review_read_tools = set(modes.allowed_tools("ask")) | {
+            "git_status_diff", "lint_check", "find_references", "read_symbol", "smoke_check",
+        }
+        agent._turn_tools &= review_read_tools
+    elif read_only(effective) and not is_learn_intent and not is_direct_skill:
         agent._turn_tools &= set(modes.allowed_tools("ask"))
     agent.ws.turn_allowed_tools = agent._turn_tools
     if direct_skill_info is not None:
