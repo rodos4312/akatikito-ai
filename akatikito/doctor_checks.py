@@ -507,6 +507,7 @@ def run_extended_checks(doc, make_item, *, check_api: bool = False) -> list[dict
         _v26_checks.check_skills_security(doc, make_item),
         _v26_checks.check_context_archive(doc, make_item),
         _v26_checks.check_ui_assets(doc, make_item),
+        _v26_checks.check_subagents_runtime(doc, make_item),
     ]
 
 

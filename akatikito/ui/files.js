@@ -62,6 +62,7 @@ function friendlyToolCall(name, rawArgs) {
     done_reminder: () => `✅ Ολοκλήρωση υπενθύμισης`,
     update_todos: () => `📋 Ενημέρωση λίστας εργασιών (${Array.isArray(a.todos) ? a.todos.length : 0} βήματα)`,
     run_subtask: () => `🤖 Ανάθεση υποεργασίας: <b>${esc(String(a.task || "").slice(0, 90))}</b>`,
+    run_subtasks: () => `🤖 Παράλληλοι βοηθοί (${Array.isArray(a.tasks) ? a.tasks.length : 0} υποεργασίες)`,
     use_skill: () => `📘 Φόρτωση συνταγής <b>/${esc(a.name || "")}</b>`,
     record_diagnosis: () => `🩺 Καταγραφή διάγνωσης σφάλματος: <b>${esc(String(a.cause || "").slice(0, 100))}</b>`,
     complete_task: () => `🏁 Ολοκλήρωση εργασίας (${esc(a.outcome || "completed")})`,
@@ -555,7 +556,7 @@ async function runDoctor(checkApi) {
   box.replaceChildren();
   const loading = document.createElement('span');
   loading.className = 'hint';
-  loading.textContent = checkApi ? '🩺 Έλεγχος 22 σημείων + δοκιμή API key…' : '🩺 Εκτέλεση διάγνωσης (μόνο ανάγνωση)…';
+  loading.textContent = checkApi ? '🩺 Έλεγχος 23 σημείων + δοκιμή API key…' : '🩺 Εκτέλεση διάγνωσης (μόνο ανάγνωση)…';
   box.appendChild(loading);
   try {
     const r = await api('/api/doctor/diagnose', {check_api: !!checkApi});

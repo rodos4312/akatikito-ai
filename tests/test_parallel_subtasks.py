@@ -428,3 +428,67 @@ def test_stale_child_from_previous_turn_does_not_pollute_new_turn(tmp_path):
     assert ag.tokens["prompt_tokens"] == 0
     assert ag.tokens["completion_tokens"] == 0
     assert len(ag._task_writes) == 0
+
+
+def test_subtask_token_governed_allows_more_than_12_steps_under_200k_tokens(tmp_path):
+    # Create 15 distinct files so each read advances progress (no idle stall).
+    for i in range(15):
+        (tmp_path / f"f{i}.txt").write_text(f"data {i}\n", encoding="utf-8")
+
+    step_no = [0]
+
+    def responder(messages, idx, user_txt):
+        n = step_no[0]
+        step_no[0] += 1
+        if n < 14:
+            return {
+                "content": "",
+                "tool_calls": [{
+                    "id": f"tc_{n}",
+                    "name": "read_file",
+                    "arguments": json.dumps({"path": f"f{n}.txt"}),
+                }],
+                "usage": {"prompt_tokens": 500, "completion_tokens": 50},
+            }
+        return {"content": "FINISHED_14_STEPS", "tool_calls": [], "usage": {"prompt_tokens": 500, "completion_tokens": 50}}
+
+    ag = _make_agent(tmp_path, SleepFakeModel(responder=responder))
+    assert ag.config.subtask_token_limit == 200000
+    assert ag.config.subtask_total_token_limit == 500000
+    assert ag.config.subtask_max_steps == 0
+
+    raw = ag._run_subtasks([{"task": "Heavy multi-step read", "mode": "ask"}])
+    rows = json.loads(raw)
+    assert rows[0]["status"] == "complete"
+    assert "FINISHED_14_STEPS" in rows[0]["summary"]
+    assert rows[0]["step"] >= 14
+    # Verify live subtask progress events were emitted along the way
+    live_tools = [e.data.get("active_tool") for e in ag.events.log if e.kind == "subtask" and e.data.get("active_tool")]
+    assert "read_file" in live_tools
+
+
+def test_subtask_context_field_and_fast_model_routing_only_for_ask(tmp_path):
+    from akatikito.agent_subtasks import _resolve_child_route
+
+    ag = _make_agent(
+        tmp_path,
+        SleepFakeModel(),
+        fast_model="cheap-fast-model",
+        fast_base_url="https://fast.example/v1",
+        fast_api_key="fast-k",
+    )
+    # ask mode uses fast_model; code/debug strictly keep main model
+    assert _resolve_child_route(ag, "ask") == ("cheap-fast-model", "https://fast.example/v1", "fast-k")
+    assert _resolve_child_route(ag, "code")[0] == "fake-parallel"
+    assert _resolve_child_route(ag, "debug")[0] == "fake-parallel"
+
+    # context field is injected cleanly into child prompt
+    raw = ag._run_subtasks([{
+        "task": "Inspect auth flow",
+        "context": "Check auth.py lines 10-40; focus on token expiry.",
+        "mode": "ask",
+    }])
+    rows = json.loads(raw)
+    assert rows[0]["model"] == "cheap-fast-model"
+    assert "Check auth.py lines 10-40" in ag.model.calls[-1]["user"]
+    assert "Inspect auth flow" in ag.model.calls[-1]["user"]

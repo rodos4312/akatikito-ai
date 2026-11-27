@@ -71,9 +71,9 @@ class Config:
     verify_command: str = ""
 
     subtask_limit: int = 4
-    subtask_max_steps: int = 12
-    subtask_token_limit: int = 150000
-    subtask_total_token_limit: int = 300000
+    subtask_max_steps: int = 0  # 0: token-governed (no tight step cap; safety net = 100)
+    subtask_token_limit: int = 200000
+    subtask_total_token_limit: int = 500000
     max_parallel_subtasks: int = 2
     subtask_grace_seconds: float = 5.0
     supports_vision: bool = False

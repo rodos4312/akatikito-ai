@@ -417,14 +417,16 @@
     const rail = document.createElement('div'); rail.className = 'trail-rail';
     for (const r of rows) {
       const st = String(r.status || '');
-      const dotCls = st === 'running' ? 'running' : st === 'done' || st === 'completed' ? 'ok' : st === 'error' || st === 'failed' ? 'bad' : '';
+      const dotCls = st === 'running' ? 'running' : st === 'complete' || st === 'done' || st === 'completed' ? 'ok' : st === 'error' || st === 'failed' ? 'bad' : '';
       const dotTxt = dotCls === 'ok' ? '✓' : dotCls === 'bad' ? '✗' : '●';
       const tok = (r.tokens?.prompt_tokens || 0) + (r.tokens?.completion_tokens || 0);
       const tokStr = tok > 0 ? ` · ${tok >= 1000 ? (tok / 1000).toFixed(1) + 'k' : tok} tok` : '';
+      const liveStr = st === 'running' && r.active_tool ? ` · ${r.active_tool}` : '';
+      const secStr = Number(r.elapsed_s) > 0 ? ` · ${Math.round(r.elapsed_s)}s` : '';
       const row = document.createElement('div'); row.className = 'trail-row';
       const line = document.createElement('div'); line.className = 'trail-line';
       const dot = document.createElement('span'); dot.className = 'trail-dot ' + dotCls; dot.textContent = dotTxt;
-      const txt = document.createElement('span'); txt.textContent = `${r.task || ''} (${st}${tokStr})`;
+      const txt = document.createElement('span'); txt.textContent = `${r.task || ''} (${st}${liveStr}${secStr}${tokStr})`;
       line.append(dot, txt); row.appendChild(line); rail.appendChild(row);
     }
     body.appendChild(rail); card.append(head, body); panel.appendChild(card);

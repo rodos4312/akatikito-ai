@@ -17,7 +17,7 @@ def _by_id(report: dict) -> dict[str, dict]:
     return {c["id"]: c for c in report["checks"]}
 
 
-def test_diagnose_is_readonly_and_returns_all_22_checks(tmp_path):
+def test_diagnose_is_readonly_and_returns_all_23_checks(tmp_path):
     data_dir = tmp_path / "data"
     proj_dir = tmp_path / "proj"
     data_dir.mkdir()
@@ -31,9 +31,9 @@ def test_diagnose_is_readonly_and_returns_all_22_checks(tmp_path):
 
     doc = Doctor(app_root=tmp_path, data_dir=data_dir, project_root=proj_dir, lock_dir=tmp_path / "locks")
     rep = doc.diagnose(check_api=False)
-    assert len(rep["checks"]) == 22
+    assert len(rep["checks"]) == 23
     by_id = _by_id(rep)
-    assert {"memory_db", "skills_security", "context_archive", "ui_assets"} <= set(by_id)
+    assert {"memory_db", "skills_security", "context_archive", "ui_assets", "subagents_runtime"} <= set(by_id)
     assert by_id["json_integrity"]["status"] == "error"
     assert by_id["temp_partials"]["status"] == "warn"
     assert by_id["api_key_live"]["meta"].get("checked") is False
@@ -306,7 +306,7 @@ def test_doctor_is_human_only_never_exposed_as_llm_tool_and_cli_runs(tmp_path, c
     rc = _cli(["--project", str(tmp_path), "--json"])
     out = capsys.readouterr().out
     parsed = json.loads(out)
-    assert "checks" in parsed and len(parsed["checks"]) == 22
+    assert "checks" in parsed and len(parsed["checks"]) == 23
     assert rc in (0, 1)
 
 
@@ -535,3 +535,23 @@ def test_doctor_v26_ui_assets_verifies_references_and_js_syntax(tmp_path):
         bad_chk = _by_id(doc.diagnose())["ui_assets"]
         assert bad_chk["status"] == "error"
         assert "missing.js" in bad_chk["meta"]["bad_js"]
+
+
+def test_doctor_v26_subagents_runtime_detects_missing_fast_provider_key(tmp_path):
+    data_dir = tmp_path / "data"
+    proj_dir = tmp_path / "proj"
+    data_dir.mkdir()
+    proj_dir.mkdir()
+
+    doc = Doctor(app_root=tmp_path, data_dir=data_dir, project_root=proj_dir, lock_dir=tmp_path / "locks")
+    ok_chk = _by_id(doc.diagnose())["subagents_runtime"]
+    assert ok_chk["status"] == "ok" and ok_chk["meta"]["token_limit"] == 200000
+
+    # Cloud fast_model without saved API key -> warn
+    (data_dir / "settings.json").write_text(
+        json.dumps({"provider": "DeepSeek", "fast_provider": "OpenRouter", "fast_model": "openai/gpt-4o-mini", "keys": {}}),
+        encoding="utf-8",
+    )
+    warn_chk = _by_id(doc.diagnose())["subagents_runtime"]
+    assert warn_chk["status"] == "warn"
+    assert any("OpenRouter" in m for m in warn_chk["meta"]["missing_keys"])

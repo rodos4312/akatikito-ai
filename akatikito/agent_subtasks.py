@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import contextvars
 import json
+import time
 import uuid
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait as wait_futures
 from dataclasses import replace
@@ -11,16 +12,41 @@ from . import modes
 from .repair import RepairState
 from .subtasks import CHILD_FORBIDDEN_TOOLS, FileClaims, make_declared_write_guard, normalize_claim_path
 
+_CHILD_STEP_SAFETY_NET = 100
 
-def _build_child_agent(parent, mode: str, max_steps: int, ceiling: set[str], declared_files):
+
+def _resolve_child_max_steps(parent, max_steps: int | None) -> int:
+    cfg_cap = int(getattr(parent.config, "subtask_max_steps", 0) or 0)
+    ceiling = cfg_cap if cfg_cap > 0 else _CHILD_STEP_SAFETY_NET
+    if max_steps is None or int(max_steps) <= 0:
+        return ceiling
+    return max(1, min(int(max_steps), ceiling))
+
+
+def _resolve_child_route(parent, mode: str) -> tuple[str, str, str]:
+    cfg = parent.config
+    fast_model = str(getattr(cfg, "fast_model", "") or "").strip()
+    if mode == "ask" and fast_model:
+        base_url = str(getattr(cfg, "fast_base_url", "") or getattr(parent, "_default_base_url", cfg.base_url)).strip()
+        api_key = str(getattr(cfg, "fast_api_key", "") or getattr(parent, "_default_api_key", cfg.api_key))
+        return fast_model, base_url, api_key
+    return (
+        getattr(parent, "_default_model_name", cfg.model),
+        getattr(parent, "_default_base_url", cfg.base_url),
+        getattr(parent, "_default_api_key", cfg.api_key),
+    )
+
+
+def _build_child_agent(parent, mode: str, max_steps: int | None, ceiling: set[str], declared_files):
     from . import agent as agent_mod
 
+    child_model_name, child_base_url, child_api_key = _resolve_child_route(parent, mode)
     child_cfg = replace(
         parent.config,
-        model=getattr(parent, "_default_model_name", parent.config.model),
-        base_url=getattr(parent, "_default_base_url", parent.config.base_url),
-        api_key=getattr(parent, "_default_api_key", parent.config.api_key),
-        max_steps=max(1, min(max_steps, parent.config.subtask_max_steps, 12)),
+        model=child_model_name,
+        base_url=child_base_url,
+        api_key=child_api_key,
+        max_steps=_resolve_child_max_steps(parent, max_steps),
         auto_mode=False,
         checkpoints=False,
         fast_model="",
@@ -142,7 +168,24 @@ def _finalize_child(parent, child, row: dict, owner_turn: int) -> None:
     parent.events.emit("subtask", **row)
 
 
-def run_subtask(parent, task, mode, max_steps=8, declared_files=None, child_id=None):
+def _attach_child_progress(parent, child, row: dict, started_at: float):
+    def _on_child_event(event) -> None:
+        if event.kind not in ("tool_call", "tool_result"):
+            return
+        tool_name = str(event.data.get("name") or "")
+        with parent._sub_lock:
+            row["elapsed_s"] = round(time.monotonic() - started_at, 1)
+            row["tokens"] = dict(child.tokens)
+            if event.kind == "tool_call" and tool_name:
+                row["step"] = int(row.get("step", 0)) + 1
+                row["active_tool"] = tool_name
+            snapshot = dict(row)
+        parent.events.emit("subtask", **snapshot)
+
+    return child.events.subscribe(_on_child_event)
+
+
+def run_subtask(parent, task, mode, max_steps=None, declared_files=None, child_id=None, context=""):
     if parent._child_depth >= 1:
         return "ΑΠΟΡΡΙΨΗ: μέγιστο βάθος υποεργασιών 1."
     with parent._sub_lock:
@@ -168,17 +211,34 @@ def run_subtask(parent, task, mode, max_steps=8, declared_files=None, child_id=N
         parent_usage_hook(usage)
 
     child.usage_hook = _child_usage_hook
-    row = {"id": child_id or uuid.uuid4().hex, "task": task, "mode": mode, "status": "running", "tokens": {}}
+    started_at = time.monotonic()
+    row = {
+        "id": child_id or uuid.uuid4().hex,
+        "task": task,
+        "mode": mode,
+        "model": child.config.model,
+        "status": "running",
+        "step": 0,
+        "active_tool": "",
+        "elapsed_s": 0.0,
+        "tokens": {},
+    }
     with parent._sub_lock:
         parent.subtasks.append(row)
         parent._active_children.append(child)
         parent._active_child = child
+    progress_listener = _attach_child_progress(parent, child, row, started_at)
     parent.events.emit("subtask", **row)
+    ctx_clean = str(context or "").strip()[:4000]
+    child_prompt = f"Πλαίσιο υποεργασίας:\n{ctx_clean}\n\nΑποστολή:\n{task}" if ctx_clean else task
     try:
-        answer = child.chat(task)
+        answer = child.chat(child_prompt)
+        row["elapsed_s"] = round(time.monotonic() - started_at, 1)
+        row["active_tool"] = ""
         _merge_child_outcome(parent, child, row, answer, mode, owner_turn)
         return json.dumps(row, ensure_ascii=False)
     finally:
+        child.events.unsubscribe(progress_listener)
         _finalize_child(parent, child, row, owner_turn)
 
 
@@ -196,15 +256,17 @@ def _prepare_subtask_queue(parent, tasks: list[dict]) -> tuple[list[dict], list]
             continue
         mode = str(spec.get("mode") or "ask")
         task_text = str(spec.get("task") or "")
+        ctx_text = str(spec.get("context") or "")
         try:
-            max_steps = int(spec.get("max_steps") or 8)
+            raw_steps = spec.get("max_steps")
+            max_steps = int(raw_steps) if raw_steps is not None else None
             raw_files = spec.get("files") or []
             norm_files = [normalize_claim_path(parent.ws, f) for f in raw_files if str(f).strip()]
             declared = set(raw_files) if mode != "ask" else None
         except Exception as exc:  # quality: allow BLE001 — per-item spec error stays isolated in results list
             results[idx] = _err_row(cid, task_text, mode, str(exc))
             continue
-        pending.append({"idx": idx, "cid": cid, "mode": mode, "task": task_text, "max_steps": max_steps, "norm_files": norm_files, "declared": declared})
+        pending.append({"idx": idx, "cid": cid, "mode": mode, "task": task_text, "context": ctx_text, "max_steps": max_steps, "norm_files": norm_files, "declared": declared})
     return pending, results
 
 
@@ -260,7 +322,7 @@ def run_subtasks(parent, tasks: list[dict]) -> str:
     def run_one(item: dict):
         try:
             return item["idx"], parent._run_subtask(
-                item["task"], item["mode"], max_steps=item["max_steps"], declared_files=item["declared"], child_id=item["cid"]
+                item["task"], item["mode"], max_steps=item["max_steps"], declared_files=item["declared"], child_id=item["cid"], context=item.get("context", "")
             )
         except Exception as exc:  # quality: allow BLE001 — worker boundary converts any error into JSON row
             return item["idx"], _err_row(item["cid"], item["task"], item["mode"], str(exc))

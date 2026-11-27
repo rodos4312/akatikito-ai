@@ -248,10 +248,12 @@ class Akatikito:
         ceiling=getattr(self,'capability_ceiling',None)
         return tools if ceiling is None else tools & ceiling
 
-    def _run_subtask(self, task, mode, max_steps=8, declared_files=None, child_id=None):
+    def _run_subtask(self, task, mode, max_steps=None, declared_files=None, child_id=None, context=""):
         from .agent_subtasks import run_subtask
 
-        return run_subtask(self, task, mode, max_steps=max_steps, declared_files=declared_files, child_id=child_id)
+        return run_subtask(
+            self, task, mode, max_steps=max_steps, declared_files=declared_files, child_id=child_id, context=context
+        )
 
     def _run_subtasks(self, tasks: list[dict]) -> str:
         from .agent_subtasks import run_subtasks

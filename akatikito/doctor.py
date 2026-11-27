@@ -546,7 +546,7 @@ class Doctor:
     # ------------------------------------------------------------------ public API
 
     def diagnose(self, *, check_api: bool = False) -> dict[str, Any]:
-        """Run all 22 read-only diagnostic checks."""
+        """Run all 23 read-only diagnostic checks."""
         checks = [
             self._check_json_integrity(), self._check_mobile_sessions(), self._check_mobile_port(),
             self._check_orphan_locks(), self._check_temp_partials(), self._check_agent_backups(),

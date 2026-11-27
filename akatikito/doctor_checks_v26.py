@@ -269,3 +269,62 @@ def check_ui_assets(doc, make_item) -> dict[str, Any]:
         f"Όλα τα αρχεία διεπαφής UI ({len(refs)} JS/CSS) υπάρχουν και είναι έγκυρα.",
         meta={"checked": len(refs), "missing": [], "bad_js": []},
     )
+
+
+def _route_missing_key(raw: dict[str, Any], prefix: str) -> str:
+    from .model import PROVIDERS
+    from .settings import unmask_secret
+
+    model = str(raw.get(f"{prefix}_model", "") or "").strip()
+    if not model:
+        return ""
+    prov = str(raw.get(f"{prefix}_provider", "") or raw.get("provider", "") or "").strip()
+    if not prov:
+        return ""
+    url = str(raw.get(f"{prefix}_base_url", "") or "").strip()
+    if not url:
+        info = PROVIDERS.get(prov)
+        url = info if isinstance(info, str) else str((info or {}).get("base_url", "") or "")
+    if "127.0.0.1" in url or "localhost" in url:
+        return ""
+    keys = raw.get("keys") if isinstance(raw.get("keys"), dict) else {}
+    has_key = bool(unmask_secret(keys.get(prov, ""))) if keys else False
+    return "" if has_key else f"{prefix}_model ({prov}: {model})"
+
+
+def check_subagents_runtime(doc, make_item) -> dict[str, Any]:
+    """Verify subtask token limits, module health, and fast/smart model API-key readiness."""
+    from .config import Config
+
+    cfg = Config()
+    per_tok = int(getattr(cfg, "subtask_token_limit", 0) or 0)
+    tot_tok = int(getattr(cfg, "subtask_total_token_limit", 0) or 0)
+    workers = int(getattr(cfg, "max_parallel_subtasks", 2) or 2)
+    raw: dict[str, Any] = {}
+    spath = doc.data_dir / "settings.json"
+    if spath.is_file():
+        try:
+            loaded = json.loads(spath.read_text(encoding="utf-8"))
+            if isinstance(loaded, dict):
+                raw = loaded
+        except (OSError, ValueError):
+            raw = {}
+    missing_keys = [m for p in ("fast", "smart") if (m := _route_missing_key(raw, p))]
+    fast_ask = str(raw.get("fast_model", "") or "").strip()
+    if missing_keys:
+        return make_item(
+            "subagents_runtime",
+            "Βοηθοί agent & δρομολόγηση μοντέλων",
+            "warn",
+            f"Έχει οριστεί δευτερεύον μοντέλο χωρίς αποθηκευμένο API key: {', '.join(missing_keys)}.",
+            fixable=False,
+            meta={"token_limit": per_tok, "total_token_limit": tot_tok, "workers": workers, "missing_keys": missing_keys},
+        )
+    fast_note = f" · fast ask: {fast_ask}" if fast_ask else ""
+    return make_item(
+        "subagents_runtime",
+        "Βοηθοί agent & δρομολόγηση μοντέλων",
+        "ok",
+        f"Βοηθοί έτοιμοι (έως {workers} παράλληλοι, όριο {per_tok // 1000}k/{tot_tok // 1000}k tokens{fast_note}).",
+        meta={"token_limit": per_tok, "total_token_limit": tot_tok, "workers": workers, "fast_model": fast_ask},
+    )
