@@ -4,7 +4,7 @@
 
 # Akatikito — Local-First Desktop & Android AI Agent
 
-[![Release](https://img.shields.io/badge/Release-v2.6.1-22c55e)](https://github.com/rodos4312/akatikito-ai/releases/tag/v2.6.1)
+[![Release](https://img.shields.io/badge/Release-v2.6.2-22c55e)](https://github.com/rodos4312/akatikito-ai/releases/tag/v2.6.2)
 [![Android APK](https://img.shields.io/badge/Android%20APK-v1.9.0%20arm64-3ddc84)](https://github.com/rodos4312/akatikito-ai/releases/tag/v2.6.0)
 [![Website](https://img.shields.io/badge/Website-GitHub%20Pages-38bdf8)](https://rodos4312.github.io/akatikito-ai/)
 [![Languages](https://img.shields.io/badge/UI%20Languages-EL%20%7C%20EN%20%7C%20RU%20%7C%20DE%20%7C%20ES%20%7C%20FR-blue)](#multi-language-interface)
@@ -17,7 +17,7 @@
 - **Ελληνικός οδηγός (5 βήματα με εικόνες):** [docs/GETTING-STARTED.el.md](docs/GETTING-STARTED.el.md)
 - **English guide (5 steps with images):** [docs/GETTING-STARTED.en.md](docs/GETTING-STARTED.en.md)
 
-1. Download **`Akatikito-v2.6.1-portable.zip`** from [Releases](https://github.com/rodos4312/akatikito-ai/releases) *(Python 3.11 + all packages included)*.
+1. Download **`Akatikito-v2.6.2-portable.zip`** from [Releases](https://github.com/rodos4312/akatikito-ai/releases) *(Python 3.11 + all packages included)*.
 2. Right-click → **Extract All**.
 3. Double-click **`AkatikitoApp.cmd`** *(if Windows SmartScreen appears, click **More info → Run anyway**)*.
 4. Choose **AI account** or **Local AI (Ollama / LM Studio)** and ask your first question.

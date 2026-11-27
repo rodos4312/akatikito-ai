@@ -2,6 +2,22 @@
 
 Όλες οι σημαντικές αλλαγές σε απλά ελληνικά.
 
+## [v2.6.2] — 2026-11-27
+
+### Προστέθηκε
+- **Κατηγοριοποιημένο `/` Slash Menu & νέες εντολές (`slash_commands.py`, `ui/chat_ux.js`)**: κουμπί `/` 1-κλικ στο chat με εντολές ανά κατηγορία (Κώδικας & Έλεγχος, Πλαίσιο & Συνεδρία, Κόστος & Εργαλεία), μαζί με νέες άμεσες εντολές `/diff`, `/test`, `/review` (read-only code review), `/pin` / `/unpin`, `/context` (ανάλυση πλαισίου ανά κατηγορία), `/usage` (σύνοψη κόστους/cache/κορυφαίων μοντέλων) και `/compact`.
+- **Coding Engine Pro & Dev Tools (`code_engine.py`, `dev_tools.py`)**: επεξεργασία σε επίπεδο συμβόλου (`read_symbol`, `replace_symbol`), ευρύ `smart_read` (έως 1500 γραμμές / 80 KB με fuzzy `similar_files`), `find_references` (Python AST + JS/TS), έξυπνο `run_tests`, `lint_check`, `smoke_check` (Python/JS/HTML inline scripts) και εξηγήσιμο `find_relevant_files`.
+- **Διαχείριση Background Processes & Context Pinning (`bg_processes.py`, `context_pin.py`)**: ελεγχόμενες διεργασίες παρασκηνίου (π.χ. dev/API servers με start/read/stop, όριο 3, καθαρός τερματισμός χωρίς orphan PIDs) και per-session καρφίτσωμα έως 3 αρχείων (`/pin`) που επιβιώνουν και μετά το compaction.
+- **Παράλληλοι Subtasks με Όριο Tokens (`agent_subtasks.py`)**: 200k/500k token-governed βοηθοί με ρητό πεδίο `context`, υποστήριξη `fast_model` σε `ask` mode και live ένδειξη προόδου στο UI.
+- **Ανθεκτικότητα & Context Engineering (`compaction.py`, `model_guards.py`, `image_eviction.py`, `web_cache.py`, `activity.py`)**: αυτόματο/χειροκίνητο compaction με βαθμονόμηση από πραγματικά provider `prompt_tokens`, αποφόρτιση παλιών tool outputs & εικόνων, tool-free Grace Call στο `max_steps`, Multi-step Cycle Guardrails, Repetition Guard + seamless continuation stitching σε `finish_reason=length`, 429 cooldown + empty-reply guard, web TTL cache, blind-overwrite guard σε τροποποιημένα αρχεία και Unicode / escape-drift edit recovery.
+- **Chat UX & Οικονομία (`ui/chat_pro.js`, `ui/chat_ux.js`, `ui/attachments.js`, `ui/skills.js`)**: ευρύτερη στήλη `1180px`, καθολική ένδειξη prompt cache, κάρτα Todo, πραγματικό Context Gauge %, ουρά μηνυμάτων (Chat Message Queue), mouse-first Copy/Paste με floating bar & δεξί κλικ, κάρτες συνημμένων με lightbox & `@file` drag, deliverable file cards, eye-line approvals, 2-στηλη Master-Detail οθόνη Skills με static Security Guard, και live κόστος USD απευθείας από τον πάροχο (OpenRouter `usage.cost`).
+- **🩺 Γιατρός v2.6 (`doctor_checks_v26.py`)**: επεκτάθηκε στους **23 διαγνωστικούς ελέγχους** (Skills Security Guard, context archive, UI assets, subtasks/bg/pins/dev tools).
+
+### Διορθώθηκε & Βελτιώθηκε
+- **Ολοκλήρωση & Ασφάλεια Εργαλείων**: αυστηρό προφίλ `readonly`/`office` για όλα τα νέα mutating/bg tools, σωστό `EditResult` & tracking για `replace_symbol`, σειριακό lock & αποφυγή διπλού verify στο `run_tests`, read-only scope στο `/review` και 163/163 απομονωμένες pytest σουίτες + 17/17 Node UI σουίτες πράσινες (0 flaky).
+
+---
+
 ## [v2.6.1] — 2026-11-26
 
 ### Βελτιώθηκε

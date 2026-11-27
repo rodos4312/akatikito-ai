@@ -8,7 +8,7 @@
 ---
 
 ## 1. Download
-Download the latest **`Akatikito-v2.6.1-portable.zip`** from [GitHub Releases](https://github.com/rodos4312/akatikito-ai/releases).
+Download the latest **`Akatikito-v2.6.2-portable.zip`** from [GitHub Releases](https://github.com/rodos4312/akatikito-ai/releases).
 It already bundles its own embedded Python 3.11 runtime and every required package.
 
 ## 2. Extract
