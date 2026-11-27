@@ -682,6 +682,7 @@
     <div id="inputbar">
       <button class="btn" style="width:auto;flex:0 0 auto" title="Προσθήκη αρχείου ή εικόνας" aria-label="Προσθήκη συνημμένου" onclick="chooseAttachments()">📎</button>
       <button class="btn" style="width:auto;flex:0 0 auto" title="Στιγμιότυπο Οθόνης (Screenshot 1-κλικ)" aria-label="Στιγμιότυπο οθόνης" onclick="captureScreenAttachment()">📸</button>
+      <button id="slash-trigger-btn" class="btn" style="width:auto;flex:0 0 auto;font-weight:700" title="Εντολές & Συνταγές ανά κατηγορία (/)" aria-label="Μενού εντολών" onclick="if(typeof ChatUX!=='undefined'&&ChatUX.toggleSlashMenu)ChatUX.toggleSlashMenu()">/</button>
       <textarea id="prompt" rows="1" data-i18n-placeholder="prompt_placeholder" placeholder="Γράψε τι θέλεις… (π.χ. «ψάξε στο internet για…» ή «φτιάξε ένα Excel με…»)" onkeydown="onKey(event)" oninput="grow(this); updateSlashMenu(this)"></textarea>
       <button id="voice-record" class="btn" style="width:auto;flex:0 0 auto" aria-label="Υπαγόρευση φωνής" aria-pressed="false" onclick="toggleVoice()">🎙</button><button id="voice-cancel-record" class="btn" style="width:auto;display:none" onclick="cancelVoice()" aria-label="Ακύρωση υπαγόρευσης">✕</button>
       <button id="stopbtn" data-i18n="btn_stop" onclick="stopAgent()">■ Σταμάτα</button>

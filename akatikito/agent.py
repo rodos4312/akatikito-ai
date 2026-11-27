@@ -426,9 +426,9 @@ class Akatikito:
     def _try_local_slash(self, text: str, internal: bool) -> str | None:
         if internal or getattr(self, "_child_depth", 0):
             return None
-        from .context_pin import handle_pin_slash_command
+        from .slash_commands import handle_local_slash_command
 
-        return handle_pin_slash_command(self, text)
+        return handle_local_slash_command(self, text)
 
     def _maybe_capture_skill(self, internal: bool) -> None:
         if (internal or getattr(self, "_child_depth", 0) or self._stop

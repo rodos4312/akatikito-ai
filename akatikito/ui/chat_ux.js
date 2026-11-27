@@ -594,8 +594,134 @@
     _paintSkillsMasterDetail();
   }
 
+  // ---- Categorized Slash Commands Menu (1-click `/` button & live filter) ----
+  const SLASH_GROUPS = [
+    {
+      id: 'context',
+      label: '💬 Συζήτηση & Context',
+      items: [
+        { name: 'compact', desc: 'Συμπίεση ιστορικού (εξοικονόμηση tokens)', instant: 'compact' },
+        { name: 'pin', desc: 'Καρφίτσωμα αρχείου στο context (έως 3)', instant: '' },
+        { name: 'unpin', desc: 'Ξεκαρφίτσωμα αρχείου (ή /unpin clear)', instant: '' },
+        { name: 'pins', desc: 'Προβολή καρφιτσωμένων αρχείων (0 tokens)', instant: 'send' },
+      ],
+    },
+    {
+      id: 'code',
+      label: '🛠️ Κώδικας & Git',
+      items: [
+        { name: 'diff', desc: 'Αλλαγμένα αρχεία Git — status & diff (0 tokens)', instant: 'send' },
+        { name: 'test', desc: 'Γρήγορη εκτέλεση tests του project (0 tokens)', instant: 'send' },
+        { name: 'review', desc: 'Αυτόματο code review στις αλλαγές πριν το commit', instant: 'send' },
+      ],
+    },
+    {
+      id: 'skills',
+      label: '📘 Συνταγές (Skills)',
+      items: [
+        { name: 'learn', desc: 'Αποθήκευση τρέχουσας διαδικασίας ως Skill', instant: '' },
+      ],
+    },
+  ];
+
+  function _runSlashItem(item, textarea, menu) {
+    menu.style.display = 'none';
+    if (item.instant === 'compact' && typeof ChatPro !== 'undefined' && ChatPro.runCompact) {
+      textarea.value = '';
+      if (typeof grow === 'function') grow(textarea);
+      ChatPro.runCompact();
+      return;
+    }
+    if (item.instant === 'send') {
+      textarea.value = '/' + item.name;
+      if (typeof grow === 'function') grow(textarea);
+      if (typeof send === 'function') { send(); return; }
+    }
+    textarea.value = '/' + item.name + ' ';
+    if (typeof textarea.focus === 'function') textarea.focus();
+    if (typeof grow === 'function') grow(textarea);
+  }
+
+  function _matchesSlashQuery(item, groupLabel, q) {
+    if (!q) return true;
+    const hay = `${item.name || ''} ${item.desc || ''} ${groupLabel || ''}`.toLowerCase();
+    return hay.includes(q);
+  }
+
+  function _buildSlashButton(item, textarea, menu) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'cmd-item slash-cmd-row';
+    const cmdSpan = document.createElement('span');
+    cmdSpan.className = 'slash-cmd-name';
+    cmdSpan.textContent = '/' + item.name;
+    const descSpan = document.createElement('span');
+    descSpan.className = 'slash-cmd-desc';
+    descSpan.textContent = item.desc || '';
+    btn.append(cmdSpan, descSpan);
+    if (item.instant) {
+      const tag = document.createElement('span');
+      tag.className = 'slash-cmd-tag';
+      tag.textContent = '1-κλικ';
+      btn.appendChild(tag);
+    }
+    btn.onclick = () => _runSlashItem(item, textarea, menu);
+    return btn;
+  }
+
+  function renderSlashMenu(textarea, menu, skills, query) {
+    if (!menu || !textarea) return false;
+    const q = String(query || '').trim().toLowerCase();
+    const skillRows = (Array.isArray(skills) ? skills : []).map((s) => ({
+      name: String(s.name || ''),
+      desc: String(s.description || ''),
+      instant: '',
+    })).filter((s) => s.name);
+    menu.replaceChildren();
+    let total = 0;
+    for (const grp of SLASH_GROUPS) {
+      const pool = grp.id === 'skills' ? grp.items.concat(skillRows) : grp.items;
+      const matched = pool.filter((it) => _matchesSlashQuery(it, grp.label, q));
+      if (!matched.length) continue;
+      const hdr = document.createElement('div');
+      hdr.className = 'slash-cat-hdr';
+      hdr.textContent = grp.label;
+      menu.appendChild(hdr);
+      for (const it of matched.slice(0, q ? 8 : 12)) {
+        menu.appendChild(_buildSlashButton(it, textarea, menu));
+        total += 1;
+      }
+    }
+    menu.style.display = total ? 'flex' : 'none';
+    return total > 0;
+  }
+
+  function toggleSlashMenu() {
+    if (typeof document === 'undefined') return false;
+    const menu = document.getElementById('slash-menu');
+    const textarea = document.getElementById('prompt');
+    if (!menu || !textarea) return false;
+    if (menu.style.display === 'flex') {
+      menu.style.display = 'none';
+      return false;
+    }
+    const skills = typeof cachedSkills !== 'undefined' && Array.isArray(cachedSkills) ? cachedSkills : [];
+    return renderSlashMenu(textarea, menu, skills, '');
+  }
+
+  if (typeof document !== 'undefined' && document.addEventListener) {
+    document.addEventListener('click', (e) => {
+      const menu = document.getElementById('slash-menu');
+      if (!menu || menu.style.display !== 'flex') return;
+      const t = e && e.target;
+      if (t && t.closest && (t.closest('#slash-menu') || t.closest('#slash-trigger-btn'))) return;
+      menu.style.display = 'none';
+    });
+  }
+
   root.ChatUX = {
     LARGE_PASTE_THRESHOLD,
+    SLASH_GROUPS,
     getSelectedText: _getSelectedText,
     quoteIntoPrompt: _quoteIntoPrompt,
     cleanMessageText: _cleanMessageText,
@@ -606,5 +732,7 @@
     maybeAttachLargePaste,
     renderSkillsMasterDetail,
     filterSkillsMasterDetail,
+    renderSlashMenu,
+    toggleSlashMenu,
   };
 })(typeof globalThis !== 'undefined' ? globalThis : window);

@@ -38,6 +38,11 @@ def _parse_turn_intent(agent, text: str, internal: bool):
             "3) Αλλιώς, κάλεσε propose_skill με σαφή steps (3+ βήματα), category, triggers και notes (παγίδες/σημειώσεις)."
         )
     elif not internal:
+        from .slash_commands import expand_prompt_slash_command
+
+        expanded_text, matched_cmd = expand_prompt_slash_command(text)
+        if matched_cmd:
+            return expanded_text, False, False, False, None
         m_skill = re.match(r"^\s*/([a-z][a-z0-9-]{1,63})\b(.*)$", text or "", re.S)
         if m_skill:
             s_name, s_rest = m_skill.group(1), m_skill.group(2).strip()

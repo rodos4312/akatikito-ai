@@ -512,21 +512,11 @@ function updateSlashMenu(textarea) {
     if (typeof ChatPro !== 'undefined' && ChatPro.updateAtMenu && ChatPro.updateAtMenu(textarea, menu)) return;
     menu.style.display = 'none'; return;
   }
-  const q = val.slice(1).toLowerCase();
-  const base = [{name: 'compact', description: '🗜️ Συμπίεση ιστορικού (εξοικονόμηση tokens)'}, {name: 'learn', description: 'Distill current conversation into a reusable Skill'}, ...cachedSkills];
-  const matches = base.filter(s => (s.name || '').toLowerCase().includes(q)).slice(0, 8);
-  if (!matches.length) { menu.style.display = 'none'; return; }
-  menu.replaceChildren();
-  for (const sk of matches) {
-    const btn = document.createElement('button'); btn.className = 'cmd-item';
-    btn.textContent = '/' + sk.name + (sk.description ? ' — ' + sk.description : '');
-    btn.onclick = () => {
-      if (sk.name === 'compact' && typeof ChatPro !== 'undefined' && ChatPro.runCompact) { textarea.value = ''; menu.style.display = 'none'; ChatPro.runCompact(); return; }
-      textarea.value = '/' + sk.name + ' '; menu.style.display = 'none'; textarea.focus(); grow(textarea);
-    };
-    menu.appendChild(btn);
+  if (typeof ChatUX !== 'undefined' && ChatUX.renderSlashMenu) {
+    ChatUX.renderSlashMenu(textarea, menu, cachedSkills, val.slice(1));
+    return;
   }
-  menu.style.display = 'flex';
+  menu.style.display = 'none';
 }
 
 let mobileBridgeActive = false;
