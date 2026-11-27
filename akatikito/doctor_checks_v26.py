@@ -297,11 +297,13 @@ def check_subagents_runtime(doc, make_item) -> dict[str, Any]:
     from .bg_processes import MAX_RUNNING_PROCESSES
     from .config import Config
     from .context_pin import MAX_PINNED_FILES
+    from .dev_tools import DEV_TOOLS_HANDLERS
 
     cfg = Config()
     per_tok = int(getattr(cfg, "subtask_token_limit", 0) or 0)
     tot_tok = int(getattr(cfg, "subtask_total_token_limit", 0) or 0)
     workers = int(getattr(cfg, "max_parallel_subtasks", 2) or 2)
+    dev_cnt = len(DEV_TOOLS_HANDLERS)
     raw: dict[str, Any] = {}
     spath = doc.data_dir / "settings.json"
     if spath.is_file():
@@ -327,6 +329,12 @@ def check_subagents_runtime(doc, make_item) -> dict[str, Any]:
         "subagents_runtime",
         "Βοηθοί agent & δρομολόγηση μοντέλων",
         "ok",
-        f"Βοηθοί έτοιμοι (έως {workers} παράλληλοι, {per_tok // 1000}k/{tot_tok // 1000}k tokens{fast_note} · bg max {MAX_RUNNING_PROCESSES} · pins max {MAX_PINNED_FILES}).",
-        meta={"token_limit": per_tok, "total_token_limit": tot_tok, "workers": workers, "fast_model": fast_ask, "bg_max": MAX_RUNNING_PROCESSES, "pin_max": MAX_PINNED_FILES},
+        (
+            f"Βοηθοί έτοιμοι (έως {workers} παράλληλοι, {per_tok // 1000}k/{tot_tok // 1000}k tokens{fast_note}"
+            f" · bg max {MAX_RUNNING_PROCESSES} · pins max {MAX_PINNED_FILES} · dev tools {dev_cnt})."
+        ),
+        meta={
+            "token_limit": per_tok, "total_token_limit": tot_tok, "workers": workers,
+            "fast_model": fast_ask, "bg_max": MAX_RUNNING_PROCESSES, "pin_max": MAX_PINNED_FILES, "dev_tools": dev_cnt,
+        },
     )
