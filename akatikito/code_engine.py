@@ -15,7 +15,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-from .editing import EditError, check_syntax, commit_batch
+from .editing import EditError, EditResult, check_syntax, commit_batch
 from .workspace import Workspace
 
 _JS_EXTS = frozenset({".js", ".mjs", ".cjs", ".ts", ".jsx", ".tsx"})
@@ -224,11 +224,13 @@ def replace_symbol(ws: Workspace, path: str, symbol: str, new_code: str) -> str:
         )
     )
     smoke = _smoke_check_single(ws, target, updated)
-    return (
-        f"OK: ενημερώθηκε το σύμβολο {hit.name} στο {ws.relative(target)} "
+    rel = ws.relative(target)
+    msg = (
+        f"OK: ενημερώθηκε το σύμβολο {hit.name} στο {rel} "
         f"(L{hit.start_line}-L{hit.end_line} → {len(replacement_lines)} γραμμές, με backup).\n"
         f"{smoke}\n{diff[:1800]}"
     ).strip()
+    return EditResult(msg, [rel])
 
 
 def _check_html_deep(ws: Workspace, target: Path, text: str) -> list[str]:

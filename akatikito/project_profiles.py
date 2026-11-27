@@ -24,7 +24,11 @@ DEFAULT_PROFILE = "developer"
 _MUTATING_TOOLS = {
     "write_file",
     "edit_file",
+    "replace_symbol",
     "run_command",
+    "run_tests",
+    "start_background_process",
+    "stop_background_process",
     "github_clone",
     "create_word_document",
     "create_excel_sheet",
@@ -41,7 +45,14 @@ _MUTATING_TOOLS = {
     "done_reminder",
 }
 
-_OFFICE_BLOCKED_TOOLS = {"run_command", "github_clone"}
+_OFFICE_BLOCKED_TOOLS = {
+    "run_command",
+    "run_tests",
+    "replace_symbol",
+    "start_background_process",
+    "stop_background_process",
+    "github_clone",
+}
 
 
 class ProjectProfiles:

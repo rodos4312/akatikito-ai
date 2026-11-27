@@ -101,3 +101,39 @@ def test_dev_tools_mode_permissions_and_slim_ask_preservation():
     assert "lint_check" not in modes.ASK_CORE_TOOLS
     unlocked = modes.select_ask_tools("Κάνε lint στον κώδικα", set(modes.allowed_tools("ask")), set())
     assert {"find_references", "lint_check"} <= unlocked
+
+
+def test_new_v26_tools_integrated_with_profiles_mutations_and_dispatch(tmp_path):
+    from akatikito.agent import Akatikito
+    from akatikito.config import Config
+    from akatikito.execution import PARALLEL_READS, mutation_paths
+    from akatikito.model import ScriptedModel, tool_call
+    from akatikito.project_profiles import ProjectProfiles
+
+    # 1. Project profile enforcement: readonly & office block replace_symbol, run_tests, bg processes
+    for tool in ("replace_symbol", "run_tests", "start_background_process", "stop_background_process"):
+        assert ProjectProfiles.check_tool("readonly", tool) is not None
+        assert ProjectProfiles.check_tool("office", tool) is not None
+        assert ProjectProfiles.check_tool("developer", tool) is None
+
+    # 2. mutation_paths recognizes replace_symbol & PARALLEL_READS includes new read tools
+    assert mutation_paths("replace_symbol", {"path": "a.py"}, "ΕΓΙΝΕ: αντικατάσταση") == ("a.py",)
+    assert {"read_symbol", "find_relevant_files", "find_references", "lint_check", "smoke_check"} <= PARALLEL_READS
+
+    # 3. run_tests counts as verification check (no redundant double-verify!) & read_symbol records repair read
+    (tmp_path / "m.py").write_text("def f():\n    return 1\n", encoding="utf-8")
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "tests" / "test_m.py").write_text("from m import f\n\ndef test_f():\n    assert f() == 2\n", encoding="utf-8")
+    model = ScriptedModel([
+        {"tool_calls": [tool_call("read_symbol", path="m.py", symbol="f")]},
+        {"tool_calls": [tool_call("replace_symbol", path="m.py", symbol="f", new_code="def f():\n    return 2")]},
+        {"tool_calls": [tool_call("run_tests", target="tests/test_m.py")]},
+        {"content": "Done!"},
+    ])
+    ag = Akatikito(str(tmp_path), Config(auto_mode=False, verify_command=" "), model)
+    ag.set_mode("code")
+    ans = ag.chat("Fix f()")
+    assert "Done!" in ans
+    assert "m.py" in ag._task_writes
+    assert ag._task_checks >= 1
+    assert ag._verified_generation == ag._mutation_generation

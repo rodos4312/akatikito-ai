@@ -122,7 +122,7 @@ def _check_repair_command_policy(agent, name: str, command: str, checking: bool)
 
 def _dispatch_tool(agent, name: str, args: dict, proj_profile: str, dispatch_fn) -> str:
     agent.ws.organization_scope = "full" if (agent.mode in ("code", "debug") and proj_profile == "developer") else "documents"
-    if name == "run_command" and agent._shared_command_lock is not None:
+    if name in ("run_command", "run_tests") and agent._shared_command_lock is not None:
         with agent._shared_command_lock:
             result = dispatch_fn(agent.ws, name, args)
     elif getattr(agent, "mcp", None) and name in agent.mcp.entries:
@@ -144,7 +144,7 @@ def _record_call_effects(agent, name: str, args: dict, result, checking: bool, c
     checking = checking and result.startswith("returncode=")
     if checking:
         agent._last_verify_command = command
-    if name == "read_file" and not args.get("outline") and not result.startswith(ERROR_PREFIXES):
+    if name in ("read_file", "read_symbol") and not args.get("outline") and not result.startswith(ERROR_PREFIXES):
         agent.repair.note_read(args["path"])
     changed = mutation_paths(name, args, result)
     try:
@@ -189,8 +189,10 @@ def execute_call(agent, call: dict, turn_tools: set[str], dispatch_fn) -> tuple[
         if mode_err:
             return mode_err, False
         command = (args.get("command") or "").strip()
-        checking = name == "run_command" and bool(command) and (
-            command == agent.config.verify_command.strip() or is_test_command(command)
+        checking = (name == "run_tests") or (
+            name == "run_command" and bool(command) and (
+                command == agent.config.verify_command.strip() or is_test_command(command)
+            )
         )
         repair_err = _check_repair_command_policy(agent, name, command, checking)
         if repair_err:

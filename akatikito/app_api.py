@@ -103,8 +103,8 @@ class AppState(OpsStateMixin, FilesStateMixin, SessionsUpgradeStateMixin, Memory
         """Ακροατής για τα γεγονότα του agent → ουρά για το UI."""
         if event.kind == "checkpoint": self._save_session(); return
         self._apply_stream_event(event)
-        if (event.kind == 'tool_result' and event.data.get('name') in ('edit_file','write_file','create_word_document','create_excel_sheet','create_pdf_document','convert_data_file')
-                and (str(event.data.get('result','')).startswith('ΕΓΙΝΕ') or event.data.get('recovery_required'))):
+        if (event.kind == 'tool_result' and event.data.get('name') in ('edit_file','replace_symbol','write_file','create_word_document','create_excel_sheet','create_pdf_document','convert_data_file')
+                and (str(event.data.get('result','')).startswith(('ΕΓΙΝΕ', 'OK:')) or event.data.get('recovery_required'))):
             try:
                 paths = event.data.get('paths') or [event.data.get('path')]
                 for path in paths:

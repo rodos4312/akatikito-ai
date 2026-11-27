@@ -169,8 +169,8 @@ def progress_report(agent, reason: str) -> str:
         if (
             event.kind == "tool_result"
             and event.data.get("name")
-            in ("edit_file", "write_file", "create_word_document", "create_excel_sheet", "create_pdf_document", "convert_data_file")
-            and event.data.get("result", "").startswith("ΕΓΙΝΕ")
+            in ("edit_file", "replace_symbol", "write_file", "create_word_document", "create_excel_sheet", "create_pdf_document", "convert_data_file")
+            and event.data.get("result", "").startswith(("ΕΓΙΝΕ", "OK:"))
         ):
             changes.append(event.data["result"].splitlines()[0])
         elif event.kind == "tool_result" and event.data.get("recovery_required") and event.data.get("paths"):

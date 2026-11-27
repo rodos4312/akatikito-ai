@@ -3,12 +3,16 @@ from __future__ import annotations
 import json
 from .network_tools import READ_TOOLS
 
-PARALLEL_READS = frozenset(('list_files', 'read_file', 'search_in_file', 'search_project', 'search_documents', 'file_operation_history', *READ_TOOLS))
+PARALLEL_READS = frozenset((
+    'list_files', 'read_file', 'read_symbol', 'search_in_file', 'search_project',
+    'find_relevant_files', 'find_references', 'lint_check', 'smoke_check',
+    'search_documents', 'file_operation_history', *READ_TOOLS,
+))
 
 
 def mutation_paths(name, args, result):
     """One mutation protocol for tools, repair, task state, UI and context."""
-    if name not in ('edit_file','write_file','create_word_document','create_excel_sheet','create_pdf_document','convert_data_file','pdf_toolkit','image_tools','zip_manager','apply_file_operations','undo_file_operations'):
+    if name not in ('edit_file','replace_symbol','write_file','create_word_document','create_excel_sheet','create_pdf_document','convert_data_file','pdf_toolkit','image_tools','zip_manager','apply_file_operations','undo_file_operations'):
         return ()
     reported=getattr(result,'changed_paths',None)
     if reported is not None:
@@ -41,7 +45,7 @@ def read_resource(ws, call):
         return None
     try:
         args = arguments(call)
-        if name in ('list_files', 'read_file', 'search_in_file'):
+        if name in ('list_files', 'read_file', 'read_symbol', 'search_in_file'):
             # Aliases and overlapping reads of the same file stay sequential.
             return ('local', str(ws.resolve(args.get('path') or '.')).casefold())
         if name == 'github_read':
